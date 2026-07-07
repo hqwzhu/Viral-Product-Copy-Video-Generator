@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 PRODUCT_URL_READER = SCRIPTS / "product_url_reader.py"
 PROMOTION_CYCLE_RUNNER = SCRIPTS / "promotion_cycle_runner.py"
+MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
 
@@ -28,6 +29,7 @@ def main() -> None:
 
     reader = run_product_url_reader(args, out_dir, steps)
     runs = run_promotion_cycles(args, out_dir, reader, steps)
+    attach_multi_query_viral_discovery(args, runs, steps)
     report = build_report(args, out_dir, reader, runs, steps)
     write_report(out_dir, report)
     print(f"Product batch runner report written to: {(batch_dir(out_dir) / 'product-batch-runner.json').resolve()}")
@@ -62,6 +64,21 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--skip-video", action="store_true")
     workflow.add_argument("--video-platforms", default="auto")
     workflow.add_argument("--generate-voiceover", action="store_true")
+
+    discovery = parser.add_argument_group("Multi-query viral discovery")
+    discovery.add_argument("--run-multi-query-viral-discovery", action="store_true")
+    discovery.add_argument("--multi-query-dry-run", action="store_true")
+    discovery.add_argument("--multi-query-query", action="append", default=[])
+    discovery.add_argument("--multi-query-query-count", type=int, default=5)
+    discovery.add_argument("--multi-query-platforms", default="", help="Defaults to --platforms.")
+    discovery.add_argument("--multi-query-top-n", type=int, default=20)
+    discovery.add_argument("--multi-query-html-snapshot-root", default="")
+    discovery.add_argument("--multi-query-live-official", action="store_true")
+    discovery.add_argument("--multi-query-run-creator-follow-up", action="store_true")
+    discovery.add_argument("--multi-query-creator-follow-up-dry-run", action="store_true")
+    discovery.add_argument("--multi-query-run-follow-up-captures", action="store_true")
+    discovery.add_argument("--multi-query-follow-up-dry-run", action="store_true")
+    discovery.add_argument("--multi-query-capture-browser-assisted-follow-ups", action="store_true")
 
     publish = parser.add_argument_group("Publish queue")
     publish.add_argument("--skip-publish-queue", action="store_true")
@@ -230,6 +247,7 @@ def summarize_cycle_run(record: dict[str, Any], run_dir: Path, source: dict[str,
         "exitCode": step["exitCode"],
         "stdoutTail": step["stdoutTail"],
         "stderrTail": step["stderrTail"],
+        "multiQueryViralDiscovery": {"status": "skipped", "reason": "--run-multi-query-viral-discovery was not supplied."},
     }
 
 
@@ -249,7 +267,82 @@ def blocked_run(record: dict[str, Any], run_dir: Path, reason: str) -> dict[str,
         "reason": reason,
         "command": [],
         "exitCode": None,
+        "multiQueryViralDiscovery": {"status": "skipped", "reason": "Promotion cycle was blocked."},
     }
+
+
+def attach_multi_query_viral_discovery(args: argparse.Namespace, runs: list[dict[str, Any]], steps: list[dict[str, Any]]) -> None:
+    if not args.run_multi_query_viral_discovery:
+        return
+    for run in runs:
+        run["multiQueryViralDiscovery"] = run_multi_query_for_run(args, run, steps)
+
+
+def run_multi_query_for_run(args: argparse.Namespace, run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    manifest_path = Path(str(run.get("workflowManifest") or ""))
+    run_dir = Path(str(run.get("outputDir") or ""))
+    if run.get("status") != "ready" or not manifest_path.exists() or not run_dir:
+        return {
+            "status": "blocked",
+            "reason": "A ready promotion cycle and workflow manifest are required before multi-query viral discovery.",
+            "report": "",
+            "mergedViralLibrary": "",
+            "mergedCreatorLeaderboard": "",
+            "command": [],
+        }
+    command = build_multi_query_command(args, manifest_path, run_dir)
+    step = run_command(f"multi_query_viral_discovery_{run.get('id', 'product')}", command, check=False)
+    steps.append(step)
+    report_path = run_dir / "reports/promotion-manager/competitors/multi-query-viral-discovery.json"
+    report = read_json(report_path)
+    artifacts = report.get("artifacts") if isinstance(report.get("artifacts"), dict) else {}
+    return {
+        "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+        "report": str(report_path) if report_path.exists() else "",
+        "mergedViralLibrary": str(artifacts.get("mergedViralLibrary", "")),
+        "mergedCreatorLeaderboard": str(artifacts.get("mergedCreatorLeaderboard", "")),
+        "summary": report.get("summary", {}),
+        "command": step["command"],
+        "exitCode": step["exitCode"],
+        "stdoutTail": step["stdoutTail"],
+        "stderrTail": step["stderrTail"],
+    }
+
+
+def build_multi_query_command(args: argparse.Namespace, manifest_path: Path, run_dir: Path) -> list[str]:
+    command = [
+        sys.executable,
+        str(MULTI_QUERY_VIRAL_DISCOVERY),
+        "--workflow-manifest",
+        str(manifest_path),
+        "--platforms",
+        args.multi_query_platforms or args.platforms,
+        "--top-n",
+        str(args.multi_query_top_n),
+        "--query-count",
+        str(args.multi_query_query_count),
+        "--out-dir",
+        str(run_dir),
+    ]
+    append_many(command, "--query", args.multi_query_query)
+    append_if_present(command, "--html-snapshot-root", args.multi_query_html_snapshot_root)
+    if args.multi_query_dry_run:
+        command.append("--dry-run")
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    if args.multi_query_live_official:
+        command.append("--live-official")
+    if args.multi_query_run_creator_follow_up:
+        command.append("--run-creator-follow-up")
+    if args.multi_query_creator_follow_up_dry_run:
+        command.append("--creator-follow-up-dry-run")
+    if args.multi_query_run_follow_up_captures:
+        command.append("--run-follow-up-captures")
+    if args.multi_query_follow_up_dry_run:
+        command.append("--follow-up-dry-run")
+    if args.multi_query_capture_browser_assisted_follow_ups:
+        command.append("--capture-browser-assisted-follow-ups")
+    return command
 
 
 def build_report(
@@ -268,6 +361,10 @@ def build_report(
         "blockedPromotionRuns": sum(1 for item in runs if item.get("status") == "blocked"),
         "browserStructuredRuns": sum(1 for item in runs if item.get("sourceMode") == "browser_structured_snapshot"),
         "staticFallbackRuns": sum(1 for item in runs if item.get("sourceMode") == "static_url_fallback"),
+        "multiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") not in {"", "skipped", None}),
+        "readyMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "ready"),
+        "plannedMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "planned"),
+        "failedMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "error"),
     }
     return {
         "generatedAt": TODAY,
@@ -287,6 +384,7 @@ def build_report(
             "Each product URL is read by product_url_reader.py before a promotion cycle starts.",
             "Browser structured snapshots are passed to promotion_cycle_runner.py with --structured-json when available.",
             "Static URL intake is used only when browser capture is skipped or unavailable and fallback is allowed.",
+            "Multi-query viral discovery uses public/browser-visible platform evidence, official APIs, or dry-run query plans.",
             "Official publishing still requires explicit approval, credentials, and platform authorization.",
             "No login, captcha bypass, cookie extraction, hidden token storage, or fabricated metrics.",
         ],
@@ -295,9 +393,14 @@ def build_report(
 
 
 def batch_status(runs: list[dict[str, Any]]) -> str:
-    if runs and all(item.get("status") == "ready" for item in runs):
+    if not runs:
+        return "blocked"
+    cycle_statuses = [item.get("status") for item in runs]
+    multi_statuses = [item.get("multiQueryViralDiscovery", {}).get("status") for item in runs]
+    failed_multi = any(status in {"blocked", "error"} for status in multi_statuses)
+    if all(status == "ready" for status in cycle_statuses) and not failed_multi:
         return "ready"
-    if any(item.get("status") == "ready" for item in runs):
+    if any(status == "ready" for status in cycle_statuses):
         return "partial_ready"
     return "blocked"
 
@@ -335,6 +438,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Cycle: {run.get('cycleReport', '')}",
                 f"- Workflow manifest: {run.get('workflowManifest', '')}",
                 f"- Automation status: `{run.get('automationStatus', '')}`",
+                f"- Multi-query discovery: `{run.get('multiQueryViralDiscovery', {}).get('status', 'skipped')}` {run.get('multiQueryViralDiscovery', {}).get('report', '')}",
             ]
         )
     lines.extend(["", "## Guardrails"])

@@ -99,6 +99,20 @@ python scripts/product_batch_runner.py \
 
 The batch runner writes `reports/promotion-manager/batch/product-batch-runner.{json,md}` and one `product-batch-runs/<id>/...` output folder per product. It passes browser-visible snapshots to `promotion_cycle_runner.py --structured-json` when available and uses static `--product-url` fallback only when browser capture is skipped or unavailable.
 
+Add multi-query viral discovery when every ready product should automatically derive several search queries, search/capture public platform evidence, and merge materials/creators:
+
+```bash
+python scripts/product_batch_runner.py \
+  --urls-file "./product-urls.txt" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-multi-query-viral-discovery \
+  --multi-query-query-count 5 \
+  --multi-query-top-n 20 \
+  --out-dir "./promotion-output"
+```
+
+Use `--multi-query-dry-run` for planning-only runs that write search plans and commands without opening platform pages.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

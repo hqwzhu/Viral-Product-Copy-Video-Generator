@@ -7,7 +7,7 @@ Use this reference when the user asks for full automation.
 - Parse public product URLs, saved HTML, rendered page text, or Codex/browser structured snapshots into product profiles.
 - Capture public product URLs with Playwright Chromium into structured browser-visible snapshots for product intake.
 - Run `scripts/product_url_reader.py` to read one or more product URLs into per-URL structured browser snapshots, normalized product profiles, and correct next workflow commands.
-- Run `scripts/product_batch_runner.py` to read multiple product URLs first, then execute one guarded local promotion cycle per ready product using structured snapshots when available.
+- Run `scripts/product_batch_runner.py` to read multiple product URLs first, execute one guarded local promotion cycle per ready product using structured snapshots when available, and optionally run product-driven multi-query viral discovery for every ready product.
 - Run an end-to-end local workflow from one product source through `scripts/run_promotion_workflow.py`, producing intake, competitor discovery, generated content, video status, publish automation status, metrics recovery status, and a workflow manifest.
 - Run due promotion jobs from a local JSON schedule through `scripts/automation_scheduler.py`, including state tracking and Windows Task Scheduler script generation.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.

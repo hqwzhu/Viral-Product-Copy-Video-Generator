@@ -465,6 +465,63 @@ Prompt templates for product copy, SEO content, and video scripts.
                 self.assertEqual(run["sourceMode"], "static_url_fallback")
                 self.assertIn("--product-url", command_text)
 
+    def test_product_batch_runner_runs_multi_query_discovery_after_each_cycle(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-multi-query-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        page = out_dir / "prompt-kit.html"
+        page.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content.</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        command = [
+            sys.executable,
+            str(PRODUCT_BATCH_RUNNER),
+            "--url",
+            page.as_uri(),
+            "--platforms",
+            "github,xiaohongshu",
+            "--skip-video",
+            "--run-multi-query-viral-discovery",
+            "--multi-query-dry-run",
+            "--multi-query-query-count",
+            "2",
+            "--multi-query-top-n",
+            "5",
+            "--out-dir",
+            str(out_dir / "output"),
+        ]
+        if not playwright_chromium_available():
+            command.append("--skip-browser")
+        subprocess.run(command, check=True, cwd=ROOT)
+
+        report_path = out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["multiQueryDiscoveryRuns"], 1)
+        self.assertEqual(report["summary"]["plannedMultiQueryDiscoveryRuns"], 1)
+        run = report["promotionRuns"][0]
+        multi_query = run["multiQueryViralDiscovery"]
+        self.assertEqual(multi_query["status"], "planned")
+        self.assertTrue(Path(multi_query["report"]).exists())
+        self.assertTrue(Path(multi_query["mergedViralLibrary"]).exists())
+        self.assertTrue(Path(multi_query["mergedCreatorLeaderboard"]).exists())
+        command_text = " ".join(multi_query["command"])
+        self.assertIn("--workflow-manifest", command_text)
+        self.assertIn("--dry-run", command_text)
+        discovery_report = json.loads(Path(multi_query["report"]).read_text(encoding="utf-8"))
+        self.assertEqual(discovery_report["summary"]["queries"], 2)
+
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3127,6 +3184,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
+        self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
@@ -3137,6 +3195,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
+        self.assertTrue(
+            any(
+                item["purpose"] == "batch_product_url_cycles_with_multi_query_viral_discovery"
+                for item in report["recommendedCommands"]
+            )
+        )
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))

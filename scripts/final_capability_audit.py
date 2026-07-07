@@ -624,6 +624,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             ),
         },
         {
+            "purpose": "batch_product_url_cycles_with_multi_query_viral_discovery",
+            "command": (
+                f"python scripts/product_batch_runner.py --urls-file \"./product-urls.txt\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --run-multi-query-viral-discovery "
+                f"--multi-query-query-count 5 --multi-query-top-n 20 --out-dir \"{out_dir}\""
+            ),
+        },
+        {
             "purpose": "multi_query_viral_discovery",
             "command": (
                 f"python scripts/multi_query_viral_discovery.py --workflow-manifest "

@@ -17,7 +17,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` captures browser-visible product page evidence
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` when `scripts/product_url_reader.py` reads one or more product URLs into structured page snapshots and product profiles
 - `product-url-reader/<id>/structured-product-page.json` and `product-url-reader/<id>/intake/product-profile.{json,md}` per product URL read by `scripts/product_url_reader.py`
-- `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` reads multiple product URLs first and then runs one promotion cycle per ready product
+- `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery after each cycle
 - `product-batch-runs/<id>/reports/promotion-manager/cycle/promotion-cycle.{json,md}` per product cycle run created by `scripts/product_batch_runner.py`
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
@@ -102,7 +102,9 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `promotionRuns[].cycleReport`: the per-product `promotion-cycle.json`
 - `promotionRuns[].workflowManifest`: the workflow manifest created inside the cycle output
 - `promotionRuns[].publishQueue` and `promotionRuns[].metricsRecovery`: guarded publish and recovery artifacts when created
+- `promotionRuns[].multiQueryViralDiscovery`: optional product-driven multi-query discovery status, report path, merged viral library, merged creator leaderboard, summary, and command
 - `promotionRuns[].command`: sanitized command ledger for the per-product cycle
+- `summary.multiQueryDiscoveryRuns`, `readyMultiQueryDiscoveryRuns`, `plannedMultiQueryDiscoveryRuns`, and `failedMultiQueryDiscoveryRuns`: per-product viral discovery coverage
 - `guardrails`: read product URLs first, use structured snapshots when available, no unapproved publishing, and no login/captcha/token bypass
 
 ## Workflow Manifest
