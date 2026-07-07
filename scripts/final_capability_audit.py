@@ -39,6 +39,7 @@ SCRIPT_REQUIREMENTS = {
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
     "browser_publish_assistant": "browser_publish_assistant.py",
+    "browser_publish_form_fill": "browser_publish_form_fill.py",
     "platform_access_audit": "platform_access_audit.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
@@ -339,7 +340,14 @@ def requirement_status(
     )
     publish_ready = scripts_ready(
         scripts,
-        ["publish_queue", "publish_readiness", "browser_publish_assistant", "publish_executor", "youtube_oauth_publish"],
+        [
+            "publish_queue",
+            "publish_readiness",
+            "browser_publish_assistant",
+            "browser_publish_form_fill",
+            "publish_executor",
+            "youtube_oauth_publish",
+        ],
     )
     metrics_ready = scripts_ready(
         scripts,
@@ -411,6 +419,7 @@ def requirement_status(
                     "publish_queue",
                     "publish_readiness",
                     "browser_publish_assistant",
+                    "browser_publish_form_fill",
                     "publish_executor",
                     "youtube_oauth_publish",
                 ],

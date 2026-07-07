@@ -31,6 +31,8 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 - Zhihu, Xiaohongshu, Douyin, and unverified platforms are written as manual or browser-assisted tasks with copy-ready drafts.
 - Real official writes still require `--execute --approval I_APPROVE_PUBLISH` and the relevant environment credential.
 
+`scripts/browser_publish_assistant.py` prepares payload JSON, clipboard text, checklist files, and a copy-ready `scripts/browser_publish_form_fill.py` command for manual/browser-assisted platforms. `scripts/browser_publish_form_fill.py` may fill visible form fields from one payload and write a screenshot/report, but it must not login, bypass challenges, or click the final publish/submit button.
+
 `scripts/publish_readiness_runner.py` audits an existing queue or builds one first with `--build-queue`. It reports per-platform readiness, missing target fields, credential presence by environment variable name, approval status, and next actions. It does not store secret values and does not bypass the explicit approval gate.
 
 `scripts/platform_access_audit.py` creates the official access boundary report before implementation or execution decisions. It maps each platform to implemented official API paths, official app-review candidates, manual/browser-assisted fallbacks, metrics evidence sources, required environment variable names, and implementation gaps. Use `--check-live` only when you want to verify that official documentation URLs are reachable.

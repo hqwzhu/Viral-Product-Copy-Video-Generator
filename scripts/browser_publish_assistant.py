@@ -17,6 +17,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 PUBLISHED_ITEMS = SCRIPTS / "published_items.py"
+BROWSER_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 TODAY = date.today().isoformat()
 ASSISTED_STATUSES = {"queued_manual", "queued_browser_assisted"}
 ASSISTED_MODES = {"manual_publish_required", "browser_assisted_publish"}
@@ -117,6 +118,7 @@ def build_records(
         payload = payload_from_draft(platform, draft, item)
         publisher_url = overrides.get(platform) or DEFAULT_PUBLISH_URLS.get(platform, "")
         payload_files = write_payload_files(out_dir, platform, payload, item, publisher_url)
+        browser_form_fill = browser_form_fill_info(out_dir, payload_files["json"])
         opened = False
         if args.open_browser and publisher_url:
             opened = webbrowser.open(publisher_url)
@@ -133,6 +135,7 @@ def build_records(
                 "browserOpened": bool(opened),
                 "payload": payload,
                 "payloadFiles": payload_files,
+                "browserFormFill": browser_form_fill,
                 "finalPublishUserActionRequired": True,
                 "postPublish": {
                     "registerUrlCommand": (
@@ -149,6 +152,19 @@ def build_records(
             }
         )
     return records
+
+
+def browser_form_fill_info(out_dir: Path, payload_json: str) -> dict[str, Any]:
+    report = report_dir(out_dir) / "browser-form-fill.json"
+    screenshot = report_dir(out_dir) / "browser-form-fill.png"
+    return {
+        "command": f"python scripts/{BROWSER_FORM_FILL.name} --payload-json \"{payload_json}\" --out-dir \"{out_dir}\"",
+        "payloadJson": payload_json,
+        "report": str(report),
+        "screenshot": str(screenshot),
+        "finalPublishUserActionRequired": True,
+        "guardrail": "Fills visible fields only; the user must review and click final publish.",
+    }
 
 
 def payload_from_draft(platform: str, draft: str, item: dict[str, Any]) -> dict[str, Any]:
@@ -357,6 +373,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Publisher URL: {record['publisherUrl'] or 'missing'}",
                 f"- Clipboard: {record['payloadFiles']['clipboard']}",
                 f"- Form fill script: {record['payloadFiles']['formFillScript']}",
+                f"- Browser form-fill command: `{record['browserFormFill']['command']}`",
                 f"- Checklist: {record['payloadFiles']['checklist']}",
                 f"- Final publish user action required: {record['finalPublishUserActionRequired']}",
                 f"- Next action: {record['nextAction']}",

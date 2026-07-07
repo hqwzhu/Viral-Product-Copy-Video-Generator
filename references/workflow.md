@@ -384,7 +384,17 @@ python scripts/browser_publish_assistant.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` plus per-platform payload JSON, clipboard text, form-fill helper scripts, and checklists. It can open user-visible publisher entry URLs with `--open-browser`, but the user must complete login, account checks, media review, and the final publish action. Override moved creator pages with `--platform-publish-url platform=url`.
+This writes `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` plus per-platform payload JSON, clipboard text, form-fill helper scripts, controlled browser form-fill commands, and checklists. It can open user-visible publisher entry URLs with `--open-browser`, but the user must complete login, account checks, media review, and the final publish action. Override moved creator pages with `--platform-publish-url platform=url`.
+
+To let Codex fill visible publisher fields from one prepared payload and then stop for user review:
+
+```bash
+python scripts/browser_publish_form_fill.py \
+  --payload-json "./promotion-output/reports/promotion-manager/browser-publish/payloads/xiaohongshu.payload.json" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png`. It must not click the final publish/submit button, login, solve challenges, read cookies, or store credentials.
 
 After the user publishes manually or in a user-visible browser session, register the real published URL:
 

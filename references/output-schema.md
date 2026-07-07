@@ -52,7 +52,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
-- `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads and registers supplied real published URLs
+- `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads, browser form-fill commands, and registers supplied real published URLs
+- `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from a prepared payload and stops before final publish
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
@@ -258,11 +259,24 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `records[].platform`, `queueStatus`, `publishMode`, `contentDraft`, `publisherUrl`, and `publisherUrlSource`
 - `records[].payload`: normalized title, body, tags, cover text, CTA, and preparation date
 - `records[].payloadFiles`: payload JSON, clipboard text, generic form-fill helper script, and checklist path
+- `records[].browserFormFill`: copy-ready `browser_publish_form_fill.py` command, payload JSON path, expected report path, screenshot path, and final-user-action guardrail
 - `records[].finalPublishUserActionRequired`: always true for browser/manual platforms
 - `records[].postPublish`: copy-ready commands for `published_items.py`, `publish_url_capture.py`, and `metrics_recovery.py`
 - `registeredPublishedItems`: sanitized command results when `--published-url platform=url` is supplied
 - `summary`: prepared task count, opened browser count, registered published URL count, and final-user-action count
 - `guardrails`: no auto-login, no final publish click, no captcha/risk-control bypass, and no cookie/token capture
+
+`browser-form-fill.json` includes:
+
+- `status`: `ready`, `partial_ready_no_matching_visible_fields`, `blocked`, or `error`
+- `platform`, `publisherUrl`, `finalUrl`, `httpStatus`, and `pageTitle`
+- `payloadJson`: prepared payload path used as input
+- `submitted`: false unless the page itself reports an already-submitted state; the helper never clicks submit
+- `finalPublishUserActionRequired`: always true
+- `filledFields[]`: visible fields filled with field name, value, selector, and descriptor
+- `missingFields[]`: payload fields that could not be matched to visible inputs
+- `artifacts.screenshot`: screenshot after filling or blocking
+- `guardrails`: no auto-login, no final publish click, no captcha/risk-control bypass, no hidden token/cookie access
 
 ## Platform Access Audit
 
