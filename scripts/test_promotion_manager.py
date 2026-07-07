@@ -23,6 +23,7 @@ COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 METRICS_RECOVERY = ROOT / "scripts" / "metrics_recovery.py"
+PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
@@ -1158,6 +1159,126 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn(("xiaohongshu", "publish_pending"), pending)
         self.assertIn(("douyin", "publish_pending"), pending)
 
+    def test_published_items_registers_queue_and_manual_urls(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="published-items-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        queue_dir = out_dir / "reports/promotion-manager/publish-queue"
+        queue_dir.mkdir(parents=True)
+        draft_path = queue_dir / "drafts/github-draft.md"
+        draft_path.parent.mkdir(parents=True)
+        draft_path.write_text("# github Publish Draft\n\n- Title: GitHub Launch Draft\n", encoding="utf-8")
+        execution_path = queue_dir / "official-executions/github/reports/promotion-manager/publish-results/publish-execution.json"
+        execution_path.parent.mkdir(parents=True)
+        execution_path.write_text(
+            json.dumps(
+                {
+                    "platform": "github",
+                    "status": "published",
+                    "publishedUrl": "https://github.com/example/repo/blob/main/PROMOTION.md",
+                    "commitSha": "abc123",
+                    "request": {"title": "GitHub Launch Draft"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        queue_path = queue_dir / "publish-queue.json"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "github",
+                            "status": "published",
+                            "publishMode": "official_api_publish",
+                            "contentDraft": str(draft_path),
+                            "officialExecution": {
+                                "publishedUrl": "https://github.com/example/repo/blob/main/PROMOTION.md",
+                                "report": str(execution_path),
+                            },
+                        },
+                        {"platform": "douyin", "status": "queued_browser_assisted", "publishMode": "browser_assisted_publish"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISHED_ITEMS),
+                "--publish-queue",
+                str(queue_path),
+                "--platform",
+                "xiaohongshu",
+                "--published-url",
+                "https://www.xiaohongshu.com/explore/note123",
+                "--title",
+                "Manual Launch Note",
+                "--evidence",
+                "xhs-screenshot.png",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/published-items/published-items.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        by_platform = {item["platform"]: item for item in report["records"]}
+        self.assertEqual(report["summary"]["published"], 2)
+        self.assertEqual(report["summary"]["pending"], 1)
+        self.assertEqual(by_platform["github"]["title"], "GitHub Launch Draft")
+        self.assertEqual(by_platform["xiaohongshu"]["contentId"], "note123")
+        self.assertIn("xhs-screenshot.png", by_platform["xiaohongshu"]["evidence"])
+        self.assertEqual(report["pendingQueueItems"][0]["platform"], "douyin")
+        self.assertTrue((out_dir / "reports/promotion-manager/published-items/published-items.md").exists())
+
+    def test_metrics_recovery_reads_default_published_items_report(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-published-items-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "title": "Launch Note",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        business_csv = out_dir / "business.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,orders,revenue,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,3000,380,2,$88.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--business-csv",
+                str(business_csv),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["coverage"]["publishedItemsDiscovered"], 1)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(report["recoveryStatus"], "partial_ready")
+
     def test_publish_executor_github_dry_run_requires_explicit_execution(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1288,6 +1409,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(by_platform["github"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["youtube"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["xiaohongshu"]["contentDraft"]).exists())
+        published_items_path = workflow_out / "reports/promotion-manager/published-items/published-items.json"
+        self.assertTrue(published_items_path.exists())
+        published_items = json.loads(published_items_path.read_text(encoding="utf-8"))
+        self.assertEqual(published_items["summary"]["published"], 0)
+        self.assertEqual(published_items["summary"]["pending"], 5)
         serialized = json.dumps(queue)
         self.assertNotIn("GITHUB_TOKEN", serialized)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)

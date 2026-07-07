@@ -38,6 +38,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` when `scripts/publish_queue.py` turns publish packs into official dry-run tasks and manual/browser-assisted tasks
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
+- `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
@@ -81,6 +82,16 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
 - `guardrails`: publishing safety rules used for the queue run
 
+## Published Items
+
+`published-items.json` includes:
+
+- `records[]`: proven published items with `platform`, `publishedUrl`, `contentId`, `title`, `publishedAt`, `publishStatus`, `evidence`, and `source`
+- `pendingQueueItems[]`: dry-runs, blocked writes, queued manual tasks, and browser-assisted tasks that do not yet have a real published URL
+- `summary`: counts for published records, pending queue items, and platforms
+- `sources[]`: publish queues, publish execution reports, existing published-items files, or direct CLI registration evidence used to build the report
+- `guardrails`: rules that prevent treating dry-runs or queued tasks as published content
+
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
@@ -91,7 +102,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 
 - `recoveryStatus`: `ready`, `partial_ready`, or `waiting_real_data`
 - `workflowManifest` and `publishQueue`: evidence paths used for the recovery attempt
-- `publishedItems`: planned, queued, dry-run, or proven published items discovered from manifests, publish queues, or user-provided JSON
+- `publishedItems`: planned, queued, dry-run, or proven published items discovered from manifests, publish queues, the default published-items report, or user-provided JSON
 - `records[]`: normalized metric records compatible with `metrics_intake.py`
 - `connectorStatus[]`: official connector results for YouTube/GitHub and unsupported/manual statuses for other platforms
 - `businessSources[]`: CSV, JSON, or text evidence loaded for orders, revenue, clicks, leads, or platform metrics

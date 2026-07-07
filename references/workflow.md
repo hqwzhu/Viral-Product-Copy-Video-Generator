@@ -230,6 +230,7 @@ python scripts/publish_queue.py \
 ```
 
 The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, and keeps Zhihu, Xiaohongshu, Douyin, and similar platforms as manual/browser-assisted queue items.
+It also writes `reports/promotion-manager/published-items/published-items.{json,md}`. Official dry-runs, queued manual tasks, blocked writes, and browser-assisted tasks remain pending until a real published URL exists.
 
 Run official publishing actions through a dry run first:
 
@@ -262,6 +263,17 @@ python scripts/youtube_oauth_publish.py \
 
 Dry-run writes the Google authorization URL. Execution requires `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `--execute --approval I_APPROVE_PUBLISH`. The helper exchanges the authorization code for an access token and uploads in the same process without saving the token.
 
+After manual or browser-assisted publishing, register the real URL before metrics recovery:
+
+```bash
+python scripts/published_items.py \
+  --platform xiaohongshu \
+  --published-url "https://www.xiaohongshu.com/explore/real-note-id" \
+  --title "Published launch note" \
+  --evidence "./screenshots/xhs-published.png" \
+  --out-dir "./promotion-output"
+```
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.
@@ -288,7 +300,7 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
-The coordinator reads proven published URLs, direct `--published-url` inputs, `--github-repo`, `--youtube-video-id`, and optional `--published-items-json` files. It automatically attempts only safe official/public connectors for GitHub and YouTube. It merges those records with CSV, JSON, or text exports that contain clicks, leads, orders, revenue, or platform metrics. Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, or official access are provided.
+The coordinator reads proven published URLs from the default `published-items` report, direct `--published-url` inputs, `--github-repo`, `--youtube-video-id`, and optional `--published-items-json` files. It automatically attempts only safe official/public connectors for GitHub and YouTube. It merges those records with CSV, JSON, or text exports that contain clicks, leads, orders, revenue, or platform metrics. Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, or official access are provided.
 
 ## Stage 7: Periodic Automation
 

@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+PUBLISHED_ITEMS = SCRIPTS / "published_items.py"
 TODAY = date.today().isoformat()
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 OFFICIAL_PLATFORMS = {"github", "youtube"}
@@ -39,6 +40,7 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     queue = build_queue(args, out_dir, promotion_dir, manifest, publish_pack, content, selected_platforms)
     write_queue(out_dir, queue)
+    write_published_items(out_dir)
     print(f"Publish queue written to: {(queue_dir(out_dir) / 'publish-queue.json').resolve()}")
 
 
@@ -333,6 +335,25 @@ def write_queue(out_dir: Path, queue: dict[str, Any]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "publish-queue.json").write_text(json.dumps(queue, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (directory / "publish-queue.md").write_text(render_queue_markdown(queue) + "\n", encoding="utf-8")
+
+
+def write_published_items(out_dir: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PUBLISHED_ITEMS),
+            "--publish-queue",
+            str(queue_dir(out_dir) / "publish-queue.json"),
+            "--out-dir",
+            str(out_dir),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"published_items failed: {tail(result.stderr) or tail(result.stdout)}")
 
 
 def render_queue_markdown(queue: dict[str, Any]) -> str:

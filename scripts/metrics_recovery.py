@@ -33,7 +33,11 @@ def main() -> None:
         source_status.append({"source": str(queue_path), "type": "publish_queue", "status": "loaded"})
         published_items.extend(items_from_publish_queue(queue_path))
 
-    for path in [Path(value) for value in args.published_items_json]:
+    published_item_paths = [Path(value) for value in args.published_items_json]
+    default_items_path = default_published_items(out_dir)
+    if default_items_path and default_items_path not in published_item_paths:
+        published_item_paths.append(default_items_path)
+    for path in published_item_paths:
         source_status.append({"source": str(path), "type": "published_items_json", "status": "loaded"})
         published_items.extend(items_from_published_items_json(path))
     published_items.extend(items_from_direct_args(args))
@@ -87,6 +91,11 @@ def default_workflow_manifest(out_dir: Path) -> Path | None:
 
 def default_publish_queue(out_dir: Path) -> Path | None:
     path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+    return path if path.exists() else None
+
+
+def default_published_items(out_dir: Path) -> Path | None:
+    path = out_dir / "reports/promotion-manager/published-items/published-items.json"
     return path if path.exists() else None
 
 
