@@ -6,7 +6,7 @@ Use this reference when the user asks for full automation.
 
 - Parse public product URLs or saved HTML into structured product profiles.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.
-- Render deterministic MP4 draft videos from generated platform content when `ffmpeg` is available.
+- Render deterministic MP4 videos from generated platform content with captions, optional voiceover audio files, or Windows SAPI review voiceover when `ffmpeg` is available.
 - Generate platform research docs, risk matrices, reference project notes, and self-learning notes.
 - Generate platform competitor discovery tasks and run official public search connectors where credentials/access allow.
 - Collect YouTube competitor evidence through official search/video/channel APIs and GitHub competitor evidence through public search APIs.

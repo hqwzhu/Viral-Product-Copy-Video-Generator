@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import textwrap
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,10 @@ def main() -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     ass_path = work_dir / "captions.ass"
     ass_path.write_text(render_ass(title, segments, args.width, args.height), encoding="utf-8")
-    duration = max(segment["end"] for segment in segments)
+    audio_path, audio_mode = resolve_audio(args, content, segments, work_dir)
+    duration = max(max(segment["end"] for segment in segments), audio_duration(audio_path) if audio_path else 0)
+    duration = max(duration, 1)
+    audio_input = [str(audio_path)] if audio_path else [f"anullsrc=channel_layout=stereo:sample_rate=48000:d={duration}"]
     command = [
         ffmpeg,
         "-y",
@@ -33,10 +37,13 @@ def main() -> None:
         "lavfi",
         "-i",
         f"color=c=0x111827:s={args.width}x{args.height}:d={duration}",
-        "-f",
-        "lavfi",
-        "-i",
-        f"anullsrc=channel_layout=stereo:sample_rate=48000:d={duration}",
+    ]
+    if audio_path:
+        command.extend(["-i", audio_input[0]])
+    else:
+        command.extend(["-f", "lavfi", "-i", audio_input[0]])
+    command.extend(
+        [
         "-vf",
         "subtitles=captions.ass",
         "-c:v",
@@ -47,17 +54,20 @@ def main() -> None:
         "aac",
         "-shortest",
         str(out_path),
-    ]
+        ]
+    )
     subprocess.run(command, check=True, cwd=work_dir)
     metadata = {
         "video": str(out_path),
         "captions": str(ass_path),
+        "audioMode": audio_mode,
+        "audio": str(audio_path) if audio_path else None,
         "platform": args.platform,
         "durationSeconds": duration,
         "segments": segments,
         "notes": [
-            "This is a deterministic draft MP4 with silent audio and burned-in text.",
-            "Use it as a review artifact or placeholder; replace with real voiceover and visuals before final publication.",
+            "This is a deterministic MP4 with burned-in text and optional voiceover audio.",
+            "Use external voiceover audio for publication quality; built-in Windows TTS is a review-quality fallback.",
         ],
     }
     (out_path.with_suffix(".json")).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -71,6 +81,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", default="./promotion-output/videos/promo-draft.mp4")
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--voiceover-audio", help="Existing WAV/MP3/M4A voiceover file to mux into the video.")
+    parser.add_argument("--generate-voiceover", action="store_true", help="Generate a temporary Windows SAPI voiceover WAV from the script text.")
+    parser.add_argument("--voiceover-text", default="", help="Override voiceover text used by --generate-voiceover.")
+    parser.add_argument("--voiceover-rate", type=int, default=0, help="Windows SAPI rate from -10 to 10.")
+    parser.add_argument("--voiceover-volume", type=int, default=100, help="Windows SAPI volume from 0 to 100.")
     return parser.parse_args()
 
 
@@ -100,6 +115,87 @@ def build_segments(content: dict[str, Any], platform: str) -> tuple[str, list[di
         segments.append({"start": current, "end": current + 4, "text": chunk})
         current += 4
     return title, segments or [{"start": 0, "end": 5, "text": title}]
+
+
+def resolve_audio(args: argparse.Namespace, content: dict[str, Any], segments: list[dict[str, Any]], work_dir: Path) -> tuple[Path | None, str]:
+    if args.voiceover_audio:
+        audio_path = Path(args.voiceover_audio)
+        if not audio_path.exists():
+            raise SystemExit(f"Voiceover audio not found: {audio_path}")
+        return audio_path.resolve(), "file"
+    if args.generate_voiceover:
+        if sys.platform != "win32":
+            raise SystemExit("--generate-voiceover currently requires Windows SAPI.")
+        voiceover_text = args.voiceover_text or voiceover_text_from_content(content, segments)
+        if not voiceover_text:
+            raise SystemExit("No voiceover text found for --generate-voiceover.")
+        wav_path = work_dir / "voiceover.wav"
+        synthesize_windows_sapi(voiceover_text, wav_path, args.voiceover_rate, args.voiceover_volume)
+        return wav_path, "windows_sapi"
+    return None, "silent"
+
+
+def voiceover_text_from_content(content: dict[str, Any], segments: list[dict[str, Any]]) -> str:
+    formats = content.get("formats") if isinstance(content.get("formats"), dict) else {}
+    candidates = [
+        content.get("voiceover"),
+        content.get("shortVideoScript"),
+        content.get("description"),
+    ]
+    for key in ["thirtySecondScripts", "videoScripts"]:
+        value = formats.get(key)
+        if isinstance(value, list) and value:
+            candidates.append(value[0])
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return " ".join(str(segment.get("text", "")) for segment in segments).strip()
+
+
+def synthesize_windows_sapi(text: str, wav_path: Path, rate: int, volume: int) -> None:
+    rate = max(-10, min(10, rate))
+    volume = max(0, min(100, volume))
+    escaped_text = text.replace("'", "''")
+    escaped_path = str(wav_path).replace("'", "''")
+    command = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        f"$synth.Rate = {rate}; "
+        f"$synth.Volume = {volume}; "
+        f"$synth.SetOutputToWaveFile('{escaped_path}'); "
+        f"$synth.Speak('{escaped_text}'); "
+        "$synth.Dispose();"
+    )
+    subprocess.run(["powershell", "-NoProfile", "-Command", command], check=True)
+    if not wav_path.exists() or wav_path.stat().st_size == 0:
+        raise SystemExit("Windows SAPI did not produce a voiceover WAV file.")
+
+
+def audio_duration(audio_path: Path | None) -> float:
+    if not audio_path:
+        return 0
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(audio_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        return float(result.stdout.strip())
+    except ValueError:
+        return 0
 
 
 def parse_time_range(value: str, index: int) -> tuple[int, int]:

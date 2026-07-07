@@ -557,6 +557,62 @@ class PromotionManagerScriptTest(unittest.TestCase):
         metadata = json.loads(video_path.with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(metadata["platform"], "douyin")
 
+    def test_video_renderer_muxes_voiceover_audio_file(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="video-voiceover-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        content_json = out_dir / "content.json"
+        audio_path = out_dir / "voiceover.wav"
+        video_path = out_dir / "promo-with-voiceover.mp4"
+        content_json.write_text(
+            json.dumps(
+                {
+                    "douyin": {
+                        "title": "Launch draft",
+                        "storyboard": [
+                            {"time": "0-2s", "visual": "Show the product", "voiceover": "Turn one product URL into content."}
+                        ],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=2",
+                str(audio_path),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RENDER_VIDEO),
+                "--content-json",
+                str(content_json),
+                "--platform",
+                "douyin",
+                "--voiceover-audio",
+                str(audio_path),
+                "--out",
+                str(video_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        self.assertTrue(video_path.exists())
+        metadata = json.loads(video_path.with_suffix(".json").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["audioMode"], "file")
+        self.assertEqual(Path(metadata["audio"]), audio_path)
+
 
 if __name__ == "__main__":
     unittest.main()

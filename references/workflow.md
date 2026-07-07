@@ -103,6 +103,18 @@ python scripts/render_video.py \
 
 The rendered video is a draft artifact with silent audio and burned-in text. Do not treat it as final production creative unless the user accepts that quality level.
 
+For a stronger video artifact, provide a recorded or AI-generated voiceover file:
+
+```bash
+python scripts/render_video.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json" \
+  --platform youtube \
+  --voiceover-audio "./voiceover.wav" \
+  --out "./promotion-output/videos/ai-prompt-kit-youtube.mp4"
+```
+
+On Windows, `--generate-voiceover` can synthesize a review-quality voiceover through system SAPI. Use it for iteration; use a real voiceover file for publication quality.
+
 ## Stage 4: Review
 
 Use the bundled scorecard first. If `cheat-on-content` is installed, run it as a second-pass qualitative reviewer. Do not mutate real prediction logs unless the user asks.

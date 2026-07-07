@@ -50,6 +50,16 @@ python scripts/render_video.py \
   --out "./promotion-output/videos/ai-prompt-kit-douyin.mp4"
 ```
 
+To render with a voiceover audio file:
+
+```bash
+python scripts/render_video.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json" \
+  --platform youtube \
+  --voiceover-audio "./voiceover.wav" \
+  --out "./promotion-output/videos/ai-prompt-kit-youtube.mp4"
+```
+
 To import competitor evidence from a public page, saved HTML, JSON export, or copied transcript:
 
 ```bash
@@ -147,7 +157,7 @@ Generate platform-native material:
 - Douyin: 30-second hooks, voiceover scripts, storyboard, captions, hashtags.
 - GitHub: README promotion copy, Release/Issue/Discussion drafts.
 
-When the user asks for a video file, run `scripts/render_video.py` to create a draft MP4 from the generated content JSON. This creates a silent review artifact with burned-in captions; replace it with real voiceover and visuals before final publication if production quality is required.
+When the user asks for a video file, run `scripts/render_video.py` to create an MP4 from the generated content JSON. Use `--voiceover-audio` for a real recorded/AI voiceover file, or `--generate-voiceover` on Windows for review-quality system TTS. Without either option the renderer creates a silent captioned artifact.
 
 ### 4. Review And Score
 
@@ -208,7 +218,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
-- `scripts/render_video.py`: ffmpeg-based MP4 draft renderer.
+- `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.
 - `references/platform-publishing.md`: platform publishing modes and safety rules.
