@@ -25,6 +25,12 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 
 ## Official Executor Coverage
 
+`scripts/publish_queue.py` converts generated publish packs into a single queue:
+
+- GitHub and YouTube records can call `scripts/publish_executor.py` in dry-run mode by default.
+- Zhihu, Xiaohongshu, Douyin, and unverified platforms are written as manual or browser-assisted tasks with copy-ready drafts.
+- Real official writes still require `--execute --approval I_APPROVE_PUBLISH` and the relevant environment credential.
+
 `scripts/publish_executor.py` supports:
 
 - GitHub file create/update through the repository contents REST API.

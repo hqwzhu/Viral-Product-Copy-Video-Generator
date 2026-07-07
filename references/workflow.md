@@ -176,6 +176,18 @@ Use the bundled scorecard first. If `cheat-on-content` is installed, run it as a
 
 Create publish packs. Every pack requires human approval before execution. Browser-assisted publishing may fill forms, but the user must click the final publish button.
 
+Convert a completed workflow into a publish queue before doing any real write:
+
+```bash
+python scripts/publish_queue.py \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --github-repo owner/repo \
+  --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --out-dir "./promotion-output"
+```
+
+The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, and keeps Zhihu, Xiaohongshu, Douyin, and similar platforms as manual/browser-assisted queue items.
+
 Run official publishing actions through a dry run first:
 
 ```bash
@@ -255,6 +267,8 @@ python scripts/automation_scheduler.py windows-task \
 The scheduler writes `promotion-automation-state.json` next to the config unless `--state-file` is provided. It also writes `automation-run.{json,md}` under the configured output root. Treat that report as the scheduler ledger.
 
 Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
+
+To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
 
 ## Phase 2 And Phase 3 Boundaries
 

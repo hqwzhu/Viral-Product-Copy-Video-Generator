@@ -32,6 +32,9 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/generated-content/<product>-content-review.{json,md}`
 - `reports/promotion-manager/publish-packs/<product>-publish-pack.{json,md}`
 - `reports/promotion-manager/publish-packs/platform-publish-capability-map.{json,md}`
+- `reports/promotion-manager/publish-queue/publish-queue.{json,md}` when `scripts/publish_queue.py` turns publish packs into official dry-run tasks and manual/browser-assisted tasks
+- `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
+- `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
@@ -61,6 +64,19 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `manual_publish_required`
 - `unsupported`
 
+## Publish Queue
+
+`publish-queue.json` includes:
+
+- `mode`: `dry_run` or `execute`
+- `approvalRequired` and `approvalProvided`
+- `records[]`: one platform task per selected publish pack
+- `records[].status`: `dry_run`, `published`, `blocked`, `queued_manual`, `queued_browser_assisted`, `unsupported`, or `error`
+- `records[].contentDraft`: copy-ready Markdown draft path
+- `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube tasks
+- `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
+- `guardrails`: publishing safety rules used for the queue run
+
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
@@ -79,4 +95,8 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].platforms`: target platform list
 - `jobs[].searchSnapshotDir`: optional directory of platform search snapshots for the workflow runner
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
-- `jobs[].publish.enabled`: defaults to false; final writes still require the official publish executor and approval
+- `jobs[].publish.enabled`: defaults to false; when true, the scheduler runs `scripts/publish_queue.py` after a successful workflow
+- `jobs[].publish.platforms`: optional platform filter for queue generation
+- `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`
+- `jobs[].publish.youtube`: optional YouTube queue settings such as `videoFile`, `privacyStatus`, and `categoryId`
+- `jobs[].publish.execute`: defaults to false; final writes still require official credentials and `jobs[].publish.approval` equal to `I_APPROVE_PUBLISH`

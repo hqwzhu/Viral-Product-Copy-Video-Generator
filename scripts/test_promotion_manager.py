@@ -22,6 +22,7 @@ COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
+PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
@@ -460,6 +461,79 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(run_report["records"][0]["status"], "ready")
         self.assertFalse(run_report["records"][0]["publish"]["enabled"])
 
+    def test_automation_scheduler_can_run_publish_queue_after_workflow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-publish-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-publish-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["github", "xiaohongshu"],
+                            "topN": 2,
+                            "skipVideo": True,
+                            "publish": {
+                                "enabled": True,
+                                "platforms": ["github", "xiaohongshu"],
+                                "github": {
+                                    "repo": "hqwzhu/Viral-Product-Copy-Video-Generator",
+                                    "action": "file",
+                                    "path": "PROMOTION.md",
+                                },
+                            },
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-publish-weekly"]
+        self.assertEqual(job_state["lastStatus"], "ready")
+        self.assertTrue(Path(job_state["lastPublishQueue"]).exists())
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        publish_queue = run_report["records"][0]["publishQueue"]
+        self.assertEqual(publish_queue["status"], "ready")
+        self.assertEqual(publish_queue["summary"]["officialDryRuns"], 1)
+        self.assertEqual(publish_queue["summary"]["manualQueued"], 1)
+
     def test_automation_scheduler_writes_windows_task_script(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -799,6 +873,76 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["officialApi"], "YouTube Data API videos.insert")
         self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
+
+    def test_publish_queue_builds_official_dry_runs_and_manual_tasks(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-queue-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        workflow_out = out_dir / "output"
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--skip-video",
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        video_path = out_dir / "youtube-draft.mp4"
+        video_path.write_bytes(b"dry-run video placeholder")
+        manifest_path = workflow_out / "reports/promotion-manager/agent-run/workflow-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_QUEUE),
+                "--workflow-manifest",
+                str(manifest_path),
+                "--promotion-out-dir",
+                str(workflow_out),
+                "--out-dir",
+                str(workflow_out),
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--github-path",
+                "PROMOTION.md",
+                "--youtube-video-file",
+                str(video_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        queue_path = workflow_out / "reports/promotion-manager/publish-queue/publish-queue.json"
+        queue = json.loads(queue_path.read_text(encoding="utf-8"))
+        by_platform = {item["platform"]: item for item in queue["records"]}
+        self.assertEqual(by_platform["github"]["status"], "dry_run")
+        self.assertEqual(by_platform["youtube"]["status"], "dry_run")
+        self.assertEqual(by_platform["xiaohongshu"]["status"], "queued_manual")
+        self.assertEqual(by_platform["zhihu"]["status"], "queued_manual")
+        self.assertEqual(by_platform["douyin"]["status"], "queued_browser_assisted")
+        self.assertTrue(Path(by_platform["github"]["officialExecution"]["report"]).exists())
+        self.assertTrue(Path(by_platform["youtube"]["officialExecution"]["report"]).exists())
+        self.assertTrue(Path(by_platform["xiaohongshu"]["contentDraft"]).exists())
+        serialized = json.dumps(queue)
+        self.assertNotIn("GITHUB_TOKEN", serialized)
+        self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
 
     def test_youtube_oauth_publish_dry_run_generates_auth_url_without_tokens(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-test-"))

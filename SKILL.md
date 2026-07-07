@@ -169,6 +169,16 @@ python scripts/publish_executor.py \
   --out-dir "./promotion-output"
 ```
 
+To turn a completed workflow into a guarded publish queue for all target platforms:
+
+```bash
+python scripts/publish_queue.py \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --github-repo owner/repo \
+  --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --out-dir "./promotion-output"
+```
+
 To authorize and upload a YouTube video without saving tokens:
 
 ```bash
@@ -189,6 +199,7 @@ The command writes:
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
+- `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
@@ -255,6 +266,7 @@ YouTube and GitHub may be official API candidates. Zhihu, Xiaohongshu, and Douyi
 For full-automation boundaries, read [references/final-capability-boundaries.md](references/final-capability-boundaries.md).
 Use `scripts/publish_executor.py` for supported official publishing actions. It defaults to dry-run and only writes when `--execute --approval I_APPROVE_PUBLISH` is supplied with the required environment token.
 Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAuth consent flow before upload. It requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for execution and does not save OAuth tokens.
+Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, Douyin, and other unsupported direct-publish platforms.
 
 ### 6. Retrospective
 
@@ -280,6 +292,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 Use `scripts/automation_scheduler.py` to run one or more product promotion jobs on a local schedule. The scheduler reads a JSON config, decides which jobs are due, calls `scripts/run_promotion_workflow.py`, writes a state file, and writes an automation run report. It can also generate a PowerShell script for Windows Task Scheduler.
 
 The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
+If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publish_queue.py` after a successful workflow and records the queue report path in state. This still defaults to dry-run unless the job explicitly enables execution and supplies the approval phrase.
 
 ## Bundled Resources
 
@@ -292,6 +305,7 @@ The scheduler may generate content, videos, publish packs, official dry-run publ
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
+- `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, and manual/browser-assisted publish tasks.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.

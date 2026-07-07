@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
 
 
@@ -77,7 +78,7 @@ def init_config(args: argparse.Namespace) -> None:
         "collectorPlatforms": ["youtube", "github"],
         "skipVideo": args.skip_video,
         "metrics": {},
-        "publish": {"enabled": False, "mode": "approval_required"},
+        "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
     }
     config = {
         "version": 1,
@@ -167,12 +168,74 @@ def evaluate_job(
             "manifest": str(manifest_path) if manifest_path.exists() else "",
         }
     )
+    if result.returncode == 0 and manifest_path.exists() and publish_enabled(job):
+        publish_result = run_publish_queue(job, out_dir, base_dir, manifest_path)
+        record["publishQueue"] = publish_result
     job_state["lastRunAt"] = now.isoformat()
     job_state["lastStatus"] = record["status"]
     job_state["lastOutDir"] = str(out_dir)
     job_state["lastManifest"] = str(manifest_path) if manifest_path.exists() else ""
+    if record.get("publishQueue", {}).get("report"):
+        job_state["lastPublishQueue"] = record["publishQueue"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
     return record
+
+
+def publish_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("publish") or {}).get("enabled"))
+
+
+def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
+    command = build_publish_queue_command(job, out_dir, base_dir, manifest_path)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+    summary: dict[str, Any] = {}
+    if report_path.exists():
+        try:
+            summary = json.loads(report_path.read_text(encoding="utf-8-sig")).get("summary", {})
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": "ready" if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "summary": summary,
+    }
+
+
+def build_publish_queue_command(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> list[str]:
+    publish = job.get("publish") or {}
+    command = [
+        sys.executable,
+        str(PUBLISH_QUEUE),
+        "--workflow-manifest",
+        str(manifest_path),
+        "--promotion-out-dir",
+        str(out_dir),
+        "--out-dir",
+        str(out_dir),
+    ]
+    append_if_present(command, "--platforms", comma_value(publish.get("platforms")))
+    if publish.get("execute"):
+        command.append("--execute")
+        append_if_present(command, "--approval", publish.get("approval"))
+
+    github = publish.get("github") or {}
+    append_if_present(command, "--github-repo", github.get("repo"))
+    append_if_present(command, "--github-action", github.get("action"))
+    append_if_present(command, "--github-path", github.get("path"))
+    append_if_present(command, "--github-branch", github.get("branch"))
+    append_if_present(command, "--github-tag-name", github.get("tagName"))
+
+    youtube = publish.get("youtube") or {}
+    if youtube.get("videoFile"):
+        command.extend(["--youtube-video-file", str(resolve_path(base_dir, youtube["videoFile"]))])
+    append_if_present(command, "--youtube-privacy-status", youtube.get("privacyStatus"))
+    append_if_present(command, "--youtube-category-id", youtube.get("categoryId"))
+    return command
 
 
 def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -> list[str]:
