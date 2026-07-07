@@ -39,6 +39,17 @@ python scripts/competitor_discovery.py \
 
 Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
 
+Collect supported official/public competitor evidence:
+
+```bash
+python scripts/competitor_collector.py \
+  --platform youtube \
+  --query "AI product copy generator" \
+  --out-dir "./promotion-output"
+```
+
+The collector supports YouTube Data API search/video/channel evidence and GitHub public repository search. YouTube requires `YOUTUBE_API_KEY`. GitHub can run against public search without a token, with optional `GITHUB_TOKEN` or `GH_TOKEN` for higher rate limits. Zhihu, Xiaohongshu, and Douyin remain browser-assisted/user-export paths unless official collection access is configured and verified.
+
 Start with:
 
 ```bash

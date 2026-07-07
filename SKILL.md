@@ -68,6 +68,15 @@ python scripts/competitor_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+To automatically collect competitor evidence through supported official/public connectors:
+
+```bash
+python scripts/competitor_collector.py \
+  --platform github \
+  --query "AI product copy generator" \
+  --out-dir "./promotion-output"
+```
+
 To import real post-publish metrics from a platform or business export:
 
 ```bash
@@ -116,6 +125,7 @@ The command writes:
 - For detailed routing, read [references/platform-publishing.md](references/platform-publishing.md).
 - Use the script `research` command first when platform feasibility or self-learning notes are needed.
 - Use `scripts/competitor_discovery.py` to create platform search tasks and optional official API search results before importing evidence.
+- Use `scripts/competitor_collector.py` to automatically collect YouTube official API evidence or GitHub public API evidence when credentials/access allow.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
 
 ### 3. Content Generation
@@ -183,6 +193,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/product_intake.py`: public URL or saved HTML product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
+- `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.

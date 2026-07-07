@@ -18,6 +18,7 @@ PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
+COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 
@@ -221,6 +222,146 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertFalse(tasks["xiaohongshu"]["canRunFullyAutomatedNow"])
         self.assertEqual(report["liveResults"], {})
         self.assertTrue((out_dir / "reports/promotion-manager/competitors/competitor-discovery.md").exists())
+
+    def test_competitor_collector_imports_youtube_official_fixtures(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="competitor-collector-youtube-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        search_path = out_dir / "youtube-search.json"
+        videos_path = out_dir / "youtube-videos.json"
+        channels_path = out_dir / "youtube-channels.json"
+        search_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "id": {"videoId": "vid123"},
+                            "snippet": {
+                                "title": "One URL Into 30 Posts",
+                                "channelId": "chan123",
+                                "channelTitle": "Growth Creator",
+                                "description": "Turn one product URL into a week of content.",
+                                "publishedAt": "2026-01-01T00:00:00Z",
+                            },
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        videos_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "id": "vid123",
+                            "snippet": {
+                                "title": "One URL Into 30 Posts",
+                                "channelId": "chan123",
+                                "channelTitle": "Growth Creator",
+                                "description": "Turn one product URL into a week of content.",
+                                "publishedAt": "2026-01-01T00:00:00Z",
+                            },
+                            "statistics": {"viewCount": "12000", "likeCount": "1200", "commentCount": "87"},
+                            "contentDetails": {"duration": "PT30S"},
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        channels_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "id": "chan123",
+                            "snippet": {"title": "Growth Creator"},
+                            "statistics": {"subscriberCount": "5000", "viewCount": "90000", "videoCount": "42"},
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPETITOR_COLLECTOR),
+                "--platform",
+                "youtube",
+                "--query",
+                "product copy generator",
+                "--youtube-search-json",
+                str(search_path),
+                "--youtube-videos-json",
+                str(videos_path),
+                "--youtube-channels-json",
+                str(channels_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/competitors/auto-collected-competitors.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["platform"], "youtube")
+        self.assertEqual(record["creatorName"], "Growth Creator")
+        self.assertEqual(record["visibleMetrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(record["visibleMetrics"]["channelSubscribers"]["normalized"], 5000.0)
+        self.assertEqual(report["connectorStatus"][0]["status"], "ready")
+
+    def test_competitor_collector_imports_github_public_fixtures(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="competitor-collector-github-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        search_path = out_dir / "github-search.json"
+        search_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "full_name": "example/product-copy-generator",
+                            "name": "product-copy-generator",
+                            "html_url": "https://github.com/example/product-copy-generator",
+                            "description": "Generate product copy from one URL.",
+                            "owner": {"login": "example"},
+                            "stargazers_count": 3400,
+                            "forks_count": 210,
+                            "watchers_count": 3400,
+                            "open_issues_count": 12,
+                            "language": "Python",
+                            "created_at": "2025-01-01T00:00:00Z",
+                            "updated_at": "2026-01-01T00:00:00Z",
+                            "topics": ["ai", "copywriting"],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPETITOR_COLLECTOR),
+                "--platform",
+                "github",
+                "--query",
+                "product copy generator",
+                "--github-search-json",
+                str(search_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/competitors/auto-collected-competitors.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["platform"], "github")
+        self.assertEqual(record["creatorName"], "example")
+        self.assertEqual(record["visibleMetrics"]["stars"]["normalized"], 3400.0)
+        self.assertEqual(record["language"], "Python")
+        self.assertEqual(report["connectorStatus"][0]["source"], "GitHub Search REST API")
 
     def test_metrics_intake_imports_real_csv_metrics(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-intake-test-"))
