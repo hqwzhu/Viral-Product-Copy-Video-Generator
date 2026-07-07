@@ -55,6 +55,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
+- `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
@@ -271,6 +272,22 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `issues[]`: validation blockers such as `missing_published_url`, `unknown_platform`, or `url_looks_like_draft_or_preview`
 - `guardrails`: no cookies, passwords, hidden tokens, preview URLs, drafts, or fabricated publishing evidence
 
+## Post-Publish Metrics Capture
+
+`post-publish-metrics-capture.json` includes:
+
+- `status`: `ready`, `partial_ready`, `waiting_published_urls`, or `waiting_real_data`
+- `input`: published item sources, direct published URLs, browser-assisted mode, and dry-run flag
+- `summary`: published items checked, captured metric records, statuses, platforms, and metric fields
+- `results[]`: one capture result per published URL with status, platform, URL, title, snapshot path, metric fields, and manual evidence request path when needed
+- `metricRecords[]`: flattened metric records compatible with `metrics_recovery.py --metrics-json`
+- `structuredRecords[]`: browser-visible/public page snapshots with platform, URL, title, captured text, metrics, and evidence
+- `artifacts.metricExport`: path to `post-publish-metrics-export.json`
+- `artifacts.structuredSnapshot`: path to `post-publish-metrics-snapshot.json`
+- `guardrails`: public/browser-visible capture only, no auto-login, no captcha bypass, no private endpoints, no hidden token storage, and no fabricated metrics
+
+`post-publish-metrics-export.json` is the preferred input for `metrics_recovery.py --metrics-json`. `post-publish-metrics-snapshot.json` preserves richer evidence for review.
+
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
@@ -391,3 +408,9 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].browserPublishAssistant.platformPublishUrls`: optional object or list of `platform=url` entries that override default creator/publisher entry URLs
 - `jobs[].browserPublishAssistant.publishedUrls`: optional URL registrations as a list of `platform=url` strings after the user has published
 - `jobs[].browserPublishAssistant.evidence`: optional evidence URL/path list attached to registered published URLs
+- `jobs[].postPublishMetricsCapture.enabled`: optional boolean; when true, the scheduler runs `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery
+- `jobs[].postPublishMetricsCapture.publishedItemsJson`: optional file path or list of paths containing proven published URL evidence
+- `jobs[].postPublishMetricsCapture.publishedUrls`: optional URL or list of `platform=url` entries to capture
+- `jobs[].postPublishMetricsCapture.captureBrowserAssisted`: optional boolean; uses browser-visible capture before static public HTML fallback
+- `jobs[].postPublishMetricsCapture.allowLocalhost`: test-only boolean for local fixtures
+- `jobs[].postPublishMetricsCapture.limit`: optional max published URLs to process

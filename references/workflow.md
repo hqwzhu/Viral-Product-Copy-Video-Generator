@@ -446,6 +446,15 @@ python scripts/publish_url_capture.py \
 
 The capture script extracts the real platform URL, title, content id, and evidence, then updates `reports/promotion-manager/published-items/published-items.{json,md}`. It must block draft, editor, preview, localhost, and unknown-platform URLs instead of registering them as published content.
 
+After real published URLs are registered, capture public/browser-visible metrics before recovery:
+
+```bash
+python scripts/post_publish_metrics_capture.py \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, a structured snapshot, and `post-publish-metrics-export.json`. It captures visible public metrics only. If the page requires login, captcha, account verification, private analytics, or a business system, it writes a manual evidence request instead of bypassing the platform.
+
 Run one full local operating cycle when you want workflow generation, guarded publishing, published URL registration, and metrics recovery in one command:
 
 ```bash
@@ -501,6 +510,14 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
+When `scripts/post_publish_metrics_capture.py` has already captured public page metrics, merge its export:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-json "./promotion-output/reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json" \
+  --out-dir "./promotion-output"
+```
+
 Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, browser-visible structured snapshots, or official access are provided.
 
 ## Stage 7: Periodic Automation
@@ -538,6 +555,7 @@ Scheduled runs can generate new content, videos, publish packs, and metrics impo
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
+Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.

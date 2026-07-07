@@ -301,6 +301,21 @@ python scripts/publish_url_capture.py \
   --out-dir "./promotion-output"
 ```
 
+To automatically capture public/browser-visible metrics from registered published URLs:
+
+```bash
+python scripts/post_publish_metrics_capture.py \
+  --out-dir "./promotion-output"
+```
+
+Then merge those captured metrics into the retrospective:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-json "./promotion-output/reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json" \
+  --out-dir "./promotion-output"
+```
+
 To configure periodic local automation:
 
 ```bash
@@ -452,6 +467,7 @@ The command writes:
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries.
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` captures a browser-visible published page and registers the real URL.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence.
+- `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, and metrics recovery as one local operating cycle.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks scripts, tools, credential presence, platform limits, and final requirement gaps.
@@ -542,6 +558,7 @@ Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare b
 Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted.
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
 Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
+Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.
 Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, and metrics recovery. Official GitHub/YouTube writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
 
 ### 6. Retrospective
@@ -563,6 +580,7 @@ Use only real data supplied by the user or exported from platforms:
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
+Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.
 
 ### 7. Periodic Automation
 
@@ -571,6 +589,7 @@ Use `scripts/automation_scheduler.py` to run one or more product promotion jobs 
 The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
 If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publish_queue.py` after a successful workflow and records the queue report path in state. This still defaults to dry-run unless the job explicitly enables execution and supplies the approval phrase.
 If a scheduled job has `browserPublishAssistant.enabled: true`, the scheduler runs `scripts/browser_publish_assistant.py` after publish queue generation and records the browser/manual payload report path in state.
+If a scheduled job has `postPublishMetricsCapture.enabled: true`, the scheduler runs `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Captured metrics are passed into `scripts/metrics_recovery.py` as a JSON metrics source when `metricsRecovery.enabled` is also true.
 If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted follow-up tasks.
@@ -600,6 +619,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
 - `scripts/publish_url_capture.py`: post-publish browser snapshot/HTML/text capturer that registers real published URLs.
+- `scripts/post_publish_metrics_capture.py`: public/browser-visible post-publish metrics capturer for registered URLs; writes a metrics export for recovery and manual evidence requests when metrics are hidden.
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, and manual/browser-assisted publish tasks.
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.

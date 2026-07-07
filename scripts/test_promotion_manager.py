@@ -32,6 +32,7 @@ PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
+POST_PUBLISH_METRICS_CAPTURE = ROOT / "scripts" / "post_publish_metrics_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
@@ -1484,6 +1485,121 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
 
+    def test_automation_scheduler_runs_post_publish_metrics_capture_before_recovery(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-post-metrics-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Launch Note Metrics</title></head>
+<body><h1>Launch Note Metrics</h1><p>views: 4,200 likes: 360 comments: 41 orders: 3 revenue: $99.00</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        published_url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        published_items_path = out_dir / "published-items.json"
+        published_items_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": published_url,
+                            "title": "Launch Note Metrics",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-post-metrics-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["xiaohongshu"],
+                            "topN": 1,
+                            "skipVideo": True,
+                            "postPublishMetricsCapture": {
+                                "enabled": True,
+                                "publishedItemsJson": "published-items.json",
+                                "allowLocalhost": True,
+                            },
+                            "metricsRecovery": {"enabled": True},
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-post-metrics-weekly"]
+        self.assertTrue(Path(job_state["lastPostPublishMetricsCapture"]).exists())
+        self.assertTrue(Path(job_state["lastMetricsRecovery"]).exists())
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        capture = run_report["records"][0]["postPublishMetricsCapture"]
+        self.assertEqual(capture["status"], "ready")
+        self.assertEqual(capture["summary"]["capturedMetricRecords"], 1)
+        recovery = run_report["records"][0]["metricsRecovery"]
+        self.assertEqual(recovery["status"], "ready")
+        self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
+
     def test_automation_scheduler_passes_competitor_informed_content_flags(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-enhancer-flags-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1984,6 +2100,132 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
         self.assertEqual(report["aggregates"]["totals"]["revenue"], 88.0)
 
+    def test_post_publish_metrics_capture_extracts_public_page_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="post-publish-metrics-capture-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>views: 12,000 likes: 850 comments: 64 favorites: 120 shares: 18</p>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": url,
+                            "title": "AI Prompt Kit launch note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(POST_PUBLISH_METRICS_CAPTURE),
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        capture_path = out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.json"
+        capture = json.loads(capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(capture["status"], "ready")
+        self.assertEqual(capture["summary"]["capturedMetricRecords"], 1)
+        self.assertEqual(capture["results"][0]["status"], "ready")
+        self.assertEqual(capture["structuredRecords"][0]["metrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(capture["structuredRecords"][0]["metrics"]["likes"]["normalized"], 850.0)
+        metric_export = out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json"
+        self.assertTrue(metric_export.exists())
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--metrics-json",
+                str(metric_export),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        recovery = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(recovery["coverage"]["recordsWithMetrics"], 1)
+        self.assertEqual(recovery["aggregates"]["totals"]["views"], 12000.0)
+
+    def test_post_publish_metrics_capture_queues_unsafe_pages_for_manual_evidence(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="post-publish-metrics-capture-unsafe-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "douyin",
+                            "publishedUrl": "http://127.0.0.1/login/video123",
+                            "title": "Draft page",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(POST_PUBLISH_METRICS_CAPTURE),
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        capture = json.loads((out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.json").read_text(encoding="utf-8"))
+        self.assertEqual(capture["status"], "waiting_real_data")
+        self.assertEqual(capture["summary"]["capturedMetricRecords"], 0)
+        self.assertEqual(capture["results"][0]["status"], "queued_manual_evidence")
+        self.assertEqual(capture["results"][0]["reason"], "url_looks_like_login_captcha_editor_draft_or_preview")
+        self.assertTrue(Path(capture["results"][0]["evidenceRequest"]).exists())
+
     def test_metrics_recovery_marks_publish_queue_items_pending(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-pending-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2259,9 +2501,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["selfEvolutionAudit"]["ready"])
         self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
         self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
+        self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
