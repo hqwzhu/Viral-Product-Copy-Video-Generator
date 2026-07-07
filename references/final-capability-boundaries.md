@@ -10,6 +10,7 @@ Use this reference when the user asks for full automation.
 - Generate platform research docs, risk matrices, reference project notes, and self-learning notes.
 - Generate platform competitor discovery tasks and run official public search connectors where credentials/access allow.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
+- Import real post-publish metrics from CSV, JSON, text exports, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
 
 ## What Requires Official Authorization
 
@@ -18,6 +19,7 @@ Use this reference when the user asks for full automation.
 - TikTok Direct Post requires developer app access, approved scopes, and creator authorization.
 - Douyin official publishing requires open-platform app permissions, approved scopes, and user authorization.
 - Platform analytics require official API access or user-exported evidence.
+- Orders and revenue require business-system exports or user-provided analytics evidence; public social platforms generally cannot prove those values.
 
 ## What Must Stay Browser-Assisted Or Manual
 

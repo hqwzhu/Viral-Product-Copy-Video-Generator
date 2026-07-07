@@ -104,6 +104,16 @@ Create publish packs. Every pack requires human approval before execution. Brows
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.
 
+Import real metrics first:
+
+```bash
+python scripts/metrics_intake.py \
+  --csv-file "./metrics-export.csv" \
+  --out-dir "./promotion-output"
+```
+
+Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--published-url`, `--github-repo`, and `--youtube-video-id`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
+
 ## Phase 2 And Phase 3 Boundaries
 
 The script may generate roadmap documents for a browser extension and SaaS product, but do not implement either until the user explicitly approves that phase.

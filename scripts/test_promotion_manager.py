@@ -18,6 +18,7 @@ PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
+METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -219,6 +220,41 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertFalse(tasks["xiaohongshu"]["canRunFullyAutomatedNow"])
         self.assertEqual(report["liveResults"], {})
         self.assertTrue((out_dir / "reports/promotion-manager/competitors/competitor-discovery.md").exists())
+
+    def test_metrics_intake_imports_real_csv_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        csv_path = out_dir / "metrics.csv"
+        csv_path.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,comments,shares,clicks,leads,orders,revenue,evidence",
+                    "youtube,https://www.youtube.com/watch?v=abc123,Launch Video,12K,1.2K,87,33,240,28,6,$420.50,https://studio.youtube.com/export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--csv-file",
+                str(csv_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/metrics/imported-metrics.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["metrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(record["metrics"]["revenue"]["normalized"], 420.5)
+        self.assertGreater(record["derived"]["engagementRate"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 6.0)
+        self.assertEqual(report["retrospective"]["status"], "ready")
+        self.assertTrue((out_dir / "reports/promotion-manager/metrics/imported-metrics.md").exists())
 
     def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
         if shutil.which("ffmpeg") is None:

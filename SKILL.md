@@ -68,6 +68,14 @@ python scripts/competitor_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+To import real post-publish metrics from a platform or business export:
+
+```bash
+python scripts/metrics_intake.py \
+  --csv-file "./metrics-export.csv" \
+  --out-dir "./promotion-output"
+```
+
 The command writes:
 
 - `docs/promotion-manager/01-platform-publishing-feasibility.md`
@@ -155,6 +163,7 @@ Use only real data supplied by the user or exported from platforms:
 - evidence URLs/screenshots/exports
 
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
+Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 
 ## Bundled Resources
 
@@ -162,6 +171,7 @@ If no real data exists, output `waiting_real_data`. Never estimate or fabricate 
 - `scripts/product_intake.py`: public URL or saved HTML product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
+- `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/render_video.py`: ffmpeg-based MP4 draft renderer.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.
