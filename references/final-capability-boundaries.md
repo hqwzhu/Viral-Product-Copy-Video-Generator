@@ -15,6 +15,7 @@ Use this reference when the user asks for full automation.
 - Collect YouTube competitor evidence through official search/video/channel APIs and GitHub competitor evidence through public search APIs.
 - Open public platform search pages with Playwright Chromium and save browser-visible competitor search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Capture multi-result browser-visible search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms without using private endpoints or hidden browser tokens.
+- Run a standalone keyword-to-viral-library discovery pass with `scripts/viral_discovery_runner.py`, chaining browser-visible platform search, normalized captures, viral material ranking, creator leaderboard generation, and optional safe follow-up queues.
 - Rank captured cross-platform search results into a viral material library with top titles, hooks, creators, visible metrics, reusable patterns, and source evidence paths.
 - Group ranked viral materials into a creator/account leaderboard and safe creator follow-up tasks using only observed public/browser-visible evidence.
 - Run safe creator/account follow-up research through supported official/public connectors for YouTube and GitHub, while routing Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms to browser-visible evidence requests.

@@ -143,6 +143,16 @@ python scripts/platform_search_browser.py \
   --out-dir "./promotion-output"
 ```
 
+To run the standalone viral discovery pipeline from a keyword:
+
+```bash
+python scripts/viral_discovery_runner.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
 To automatically collect competitor evidence through supported official/public connectors:
 
 ```bash
@@ -350,6 +360,7 @@ The command writes:
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
+- `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, and optional follow-up queues as one standalone discovery pass.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/competitors/viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` ranks captured search evidence.
 - `reports/promotion-manager/competitors/creator-leaderboard.{json,md}` and `creator-follow-up-tasks.{json,md}` when `scripts/creator_leaderboard.py` groups viral materials by creator/account and creates safe tracking tasks.
@@ -387,6 +398,7 @@ The command writes:
 - Use `scripts/competitor_discovery.py` to create platform search tasks and optional official API search results before importing evidence.
 - Use `scripts/competitor_collector.py` to automatically collect YouTube official API evidence or GitHub public API evidence when credentials/access allow.
 - Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
+- Use `scripts/viral_discovery_runner.py` when the user specifically asks to automatically find viral creators, posts, videos, or repositories from a keyword before product copy generation. It chains browser-visible platform search, normalized capture, ranked viral library creation, creator leaderboard generation, and optional follow-up queues.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
 - Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified.
 - Use `scripts/creator_leaderboard.py` after the viral library exists to identify high-signal creators/accounts, aggregate their observed public metrics, and create creator follow-up tasks. The full workflow does this automatically unless `--skip-creator-leaderboard` is supplied.
@@ -485,6 +497,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
 - `scripts/platform_search_browser.py`: public search page browser snapshot generator for platform competitor discovery.
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
+- `scripts/viral_discovery_runner.py`: standalone keyword-to-viral-library runner for platform search, content capture, creator leaderboard, and follow-up queues.
 - `scripts/viral_content_library.py`: ranked multi-platform viral material library and follow-up capture task generator.
 - `scripts/creator_leaderboard.py`: creator/account leaderboard and follow-up tracking task generator from ranked viral materials.
 - `scripts/creator_follow_up_runner.py`: safe creator/account follow-up runner that uses public/official connectors where available and queues manual evidence elsewhere.

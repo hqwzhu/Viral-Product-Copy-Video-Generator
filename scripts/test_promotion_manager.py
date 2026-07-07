@@ -41,6 +41,7 @@ COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
+VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -1963,6 +1964,86 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
+
+    def test_viral_discovery_runner_builds_multiplatform_library_and_creator_tasks(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-runner-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_dir = out_dir / "html"
+        html_dir.mkdir()
+        fixtures = {
+            "youtube": (
+                "https://www.youtube.com/watch?v=abc123",
+                "AI workflow exploded to 1M views",
+                "creator: Launch Lab views: 1.2M likes: 52K comments: 1200",
+            ),
+            "zhihu": (
+                "https://www.zhihu.com/question/123/answer/456",
+                "How AI operators build content engines",
+                "creator: Zhihu Builder likes: 8800 comments: 640",
+            ),
+            "xiaohongshu": (
+                "https://www.xiaohongshu.com/explore/note123",
+                "3 steps to launch an AI product note",
+                "creator: Red Launch favorites: 12000 likes: 9000 comments: 830",
+            ),
+            "douyin": (
+                "https://www.douyin.com/video/123",
+                "30 seconds AI product demo hook",
+                "creator: Demo Studio views: 2.4M likes: 180K shares: 9000",
+            ),
+            "github": (
+                "https://github.com/example/ai-promo-kit",
+                "AI promo kit repository",
+                "creator: example stars: 4200 forks: 380",
+            ),
+        }
+        for platform, (url, title, body) in fixtures.items():
+            (html_dir / f"{platform}.html").write_text(
+                f"""
+                <html><head><title>{platform} search</title></head>
+                <body>
+                  <article>
+                    <a href="{url}">{title}</a>
+                    <p>{body}</p>
+                    <p>Hook: stop writing product copy from scratch.</p>
+                    <p>CTA: try the workflow and follow for more.</p>
+                  </article>
+                </body></html>
+                """,
+                encoding="utf-8",
+            )
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_DISCOVERY_RUNNER),
+                "--query",
+                "AI product promotion",
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--top-n",
+                "5",
+                "--html-snapshot-dir",
+                str(html_dir),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["coverage"]["requestedPlatforms"], 5)
+        self.assertEqual(report["coverage"]["searchCapturesReady"], 5)
+        self.assertEqual(report["coverage"]["viralMaterials"], 5)
+        self.assertGreaterEqual(report["coverage"]["creators"], 1)
+        self.assertTrue(Path(report["viralContentLibrary"]["library"]).exists())
+        self.assertTrue(Path(report["creatorLeaderboard"]["leaderboard"]).exists())
+        self.assertTrue(Path(report["creatorLeaderboard"]["followUpTasks"]).exists())
+        task_summary = report["viralContentLibrary"]["taskSummary"]["modes"]
+        self.assertEqual(task_summary["public_url_capture_candidate"], 2)
+        self.assertEqual(task_summary["browser_assisted_capture_required"], 3)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.md").exists())
 
     def test_publish_url_capture_registers_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-test-"))

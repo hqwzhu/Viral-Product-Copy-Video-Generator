@@ -26,6 +26,7 @@ SCRIPT_REQUIREMENTS = {
     "run_workflow": "run_promotion_workflow.py",
     "platform_search_browser": "platform_search_browser.py",
     "platform_search_capture": "platform_search_capture.py",
+    "viral_discovery_runner": "viral_discovery_runner.py",
     "viral_content_library": "viral_content_library.py",
     "creator_leaderboard": "creator_leaderboard.py",
     "creator_follow_up_runner": "creator_follow_up_runner.py",
@@ -312,6 +313,7 @@ def requirement_status(
     search_ready = scripts_ready(
         scripts,
         [
+            "viral_discovery_runner",
             "platform_search_browser",
             "platform_search_capture",
             "viral_content_library",
@@ -346,6 +348,7 @@ def requirement_status(
             "evidence": scripts_present(
                 scripts,
                 [
+                    "viral_discovery_runner",
                     "platform_search_browser",
                     "platform_search_capture",
                     "viral_content_library",

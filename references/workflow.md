@@ -117,6 +117,18 @@ python scripts/platform_search_browser.py \
 
 The search browser writes `search-snapshots/browser-search/<platform>.json` files plus `browser-search-snapshots.{json,md}`. It captures visible DOM only. If Chromium is missing, install it with `python -m playwright install chromium` or pass `--install-browser-if-missing` on trusted machines.
 
+For a direct keyword-to-viral-library pass, run the standalone viral discovery runner:
+
+```bash
+python scripts/viral_discovery_runner.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` and chains platform search snapshots, normalized captures, `viral-content-library`, `creator-leaderboard`, and follow-up task generation. Use `--live-official` to also run supported YouTube/GitHub official/public collectors where credentials allow. Use `--html-snapshot-dir` when Codex or the user has saved browser-visible platform search pages.
+
 Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
 
 Collect supported official/public competitor evidence:
