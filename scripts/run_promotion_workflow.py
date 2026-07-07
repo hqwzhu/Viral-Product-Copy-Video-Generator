@@ -31,10 +31,11 @@ def main() -> None:
     run_promotion_manager(args, product, out_dir, steps)
     discovery = run_competitor_discovery(args, product, out_dir, steps)
     collections = run_competitor_collectors(args, product, out_dir, steps)
+    search_captures = run_search_captures(args, product, out_dir, steps)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, search_captures, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -59,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-n", type=int, default=10)
     parser.add_argument("--live-official-competitors", action="store_true", help="Call official/public competitor connectors where credentials allow.")
     parser.add_argument("--collector-platforms", default="youtube,github", help="Comma-separated platforms for official/public competitor collectors.")
+    parser.add_argument("--search-snapshot-dir", default="", help="Directory of rendered search snapshots named <platform>.json/.txt/.html to capture.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
 
     parser.add_argument("--skip-video", action="store_true", help="Skip MP4 rendering.")
@@ -196,6 +198,51 @@ def run_competitor_collectors(args: argparse.Namespace, product: dict[str, Any],
     return reports
 
 
+def run_search_captures(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not args.search_snapshot_dir:
+        return []
+    snapshot_dir = Path(args.search_snapshot_dir)
+    query = competitor_query(args, product)
+    captures = []
+    for platform in product["platforms"]:
+        source = search_snapshot_source(snapshot_dir, platform)
+        if not source:
+            captures.append({"platform": platform, "status": "missing_snapshot", "expected": str(snapshot_dir / f"{platform}.json")})
+            continue
+        command = [
+            sys.executable,
+            str(SCRIPTS / "platform_search_capture.py"),
+            "--platform",
+            platform,
+            "--query",
+            query,
+            "--top-n",
+            str(args.top_n),
+            "--out-dir",
+            str(out_dir),
+            str(source["flag"]),
+            str(source["path"]),
+        ]
+        step = run_command(f"platform_search_capture_{platform}", command, check=False)
+        steps.append(step)
+        path = out_dir / "reports/promotion-manager/competitors" / f"captured-search-results-{platform}.json"
+        summary = {"platform": platform, "status": "ready" if path.exists() else "error", "path": str(path), "exitCode": step["exitCode"]}
+        if path.exists():
+            report = json.loads(path.read_text(encoding="utf-8"))
+            summary["recordCount"] = len(report.get("records", []))
+            summary["inputMode"] = report.get("inputMode")
+        captures.append(summary)
+    return captures
+
+
+def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path | str] | None:
+    for suffix, flag in [(".json", "--structured-json"), (".txt", "--text-file"), (".html", "--html-file"), (".htm", "--html-file")]:
+        path = snapshot_dir / f"{platform}{suffix}"
+        if path.exists():
+            return {"path": path, "flag": flag}
+    return None
+
+
 def render_video_artifacts(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if args.skip_video:
         return [{"status": "skipped", "reason": "--skip-video was supplied."}]
@@ -255,6 +302,7 @@ def build_manifest(
     profile: dict[str, Any],
     discovery: dict[str, Any] | None,
     collections: list[dict[str, Any]],
+    search_captures: list[dict[str, Any]],
     videos: list[dict[str, Any]],
     metrics: dict[str, Any] | None,
     steps: list[dict[str, Any]],
@@ -294,6 +342,7 @@ def build_manifest(
             "query": discovery.get("query") if discovery else "",
             "platforms": [task.get("platform") for task in discovery.get("tasks", [])] if discovery else [],
             "officialCollections": collections,
+            "searchCaptures": search_captures,
         },
         "videoGeneration": videos,
         "publishAutomation": publish_queue,

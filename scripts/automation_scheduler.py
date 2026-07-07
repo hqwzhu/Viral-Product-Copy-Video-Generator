@@ -202,6 +202,8 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
         command.append("--live-official-competitors")
     if job.get("collectorPlatforms"):
         command.extend(["--collector-platforms", comma_value(job.get("collectorPlatforms"))])
+    if job.get("searchSnapshotDir"):
+        command.extend(["--search-snapshot-dir", str(resolve_path(base_dir, job["searchSnapshotDir"]))])
     if job.get("skipCompetitorDiscovery"):
         command.append("--skip-competitor-discovery")
     if job.get("skipVideo"):

@@ -25,6 +25,7 @@ PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
+PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -274,6 +275,122 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertFalse(manifest["selfEvolution"]["canInstallWithoutReview"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json").exists())
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/competitor-discovery.json").exists())
+
+    def test_platform_search_capture_imports_structured_results(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-capture-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "xiaohongshu.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "AI product copy generator",
+                    "items": [
+                        {
+                            "title": "7 prompts that turn one product page into launch content",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-1",
+                            "creator": "Growth Notes",
+                            "hook": "Stop rewriting the same product intro.",
+                            "content": "Use one URL to create hooks, notes, and CTA variants. comments 87 likes 1.2k saves 420",
+                            "likes": "1.2k",
+                            "favorites": "420",
+                            "comments": "87",
+                        },
+                        {
+                            "title": "Product launch content checklist",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-2",
+                            "creator": "AI Operator",
+                            "content": "Before posting, verify the claim, audience, offer, and evidence. likes 800 comments 35",
+                            "likes": "800",
+                            "comments": "35",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "xiaohongshu",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-xiaohongshu.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["platform"], "xiaohongshu")
+        self.assertEqual(report["recordCount"], 2)
+        self.assertEqual(report["records"][0]["visibleMetrics"]["likes"]["normalized"], 1200.0)
+        self.assertEqual(report["records"][0]["contentFormat"], "note")
+        self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
+
+    def test_agent_workflow_captures_search_snapshot_directory(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-search-snapshot-workflow-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_path = out_dir / "product.json"
+        product_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        snapshot_dir = out_dir / "search"
+        snapshot_dir.mkdir()
+        (snapshot_dir / "douyin.json").write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "title": "One URL into 10 short videos",
+                            "url": "https://www.douyin.com/video/123",
+                            "creatorName": "Launch Lab",
+                            "content": "Hook: your product page is already a script. views 120k likes 9k comments 500",
+                            "views": "120k",
+                            "likes": "9k",
+                            "comments": "500",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(product_path),
+                "--platforms",
+                "douyin",
+                "--search-snapshot-dir",
+                str(snapshot_dir),
+                "--skip-video",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        manifest = json.loads((out_dir / "output/reports/promotion-manager/agent-run/workflow-manifest.json").read_text(encoding="utf-8"))
+        captures = manifest["competitorDiscovery"]["searchCaptures"]
+        self.assertEqual(captures[0]["platform"], "douyin")
+        self.assertEqual(captures[0]["status"], "ready")
+        self.assertEqual(captures[0]["recordCount"], 1)
+        report_path = out_dir / "output/reports/promotion-manager/competitors/captured-search-results-douyin.json"
+        self.assertTrue(report_path.exists())
 
     def test_automation_scheduler_runs_due_workflow_job(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-test-"))

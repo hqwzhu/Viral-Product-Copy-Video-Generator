@@ -19,6 +19,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` when `scripts/automation_scheduler.py run` executes due jobs
 - `promotion-automation-state.json` or the configured `--state-file` with last run status, output directory, manifest path, and next due time per job
 - `reports/promotion-manager/competitors/competitor-discovery.{json,md}` when `scripts/competitor_discovery.py` is run
+- `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` imports rendered search snapshots, saved HTML, copied text, or public static URLs
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
 - `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run
 - `reports/promotion-manager/research/platform-publishing-feasibility.{json,md}`
@@ -76,5 +77,6 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].schedule.intervalDays`: minimum days between runs
 - `jobs[].input`: one of `productUrl`, `htmlFile`, `textFile`, or `structuredJson`
 - `jobs[].platforms`: target platform list
+- `jobs[].searchSnapshotDir`: optional directory of platform search snapshots for the workflow runner
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
 - `jobs[].publish.enabled`: defaults to false; final writes still require the official publish executor and approval

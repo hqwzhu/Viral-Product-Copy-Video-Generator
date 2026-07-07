@@ -80,6 +80,27 @@ python scripts/competitor_collector.py \
 
 The collector supports YouTube Data API search/video/channel evidence and GitHub public repository search. YouTube requires `YOUTUBE_API_KEY`. GitHub can run against public search without a token, with optional `GITHUB_TOKEN` or `GH_TOKEN` for higher rate limits. Zhihu, Xiaohongshu, and Douyin remain browser-assisted/user-export paths unless official collection access is configured and verified.
 
+Capture rendered search result snapshots when Codex or browser tooling can see the public search page:
+
+```bash
+python scripts/platform_search_capture.py \
+  --structured-json "./search-snapshots/xiaohongshu.json" \
+  --platform xiaohongshu \
+  --query "AI product copy generator" \
+  --out-dir "./promotion-output"
+```
+
+For a full workflow, put platform files in a directory and pass it to the runner:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --product-url "https://example.com/product" \
+  --search-snapshot-dir "./search-snapshots" \
+  --out-dir "./promotion-output"
+```
+
+Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platform>.html`, or `<platform>.htm`. Use this for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms when official API collection is unavailable. The script must not extract cookies, hidden tokens, or private endpoints; it only processes browser-visible evidence.
+
 Start with:
 
 ```bash
