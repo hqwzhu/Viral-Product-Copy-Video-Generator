@@ -156,6 +156,18 @@ This writes `reports/promotion-manager/competitors/viral-discovery-run.{json,md}
 
 Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
 
+When the product category is broad or one keyword is likely too narrow, run product-driven multi-query discovery from the workflow manifest:
+
+```bash
+python scripts/multi_query_viral_discovery.py \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
+This writes `multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}`. It derives queries from product name, value proposition, keywords, pain points, audience, and optional `--query` values. Use `--dry-run` to inspect planned platform searches before opening public search pages.
+
 Collect supported official/public competitor evidence:
 
 ```bash
@@ -558,6 +570,7 @@ Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_p
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
+Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted platform follow-up tasks.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after viral material ranking.

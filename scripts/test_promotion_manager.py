@@ -48,6 +48,7 @@ FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
 SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
+MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -1672,6 +1673,78 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--use-competitor-informed-content", commands["enhancer-enabled"])
         self.assertIn("--skip-competitor-informed-content", commands["enhancer-disabled"])
 
+    def test_automation_scheduler_runs_multi_query_viral_discovery_after_workflow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-multi-query-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                    "keywords": ["AI automation"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-multi-query-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["youtube", "github"],
+                            "topN": 2,
+                            "skipVideo": True,
+                            "multiQueryViralDiscovery": {
+                                "enabled": True,
+                                "dryRun": True,
+                                "queryCount": 4,
+                                "topN": 3,
+                                "queries": ["AI launch examples"],
+                            },
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-multi-query-weekly"]
+        self.assertTrue(Path(job_state["lastMultiQueryViralDiscovery"]).exists())
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        discovery = run_report["records"][0]["multiQueryViralDiscovery"]
+        self.assertEqual(discovery["status"], "planned")
+        self.assertIn("--workflow-manifest", discovery["command"])
+        self.assertIn("--dry-run", discovery["command"])
+        self.assertTrue(Path(discovery["report"]).exists())
+
     def test_automation_scheduler_writes_windows_task_script(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2502,9 +2575,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
         self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
+        self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
+        viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
+        self.assertIn("multi_query_viral_discovery.py", viral_evidence)
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
@@ -2641,6 +2718,138 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(task_summary["public_url_capture_candidate"], 2)
         self.assertEqual(task_summary["browser_assisted_capture_required"], 3)
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.md").exists())
+
+    def test_multi_query_viral_discovery_dry_run_builds_product_search_plan(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="multi-query-discovery-plan-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(MULTI_QUERY_VIRAL_DISCOVERY),
+                "--product-name",
+                "AI Prompt Kit",
+                "--value-proposition",
+                "Prompt templates for product copy, SEO content, and video scripts",
+                "--keywords",
+                "自动化",
+                "--pain-points",
+                "内容发布慢",
+                "--audience",
+                "独立开发者",
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--query-count",
+                "6",
+                "--dry-run",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-discovery.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        queries = [item["query"] for item in report["queryPlan"]]
+        self.assertEqual(report["status"], "planned")
+        self.assertIn("AI Prompt Kit", queries)
+        self.assertIn("自动化 工具", queries)
+        self.assertIn("自动化 教程", queries)
+        self.assertIn("自动化 测评", queries)
+        slugs = [item["slug"] for item in report["queryPlan"]]
+        self.assertEqual(len(slugs), len(set(slugs)))
+        self.assertEqual(report["summary"]["plannedRuns"], 6)
+        self.assertTrue(all("--platforms" in run["command"] for run in report["runs"]))
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-discovery.md").exists())
+
+    def test_multi_query_viral_discovery_merges_existing_runs_and_creators(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="multi-query-discovery-merge-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        run_a = out_dir / "run-a"
+        run_b = out_dir / "run-b"
+        for run_dir in [run_a, run_b]:
+            (run_dir / "reports/promotion-manager/competitors").mkdir(parents=True)
+        (run_a / "reports/promotion-manager/competitors/viral-content-library.json").write_text(
+            json.dumps(
+                {
+                    "materials": [
+                        {
+                            "platform": "youtube",
+                            "query": "AI product launch",
+                            "creatorName": "Launch Lab",
+                            "title": "Old AI launch breakdown",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "visibleMetrics": {"views": 10000},
+                            "viralSignals": {"score": 11},
+                            "reusablePatterns": ["problem-first hook"],
+                        },
+                        {
+                            "platform": "zhihu",
+                            "query": "AI 增长案例",
+                            "creatorName": "Zhihu Builder",
+                            "title": "AI operators build content engines",
+                            "url": "https://www.zhihu.com/question/123/answer/456",
+                            "visibleMetrics": {"likes": 800},
+                            "viralSignals": {"score": 8},
+                            "reusablePatterns": ["case-study structure"],
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (run_b / "reports/promotion-manager/competitors/viral-content-library.json").write_text(
+            json.dumps(
+                {
+                    "materials": [
+                        {
+                            "platform": "youtube",
+                            "query": "AI viral launch",
+                            "creatorName": "Launch Lab",
+                            "title": "New AI launch breakdown",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "visibleMetrics": {"views": 25000, "likes": 1200},
+                            "viralSignals": {"score": 27},
+                            "reusablePatterns": ["problem-first hook", "fast proof"],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(MULTI_QUERY_VIRAL_DISCOVERY),
+                "--product-name",
+                "AI Prompt Kit",
+                "--existing-run-dir",
+                str(run_a),
+                "--existing-run-dir",
+                str(run_b),
+                "--query-count",
+                "0",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        library = json.loads(
+            (out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-content-library.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(library["recordCount"], 2)
+        self.assertEqual(library["materials"][0]["title"], "New AI launch breakdown")
+        self.assertEqual(library["materials"][0]["sourceQueries"], ["AI product launch", "AI viral launch"])
+        self.assertEqual(library["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
+        creators = json.loads(
+            (out_dir / "output/reports/promotion-manager/competitors/multi-query-creator-leaderboard.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(creators["creatorCount"], 2)
+        self.assertEqual(creators["creators"][0]["creatorName"], "Launch Lab")
+        self.assertEqual(creators["creators"][0]["materialCount"], 1)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/multi-query-creator-leaderboard.md").exists())
 
     def test_publish_url_capture_registers_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-test-"))

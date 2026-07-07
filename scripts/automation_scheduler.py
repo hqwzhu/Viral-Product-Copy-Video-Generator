@@ -18,6 +18,7 @@ PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
+MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
 
 
@@ -93,6 +94,7 @@ def init_config(args: argparse.Namespace) -> None:
         "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False, "captureBrowserAssisted": args.capture_browser_assisted_follow_ups},
         "skipCreatorLeaderboard": args.skip_creator_leaderboard,
         "creatorFollowUp": {"enabled": args.run_creator_follow_up, "limit": 20, "topN": 5, "dryRun": args.creator_follow_up_dry_run},
+        "multiQueryViralDiscovery": {"enabled": False, "dryRun": False, "queryCount": 5, "queries": []},
         "competitorInformedContent": {"enabled": not args.skip_competitor_informed_content},
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
@@ -197,6 +199,9 @@ def evaluate_job(
         if publish_result.get("report") and browser_publish_assistant_enabled(job):
             browser_publish_result = run_browser_publish_assistant(job, out_dir, base_dir, publish_result["report"])
             record["browserPublishAssistant"] = browser_publish_result
+    if result.returncode == 0 and manifest_path.exists() and multi_query_viral_discovery_enabled(job):
+        multi_query_result = run_multi_query_viral_discovery(job, out_dir, base_dir, manifest_path)
+        record["multiQueryViralDiscovery"] = multi_query_result
     post_publish_capture_result: dict[str, Any] = {}
     if result.returncode == 0 and manifest_path.exists() and post_publish_metrics_capture_enabled(job):
         post_publish_capture_result = run_post_publish_metrics_capture(job, out_dir, base_dir)
@@ -212,6 +217,8 @@ def evaluate_job(
         job_state["lastPublishQueue"] = record["publishQueue"]["report"]
     if record.get("browserPublishAssistant", {}).get("report"):
         job_state["lastBrowserPublishAssistant"] = record["browserPublishAssistant"]["report"]
+    if record.get("multiQueryViralDiscovery", {}).get("report"):
+        job_state["lastMultiQueryViralDiscovery"] = record["multiQueryViralDiscovery"]["report"]
     if record.get("postPublishMetricsCapture", {}).get("report"):
         job_state["lastPostPublishMetricsCapture"] = record["postPublishMetricsCapture"]["report"]
     if record.get("metricsRecovery", {}).get("report"):
@@ -234,6 +241,10 @@ def browser_publish_assistant_enabled(job: dict[str, Any]) -> bool:
 
 def post_publish_metrics_capture_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("postPublishMetricsCapture") or {}).get("enabled"))
+
+
+def multi_query_viral_discovery_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("multiQueryViralDiscovery") or {}).get("enabled"))
 
 
 def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
@@ -269,6 +280,30 @@ def run_browser_publish_assistant(job: dict[str, Any], out_dir: Path, base_dir: 
             summary = {}
     return {
         "status": "ready" if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "summary": summary,
+    }
+
+
+def run_multi_query_viral_discovery(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
+    command = build_multi_query_viral_discovery_command(job, out_dir, base_dir, manifest_path)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/competitors/multi-query-viral-discovery.json"
+    summary: dict[str, Any] = {}
+    status = "error"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            summary = report.get("summary", {})
+            status = str(report.get("status") or "ready")
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": status if result.returncode == 0 else "error",
         "exitCode": result.returncode,
         "command": display_command(command),
         "stdoutTail": tail(result.stdout),
@@ -443,6 +478,43 @@ def build_browser_publish_assistant_command(job: dict[str, Any], out_dir: Path, 
     return command
 
 
+def build_multi_query_viral_discovery_command(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> list[str]:
+    discovery = job.get("multiQueryViralDiscovery") or {}
+    command = [
+        sys.executable,
+        str(MULTI_QUERY_VIRAL_DISCOVERY),
+        "--workflow-manifest",
+        str(manifest_path),
+        "--out-dir",
+        str(out_dir),
+    ]
+    command.extend(["--platforms", comma_value(discovery.get("platforms")) or comma_value(job.get("platforms")) or ",".join(DEFAULT_PLATFORMS)])
+    command.extend(["--top-n", str(discovery.get("topN") or job.get("topN") or 20)])
+    if discovery.get("queryCount") is not None:
+        command.extend(["--query-count", str(discovery.get("queryCount"))])
+    append_many(command, "--query", discovery.get("queries") or discovery.get("query"))
+    html_root = discovery.get("htmlSnapshotRoot") or discovery.get("htmlSnapshotDir") or ""
+    if html_root:
+        command.extend(["--html-snapshot-root", str(resolve_path(base_dir, html_root))])
+    if discovery.get("dryRun"):
+        command.append("--dry-run")
+    if discovery.get("installBrowserIfMissing"):
+        command.append("--install-browser-if-missing")
+    if discovery.get("liveOfficial"):
+        command.append("--live-official")
+    if discovery.get("runCreatorFollowUp"):
+        command.append("--run-creator-follow-up")
+    if discovery.get("creatorFollowUpDryRun"):
+        command.append("--creator-follow-up-dry-run")
+    if discovery.get("runFollowUpCaptures"):
+        command.append("--run-follow-up-captures")
+    if discovery.get("followUpDryRun"):
+        command.append("--follow-up-dry-run")
+    if discovery.get("captureBrowserAssistedFollowUps"):
+        command.append("--capture-browser-assisted-follow-ups")
+    return command
+
+
 def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -> list[str]:
     command = [sys.executable, str(SCRIPTS / "run_promotion_workflow.py")]
     source = job.get("input") or {}
@@ -612,6 +684,8 @@ def render_run_report(report: dict[str, Any]) -> str:
             lines.append(f"- Publish queue: {record['publishQueue'].get('report', '')}")
         if record.get("browserPublishAssistant"):
             lines.append(f"- Browser publish assistant: {record['browserPublishAssistant'].get('report', '')}")
+        if record.get("multiQueryViralDiscovery"):
+            lines.append(f"- Multi-query viral discovery: {record['multiQueryViralDiscovery'].get('report', '')}")
         if record.get("postPublishMetricsCapture"):
             lines.append(f"- Post-publish metrics capture: {record['postPublishMetricsCapture'].get('report', '')}")
         if record.get("metricsRecovery"):

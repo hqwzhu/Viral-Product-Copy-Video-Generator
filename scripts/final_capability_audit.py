@@ -29,6 +29,7 @@ SCRIPT_REQUIREMENTS = {
     "platform_search_capture": "platform_search_capture.py",
     "competitor_collector": "competitor_collector.py",
     "viral_discovery_runner": "viral_discovery_runner.py",
+    "multi_query_viral_discovery": "multi_query_viral_discovery.py",
     "viral_content_library": "viral_content_library.py",
     "creator_leaderboard": "creator_leaderboard.py",
     "creator_follow_up_runner": "creator_follow_up_runner.py",
@@ -325,6 +326,7 @@ def requirement_status(
         scripts,
         [
             "viral_discovery_runner",
+            "multi_query_viral_discovery",
             "platform_search_browser",
             "platform_search_capture",
             "viral_content_library",
@@ -363,6 +365,7 @@ def requirement_status(
                 scripts,
                 [
                     "viral_discovery_runner",
+                    "multi_query_viral_discovery",
                     "platform_search_browser",
                     "platform_search_capture",
                     "viral_content_library",
@@ -567,6 +570,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "multi_query_viral_discovery",
+            "command": (
+                f"python scripts/multi_query_viral_discovery.py --workflow-manifest "
+                f"\"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --top-n 20 --out-dir \"{out_dir}\""
             ),
         },
         {
