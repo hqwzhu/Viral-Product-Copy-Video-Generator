@@ -29,6 +29,7 @@ Use this reference when the user asks for full automation.
 - Register proven published URLs from official execution reports, publish queues, or manual/browser-assisted evidence into a standard published-items report for later metrics recovery.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
 - Run a one-command local operating cycle that chains workflow generation, guarded publish queue, published URL registration, and metrics recovery while preserving approval gates and evidence requirements.
+- Audit final-agent readiness with `scripts/final_capability_audit.py`, including local scripts, browser runtime, `ffmpeg`, credential presence, platform publishing limits, real metrics inputs, and self-evolution boundaries.
 - Run a YouTube OAuth consent flow and upload in the same process without saving OAuth tokens.
 
 ## What Requires Official Authorization
@@ -59,4 +60,4 @@ Use this reference when the user asks for full automation.
 
 ## Self-Evolution Rule
 
-The Skill may research, write notes, check local tool availability, and propose upgrades. It must not silently install packages, modify itself from unreviewed network code, or upgrade dependencies without an explicit command and a clear source/risk note.
+The Skill may research, write notes, check local tool availability, and propose upgrades. `scripts/final_capability_audit.py` may install only explicit allowlisted runtime dependencies, such as Playwright Chromium, when the command includes `--install-safe-missing-tools`. It must not silently install arbitrary packages, modify itself from unreviewed network code, or upgrade dependencies without an explicit command and a clear source/risk note.

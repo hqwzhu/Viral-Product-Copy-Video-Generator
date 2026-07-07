@@ -2,6 +2,23 @@
 
 Use this reference when running a full promotion cycle.
 
+Before claiming the Skill has final Agent readiness, run the capability audit:
+
+```bash
+python scripts/final_capability_audit.py --out-dir "./promotion-output"
+```
+
+The audit writes `reports/promotion-manager/capability/final-capability-audit.{json,md}` and checks the exact requested end-state: product URL parsing, viral creator/content search, copy/video generation, publishing, metrics/orders/revenue recovery, periodic Codex operation, and self-evolution. It records credential presence only by environment variable name and must not write secret values.
+
+If the machine is trusted and browser runtime installation is explicitly acceptable, the audit can install only the allowlisted Chromium runtime:
+
+```bash
+python scripts/final_capability_audit.py \
+  --install-safe-missing-tools \
+  --safe-install playwright_chromium \
+  --out-dir "./promotion-output"
+```
+
 ## Stage 1: Intake
 
 Required fields:

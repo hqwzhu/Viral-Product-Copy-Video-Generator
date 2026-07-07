@@ -54,6 +54,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, official connectors, and business exports
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, and metrics recovery as one operating cycle
+- `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
 
@@ -209,6 +210,20 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `automationStatus`: `ready_with_real_metrics`, `partial_ready_with_real_metrics`, `ready_waiting_real_data`, or a failure status
 - `approval`: whether publish execution was requested and whether the approval phrase matched
 - `steps[]`: subprocess commands, exit codes, and output tails for auditability
+
+## Final Capability Audit
+
+`final-capability-audit.json` includes:
+
+- `finalStatus`: `full_ready`, `partial_ready`, `not_ready`, or `partial_ready_blocked_by_platform_or_safety_limits`
+- `requirements[]`: requirement-by-requirement status for product URL intake, viral competitor research, copy/video generation, auto-publishing, metrics/orders/revenue recovery, periodic operation, and self-evolution
+- `platforms`: per-platform readiness for viral search, direct publishing, metrics recovery, and orders/revenue attribution
+- `localTools`: Python, Git, `ffmpeg`, Playwright, and Playwright Chromium availability
+- `credentials`: environment variable names that are present, never secret values
+- `scripts`: bundled script existence map
+- `selfEvolution`: controlled autonomy status, allowed runtime installs, and blocked unsafe self-upgrade actions
+- `recommendedCommands`: copy-ready commands for one-command cycles, safe runtime setup, and periodic jobs
+- `nextActions`: prioritized fixes needed to move closer to the final requested Agent
 
 ## Automation Scheduler Config
 

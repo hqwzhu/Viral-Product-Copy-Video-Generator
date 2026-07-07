@@ -40,6 +40,7 @@ FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
 COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py"
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
+FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -1905,6 +1906,63 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["aggregates"]["totals"]["orders"], 2.0)
         self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 88.0)
         self.assertTrue((out_dir / "output/reports/promotion-manager/cycle/promotion-cycle.md").exists())
+
+    def test_final_capability_audit_reports_real_limits_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-audit-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env = os.environ.copy()
+        secret_value = "super-secret-token-for-test"
+        for name in [
+            "YOUTUBE_API_KEY",
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "DOUYIN_CLIENT_KEY",
+            "DOUYIN_CLIENT_SECRET",
+            "DOUYIN_ACCESS_TOKEN",
+            "DOUYIN_OPEN_ID",
+            "TIKTOK_CLIENT_KEY",
+            "TIKTOK_CLIENT_SECRET",
+            "TIKTOK_ACCESS_TOKEN",
+            "TIKTOK_OPEN_ID",
+        ]:
+            env.pop(name, None)
+        env["GITHUB_TOKEN"] = secret_value
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_AUDIT),
+                "--skip-runtime-checks",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/capability/final-capability-audit.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["credentials"]["github_write"]["presentEnv"], ["GITHUB_TOKEN"])
+        self.assertFalse(report["credentials"]["github_write"]["valuesStored"])
+        by_requirement = {item["id"]: item for item in report["requirements"]}
+        self.assertIn(by_requirement["product_url_structured_intake"]["status"], {"ready", "partial_ready"})
+        self.assertEqual(by_requirement["viral_creator_content_research"]["status"], "partial_ready")
+        self.assertIn(by_requirement["copy_and_real_video_generation"]["status"], {"ready", "partial_ready"})
+        self.assertEqual(
+            by_requirement["all_platform_auto_publish"]["status"],
+            "blocked_by_authorization_or_platform_limits",
+        )
+        self.assertEqual(
+            by_requirement["fully_autonomous_self_evolution"]["status"],
+            "blocked_by_safety_boundary",
+        )
+        self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
+        self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
+        self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
 
     def test_publish_url_capture_registers_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-test-"))
