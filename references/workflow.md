@@ -134,6 +134,17 @@ python scripts/viral_content_library.py \
 
 This writes `viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}`. The library ranks captured records by observed viral score and preserves title, creator, hook, CTA, visible metrics, reusable patterns, and source report paths. The follow-up queue marks YouTube/GitHub public URLs as capture candidates and keeps Zhihu, Xiaohongshu, Douyin, TikTok, and unknown platforms as browser-assisted/manual evidence tasks unless official access is verified.
 
+Build a creator/account leaderboard from the ranked viral library:
+
+```bash
+python scripts/creator_leaderboard.py \
+  --viral-library "./promotion-output/reports/promotion-manager/competitors/viral-content-library.json" \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
+This writes `creator-leaderboard.{json,md}` and `creator-follow-up-tasks.{json,md}`. Use it to identify high-signal creators, group repeated viral materials by account, and queue safe public/browser-assisted creator tracking. It must not infer hidden follower counts, private analytics, orders, or revenue.
+
 Execute safe public follow-up capture tasks when you want deeper competitor evidence:
 
 ```bash
@@ -178,6 +189,7 @@ python scripts/run_promotion_workflow.py \
 
 Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platform>.html`, or `<platform>.htm`. Use this for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms when official API collection is unavailable. The script must not extract cookies, hidden tokens, or private endpoints; it only processes browser-visible evidence.
 The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
+The workflow runner builds the creator leaderboard automatically after the viral material library succeeds. Use `--skip-creator-leaderboard` only when you want to skip account-level aggregation.
 The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--follow-up-dry-run` to plan the stage without fetching public URLs.
 The workflow runner rewrites generated content with available viral/deep competitor libraries before rendering videos and building final publish queues. Use `--skip-competitor-informed-content` to disable that rewrite.
 
@@ -387,6 +399,7 @@ To enable queue generation after a scheduled workflow, set `jobs[].publish.enabl
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
+Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after viral material ranking.
 Scheduled jobs can set `competitorInformedContent.enabled: true` to pass the explicit workflow flag or `false` to add `--skip-competitor-informed-content`.
 Scheduled jobs can set `metricsRecovery.enabled: true` to run `scripts/metrics_recovery.py` after the workflow and optional publish queue. Use `metricsRecovery.businessCsv`, `businessJson`, `businessText`, `publishedItemsJson`, `publishedUrls`, `githubRepos`, or `youtubeVideoIds` to pass evidence for automatic recovery.
 

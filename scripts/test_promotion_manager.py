@@ -37,6 +37,7 @@ PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
 VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
 FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
 COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py"
+CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -548,6 +549,88 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(tasks["summary"]["modes"]["browser_assisted_capture_required"], 1)
         self.assertIn(str(out_dir / "output"), tasks["tasks"][0]["command"])
 
+    def test_creator_leaderboard_groups_viral_materials_by_creator(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="creator-leaderboard-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        library_path = out_dir / "viral-content-library.json"
+        library_path.write_text(
+            json.dumps(
+                {
+                    "materials": [
+                        {
+                            "id": "viral-material-001",
+                            "libraryRank": 1,
+                            "platform": "youtube",
+                            "title": "One product URL into 30 launch videos",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "creatorName": "Launch Lab",
+                            "hook": "Your product page is already a content plan.",
+                            "visibleMetrics": {
+                                "views": {"raw": "120k", "normalized": 120000.0},
+                                "likes": {"raw": "9k", "normalized": 9000.0},
+                                "comments": {"raw": "500", "normalized": 500.0},
+                            },
+                            "viralSignals": {"score": 160000.0, "hasObservedMetrics": True},
+                            "reusablePatterns": ["visible_social_proof"],
+                            "followUpCapture": {"mode": "public_url_capture_candidate", "status": "ready"},
+                        },
+                        {
+                            "id": "viral-material-002",
+                            "libraryRank": 2,
+                            "platform": "youtube",
+                            "title": "Product copy system teardown",
+                            "url": "https://www.youtube.com/watch?v=def456",
+                            "creatorName": "Launch Lab",
+                            "hook": "Stop writing launch copy from scratch.",
+                            "visibleMetrics": {"views": {"raw": "80k", "normalized": 80000.0}},
+                            "viralSignals": {"score": 85000.0, "hasObservedMetrics": True},
+                            "reusablePatterns": ["explicit_call_to_action"],
+                            "followUpCapture": {"mode": "public_url_capture_candidate", "status": "ready"},
+                        },
+                        {
+                            "id": "viral-material-003",
+                            "libraryRank": 3,
+                            "platform": "xiaohongshu",
+                            "title": "7 prompts that turn one product page into launch notes",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-1",
+                            "creatorName": "Growth Notes",
+                            "hook": "Stop rewriting the same product intro.",
+                            "visibleMetrics": {"likes": {"raw": "1.2k", "normalized": 1200.0}},
+                            "viralSignals": {"score": 5800.0, "hasObservedMetrics": True},
+                            "reusablePatterns": ["numbered_title_or_claim"],
+                            "followUpCapture": {"mode": "browser_assisted_capture_required", "status": "queued"},
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(CREATOR_LEADERBOARD),
+                "--viral-library",
+                str(library_path),
+                "--top-n",
+                "10",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        leaderboard = json.loads((out_dir / "output/reports/promotion-manager/competitors/creator-leaderboard.json").read_text(encoding="utf-8"))
+        self.assertEqual(leaderboard["creatorCount"], 2)
+        self.assertEqual(leaderboard["creators"][0]["creatorName"], "Launch Lab")
+        self.assertEqual(leaderboard["creators"][0]["materialCount"], 2)
+        self.assertEqual(leaderboard["creators"][0]["metricTotals"]["views"], 200000.0)
+        self.assertEqual(leaderboard["creators"][0]["trackingMode"], "public_or_official_research_candidate")
+        self.assertEqual(leaderboard["creators"][1]["trackingMode"], "browser_assisted_or_user_export_required")
+        tasks = json.loads((out_dir / "output/reports/promotion-manager/competitors/creator-follow-up-tasks.json").read_text(encoding="utf-8"))
+        self.assertEqual(tasks["taskCount"], 2)
+        self.assertIn("Launch Lab", tasks["tasks"][0]["creatorName"])
+        self.assertIn("official/public profile", tasks["tasks"][0]["requiredEvidence"][0])
+
     def test_follow_up_capture_runner_executes_public_and_queues_manual_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="follow-up-capture-runner-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -999,6 +1082,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(viral_library["status"], "ready")
         self.assertEqual(viral_library["recordCount"], 1)
         self.assertTrue(Path(viral_library["library"]).exists())
+        creator_leaderboard = manifest["competitorDiscovery"]["creatorLeaderboard"]
+        self.assertEqual(creator_leaderboard["status"], "ready")
+        self.assertEqual(creator_leaderboard["creatorCount"], 1)
+        self.assertTrue(Path(manifest["artifacts"]["creatorLeaderboard"]).exists())
         library = json.loads(Path(viral_library["library"]).read_text(encoding="utf-8"))
         self.assertEqual(library["materials"][0]["platform"], "douyin")
         self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "browser_assisted_capture_required")
@@ -1194,6 +1281,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "schedule": {"intervalDays": 7},
                             "input": {"structuredJson": "snapshot.json"},
                             "platforms": ["youtube"],
+                            "skipCreatorLeaderboard": True,
                             "competitorInformedContent": {"enabled": True},
                             "skipVideo": True,
                         },
@@ -1227,6 +1315,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
         commands = {record["jobId"]: record["command"] for record in run_report["records"]}
+        self.assertIn("--skip-creator-leaderboard", commands["enhancer-enabled"])
         self.assertIn("--use-competitor-informed-content", commands["enhancer-enabled"])
         self.assertIn("--skip-competitor-informed-content", commands["enhancer-disabled"])
 

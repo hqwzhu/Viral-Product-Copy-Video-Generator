@@ -51,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--install-browser-if-missing", action="store_true")
     init.add_argument("--auto-search-competitors", action="store_true")
     init.add_argument("--search-html-snapshot-dir", default="")
+    init.add_argument("--skip-creator-leaderboard", action="store_true")
     init.add_argument("--skip-competitor-informed-content", action="store_true")
 
     run = subparsers.add_parser("run", help="Run jobs that are due.")
@@ -85,6 +86,7 @@ def init_config(args: argparse.Namespace) -> None:
         "autoSearchCompetitors": args.auto_search_competitors,
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
         "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False},
+        "skipCreatorLeaderboard": args.skip_creator_leaderboard,
         "competitorInformedContent": {"enabled": not args.skip_competitor_informed_content},
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
@@ -352,6 +354,8 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
             command.append("--follow-up-dry-run")
         if follow_up.get("allowLocalhost"):
             command.append("--allow-localhost-follow-up")
+    if job.get("skipCreatorLeaderboard"):
+        command.append("--skip-creator-leaderboard")
     competitor_informed = job.get("competitorInformedContent")
     if isinstance(competitor_informed, dict):
         if competitor_informed.get("enabled") is False:

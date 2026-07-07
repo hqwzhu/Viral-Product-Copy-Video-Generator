@@ -171,6 +171,15 @@ python scripts/viral_content_library.py \
   --out-dir "./promotion-output"
 ```
 
+To group ranked viral materials into a creator/account leaderboard and follow-up tracking tasks:
+
+```bash
+python scripts/creator_leaderboard.py \
+  --viral-library "./promotion-output/reports/promotion-manager/competitors/viral-content-library.json" \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
 To execute safe follow-up captures from that queue:
 
 ```bash
@@ -308,6 +317,7 @@ The command writes:
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/competitors/viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` ranks captured search evidence.
+- `reports/promotion-manager/competitors/creator-leaderboard.{json,md}` and `creator-follow-up-tasks.{json,md}` when `scripts/creator_leaderboard.py` groups viral materials by creator/account and creates safe tracking tasks.
 - `reports/promotion-manager/competitors/follow-up-capture-results.{json,md}` and `deep-competitor-library.{json,md}` when `scripts/follow_up_capture_runner.py` executes safe follow-up captures.
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from observed viral patterns. The workflow writes this back to `<product>-platform-content.json` before video rendering unless `--skip-competitor-informed-content` is supplied.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
@@ -340,6 +350,7 @@ The command writes:
 - Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
 - Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified.
+- Use `scripts/creator_leaderboard.py` after the viral library exists to identify high-signal creators/accounts, aggregate their observed public metrics, and create creator follow-up tasks. The full workflow does this automatically unless `--skip-creator-leaderboard` is supplied.
 - Use `scripts/follow_up_capture_runner.py` to execute only safe public follow-up capture tasks and generate manual evidence request files for browser-assisted platforms. In the full workflow, add `--run-follow-up-captures` when you want this stage to run.
 - Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, and safe structure summaries to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
@@ -418,6 +429,7 @@ Use `scripts/automation_scheduler.py` to run one or more product promotion jobs 
 The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
 If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publish_queue.py` after a successful workflow and records the queue report path in state. This still defaults to dry-run unless the job explicitly enables execution and supplies the approval phrase.
 If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
+Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.
 Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rewriting with viral/deep competitor libraries, or `true` to pass the explicit `--use-competitor-informed-content` flag.
 
 ## Bundled Resources
@@ -432,6 +444,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/platform_search_browser.py`: public search page browser snapshot generator for platform competitor discovery.
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
 - `scripts/viral_content_library.py`: ranked multi-platform viral material library and follow-up capture task generator.
+- `scripts/creator_leaderboard.py`: creator/account leaderboard and follow-up tracking task generator from ranked viral materials.
 - `scripts/follow_up_capture_runner.py`: safe follow-up capture executor and deep competitor library builder.
 - `scripts/competitor_content_enhancer.py`: rewrites generated platform content and publish packs using observed viral/deep competitor patterns before videos are rendered.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
