@@ -88,6 +88,17 @@ python scripts/product_url_reader.py \
 
 This writes `reports/promotion-manager/intake/product-url-reader.{json,md}`, a per-URL structured page snapshot, and a per-URL product profile. When browser rendering succeeds, each record includes a `nextWorkflowCommand` that uses `--structured-json`; if only static fallback succeeds, it uses `--product-url` and marks the record as `partial_ready`.
 
+To read multiple product URLs first and then run a complete local promotion cycle for each ready product:
+
+```bash
+python scripts/product_batch_runner.py \
+  --urls-file "./product-urls.txt" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+The batch runner writes `reports/promotion-manager/batch/product-batch-runner.{json,md}` and one `product-batch-runs/<id>/...` output folder per product. It passes browser-visible snapshots to `promotion_cycle_runner.py --structured-json` when available and uses static `--product-url` fallback only when browser capture is skipped or unavailable.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

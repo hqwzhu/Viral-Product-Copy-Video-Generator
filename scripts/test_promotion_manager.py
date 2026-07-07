@@ -20,6 +20,7 @@ SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
 PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
+PRODUCT_BATCH_RUNNER = ROOT / "scripts" / "product_batch_runner.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
@@ -385,6 +386,84 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertEqual(record["product"]["sourceType"], "html")
             self.assertIn("--product-url", record["nextWorkflowCommand"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/intake/product-url-reader.md").exists())
+
+    def test_product_batch_runner_reads_urls_then_runs_promotion_cycles(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-runner-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_pages = [
+            (
+                "prompt-kit.html",
+                "AI Prompt Kit",
+                "Prompt templates for product copy, SEO content, and video scripts.",
+            ),
+            (
+                "landing-auditor.html",
+                "Landing Auditor",
+                "Review landing pages and turn gaps into platform-native growth content.",
+            ),
+        ]
+        urls_file = out_dir / "urls.txt"
+        urls = []
+        for filename, title, description in product_pages:
+            page = out_dir / filename
+            page.write_text(
+                f"""<!doctype html>
+<html>
+<head>
+  <title>{title}</title>
+  <meta name="description" content="{description}">
+  <link rel="canonical" href="https://example.com/{filename.replace('.html', '')}">
+  <script type="application/ld+json">{{"@type":"Product","name":"{title}","offers":{{"price":"19"}}}}</script>
+</head>
+<body>
+  <h1>{title}</h1>
+  <p>{description} Start for $19.</p>
+</body>
+</html>""",
+                encoding="utf-8",
+            )
+            urls.append(page.as_uri())
+        urls_file.write_text("\n".join(urls) + "\n", encoding="utf-8")
+
+        command = [
+            sys.executable,
+            str(PRODUCT_BATCH_RUNNER),
+            "--urls-file",
+            str(urls_file),
+            "--platforms",
+            "github,xiaohongshu",
+            "--skip-video",
+            "--out-dir",
+            str(out_dir / "output"),
+        ]
+        expect_browser_structured = playwright_chromium_available()
+        if not expect_browser_structured:
+            command.append("--skip-browser")
+        subprocess.run(command, check=True, cwd=ROOT)
+
+        report_path = out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["requestedUrls"], 2)
+        self.assertEqual(report["summary"]["readyProductProfiles"], 2)
+        self.assertEqual(report["summary"]["readyPromotionRuns"], 2)
+        self.assertTrue(Path(report["readerReport"]).exists())
+        self.assertTrue((out_dir / "output/reports/promotion-manager/batch/product-batch-runner.md").exists())
+
+        product_names = {run["product"]["productName"] for run in report["promotionRuns"]}
+        self.assertEqual(product_names, {"AI Prompt Kit", "Landing Auditor"})
+        for run in report["promotionRuns"]:
+            self.assertEqual(run["status"], "ready")
+            self.assertTrue(Path(run["outputDir"]).exists())
+            self.assertTrue(Path(run["cycleReport"]).exists())
+            self.assertTrue(Path(run["workflowManifest"]).exists())
+            command_text = " ".join(run["command"])
+            if expect_browser_structured:
+                self.assertEqual(run["sourceMode"], "browser_structured_snapshot")
+                self.assertIn("--structured-json", command_text)
+            else:
+                self.assertEqual(run["sourceMode"], "static_url_fallback")
+                self.assertIn("--product-url", command_text)
 
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))

@@ -23,6 +23,7 @@ SAFE_INSTALLS = {"playwright_chromium"}
 SCRIPT_REQUIREMENTS = {
     "browser_snapshot": "browser_snapshot.py",
     "product_url_reader": "product_url_reader.py",
+    "product_batch_runner": "product_batch_runner.py",
     "product_intake": "product_intake.py",
     "run_workflow": "run_promotion_workflow.py",
     "platform_search_browser": "platform_search_browser.py",
@@ -319,7 +320,10 @@ def requirement_status(
     platforms: dict[str, dict[str, Any]],
     self_evolution_audit: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    browser_intake_ready = scripts_ready(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"])
+    browser_intake_ready = scripts_ready(
+        scripts,
+        ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+    )
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
     )
@@ -374,8 +378,14 @@ def requirement_status(
             "id": "product_url_structured_intake",
             "label": "Automatically parse product URLs through Codex/browser structured snapshots",
             "status": "ready" if browser_intake_ready and browser_runtime_ready else "partial_ready",
-            "evidence": scripts_present(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"]),
-            "missing": missing_for_scripts(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"])
+            "evidence": scripts_present(
+                scripts,
+                ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+            ),
+            "missing": missing_for_scripts(
+                scripts,
+                ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+            )
             + ([] if browser_runtime_ready else ["Playwright Chromium runtime not verified"]),
         },
         {
@@ -603,6 +613,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "purpose": "one_command_cycle",
             "command": (
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "batch_product_url_cycles",
+            "command": (
+                f"python scripts/product_batch_runner.py --urls-file \"./product-urls.txt\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
             ),
         },
