@@ -42,6 +42,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run
+- `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, official connectors, and business exports
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
 
@@ -84,6 +85,20 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
 
+## Metrics Recovery
+
+`metrics-recovery.json` includes:
+
+- `recoveryStatus`: `ready`, `partial_ready`, or `waiting_real_data`
+- `workflowManifest` and `publishQueue`: evidence paths used for the recovery attempt
+- `publishedItems`: planned, queued, dry-run, or proven published items discovered from manifests, publish queues, or user-provided JSON
+- `records[]`: normalized metric records compatible with `metrics_intake.py`
+- `connectorStatus[]`: official connector results for YouTube/GitHub and unsupported/manual statuses for other platforms
+- `businessSources[]`: CSV, JSON, or text evidence loaded for orders, revenue, clicks, leads, or platform metrics
+- `manualExportRequired[]`: platforms or queue items that need real export/screenshot/API evidence before optimization
+- `coverage`: counts for discovered published items, queued items, metric records, records with metrics, pending manual requirements, and platforms
+- `retrospective`: data-backed next-round recommendations, or `waiting_real_data` when evidence is missing
+
 ## Automation Scheduler Config
 
 `scripts/automation_scheduler.py` accepts a JSON config:
@@ -101,6 +116,12 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].searchHtmlSnapshotDir`: optional directory of saved `<platform>.html` search pages for environments without Playwright Chromium
 - `jobs[].installBrowserIfMissing`: optional boolean that lets the workflow run the official Playwright Chromium install when `browserUrl` is used and Chromium is missing
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
+- `jobs[].metricsRecovery.enabled`: defaults to false; when true, the scheduler runs `scripts/metrics_recovery.py` after a successful workflow and optional publish queue
+- `jobs[].metricsRecovery.publishedItemsJson`: optional file path or list of file paths containing published item evidence
+- `jobs[].metricsRecovery.publishedUrls`: optional URL or list of URLs to inspect through supported official connectors
+- `jobs[].metricsRecovery.githubRepos`: optional GitHub repo or list of repos for public REST metrics
+- `jobs[].metricsRecovery.youtubeVideoIds`: optional YouTube video id or list of ids; requires `YOUTUBE_API_KEY` for live statistics
+- `jobs[].metricsRecovery.businessCsv`, `businessJson`, and `businessText`: optional export paths for orders, revenue, clicks, leads, or platform metrics
 - `jobs[].publish.enabled`: defaults to false; when true, the scheduler runs `scripts/publish_queue.py` after a successful workflow
 - `jobs[].publish.platforms`: optional platform filter for queue generation
 - `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`

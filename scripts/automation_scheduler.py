@@ -15,6 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
+METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
 
 
@@ -85,6 +86,7 @@ def init_config(args: argparse.Namespace) -> None:
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
+        "metricsRecovery": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
     }
     config = {
@@ -175,21 +177,31 @@ def evaluate_job(
             "manifest": str(manifest_path) if manifest_path.exists() else "",
         }
     )
+    publish_result: dict[str, Any] = {}
     if result.returncode == 0 and manifest_path.exists() and publish_enabled(job):
         publish_result = run_publish_queue(job, out_dir, base_dir, manifest_path)
         record["publishQueue"] = publish_result
+    if result.returncode == 0 and manifest_path.exists() and metrics_recovery_enabled(job):
+        recovery_result = run_metrics_recovery(job, out_dir, base_dir, manifest_path, publish_result.get("report", ""))
+        record["metricsRecovery"] = recovery_result
     job_state["lastRunAt"] = now.isoformat()
     job_state["lastStatus"] = record["status"]
     job_state["lastOutDir"] = str(out_dir)
     job_state["lastManifest"] = str(manifest_path) if manifest_path.exists() else ""
     if record.get("publishQueue", {}).get("report"):
         job_state["lastPublishQueue"] = record["publishQueue"]["report"]
+    if record.get("metricsRecovery", {}).get("report"):
+        job_state["lastMetricsRecovery"] = record["metricsRecovery"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
     return record
 
 
 def publish_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("publish") or {}).get("enabled"))
+
+
+def metrics_recovery_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("metricsRecovery") or {}).get("enabled"))
 
 
 def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
@@ -211,6 +223,55 @@ def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manife
         "report": str(report_path) if report_path.exists() else "",
         "summary": summary,
     }
+
+
+def run_metrics_recovery(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path, publish_queue_path: str) -> dict[str, Any]:
+    command = build_metrics_recovery_command(job, out_dir, base_dir, manifest_path, publish_queue_path)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json"
+    summary: dict[str, Any] = {}
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            summary = {
+                "recoveryStatus": report.get("recoveryStatus", ""),
+                "retrospectiveStatus": (report.get("retrospective") or {}).get("status", ""),
+                "recordsWithMetrics": (report.get("coverage") or {}).get("recordsWithMetrics", 0),
+                "manualOrPendingRequirements": (report.get("coverage") or {}).get("manualOrPendingRequirements", 0),
+            }
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": "ready" if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "summary": summary,
+    }
+
+
+def build_metrics_recovery_command(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path, publish_queue_path: str) -> list[str]:
+    recovery = job.get("metricsRecovery") or {}
+    command = [
+        sys.executable,
+        str(METRICS_RECOVERY),
+        "--workflow-manifest",
+        str(manifest_path),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if publish_queue_path:
+        command.extend(["--publish-queue", publish_queue_path])
+    append_many(command, "--published-items-json", recovery.get("publishedItemsJson"), base_dir)
+    append_many(command, "--published-url", recovery.get("publishedUrls"))
+    append_many(command, "--github-repo", recovery.get("githubRepos"))
+    append_many(command, "--youtube-video-id", recovery.get("youtubeVideoIds"))
+    append_many(command, "--business-csv", recovery.get("businessCsv"), base_dir)
+    append_many(command, "--business-json", recovery.get("businessJson"), base_dir)
+    append_many(command, "--business-text", recovery.get("businessText"), base_dir)
+    return command
 
 
 def build_publish_queue_command(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> list[str]:
@@ -385,6 +446,10 @@ def render_run_report(report: dict[str, Any]) -> str:
                 f"- Manifest: {record.get('manifest', '')}",
             ]
         )
+        if record.get("publishQueue"):
+            lines.append(f"- Publish queue: {record['publishQueue'].get('report', '')}")
+        if record.get("metricsRecovery"):
+            lines.append(f"- Metrics recovery: {record['metricsRecovery'].get('report', '')}")
     lines.extend(["", "## Guardrails"])
     lines.extend([f"- {item}" for item in report.get("guardrails", [])])
     return "\n".join(lines)
@@ -416,6 +481,17 @@ def normalize_datetime(value: datetime) -> datetime:
 def append_if_present(command: list[str], flag: str, value: Any) -> None:
     text = "" if value is None else str(value).strip()
     if text:
+        command.extend([flag, text])
+
+
+def append_many(command: list[str], flag: str, value: Any, base_dir: Path | None = None) -> None:
+    values = value if isinstance(value, list) else [value]
+    for item in values:
+        text = "" if item is None else str(item).strip()
+        if not text:
+            continue
+        if base_dir is not None:
+            text = str(resolve_path(base_dir, text))
         command.extend([flag, text])
 
 

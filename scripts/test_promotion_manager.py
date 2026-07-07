@@ -22,6 +22,7 @@ COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
+METRICS_RECOVERY = ROOT / "scripts" / "metrics_recovery.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
@@ -707,6 +708,16 @@ Prompt templates for product copy, SEO content, and video scripts.
             ),
             encoding="utf-8",
         )
+        business_csv = out_dir / "business.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,clicks,orders,revenue,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,90,2,$88.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
         config_path = out_dir / "automation.json"
         config_path.write_text(
             json.dumps(
@@ -730,6 +741,10 @@ Prompt templates for product copy, SEO content, and video scripts.
                                     "action": "file",
                                     "path": "PROMOTION.md",
                                 },
+                            },
+                            "metricsRecovery": {
+                                "enabled": True,
+                                "businessCsv": "business.csv",
                             },
                         }
                     ],
@@ -763,6 +778,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(publish_queue["status"], "ready")
         self.assertEqual(publish_queue["summary"]["officialDryRuns"], 1)
         self.assertEqual(publish_queue["summary"]["manualQueued"], 1)
+        self.assertTrue(Path(job_state["lastMetricsRecovery"]).exists())
+        recovery = run_report["records"][0]["metricsRecovery"]
+        self.assertEqual(recovery["status"], "ready")
+        self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
 
     def test_automation_scheduler_writes_windows_task_script(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))
@@ -1039,6 +1058,105 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["aggregates"]["totals"]["orders"], 6.0)
         self.assertEqual(report["retrospective"]["status"], "ready")
         self.assertTrue((out_dir / "reports/promotion-manager/metrics/imported-metrics.md").exists())
+
+    def test_metrics_recovery_merges_published_items_and_business_exports(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_items = out_dir / "published-items.json"
+        published_items.write_text(
+            json.dumps(
+                [
+                    {
+                        "platform": "youtube",
+                        "publishedUrl": "https://www.youtube.com/watch?v=abc123",
+                        "title": "Launch Video",
+                    },
+                    {
+                        "platform": "xiaohongshu",
+                        "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        "title": "Launch Note",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        business_csv = out_dir / "business.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,comments,clicks,orders,revenue,evidence",
+                    "youtube,https://www.youtube.com/watch?v=abc123,Launch Video,12000,1200,87,240,6,$420.50,shop-export.csv",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,3000,380,44,90,2,$88.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--published-items-json",
+                str(published_items),
+                "--business-csv",
+                str(business_csv),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "partial_ready")
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 8.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 508.5)
+        self.assertEqual(report["coverage"]["recordsWithMetrics"], 2)
+        statuses = {(item["platform"], item["status"]) for item in report["connectorStatus"]}
+        self.assertIn(("youtube", "requires_env_var"), statuses)
+        self.assertIn(("xiaohongshu", "manual_export_required"), statuses)
+        self.assertTrue((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.md").exists())
+        serialized = json.dumps(report)
+        self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
+        self.assertNotIn("GITHUB_TOKEN", serialized)
+
+    def test_metrics_recovery_marks_publish_queue_items_pending(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-pending-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        queue_dir = out_dir / "reports/promotion-manager/publish-queue"
+        queue_dir.mkdir(parents=True)
+        queue_path = queue_dir / "publish-queue.json"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {"platform": "github", "status": "dry_run", "publishMode": "official_api_publish", "contentDraft": ""},
+                        {"platform": "xiaohongshu", "status": "queued_manual", "publishMode": "manual_publish_required", "contentDraft": ""},
+                        {"platform": "douyin", "status": "queued_browser_assisted", "publishMode": "browser_assisted_publish", "contentDraft": ""},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--publish-queue",
+                str(queue_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "waiting_real_data")
+        self.assertEqual(report["coverage"]["plannedOrQueuedItems"], 3)
+        self.assertEqual(report["coverage"]["recordsWithMetrics"], 0)
+        pending = {(item["platform"], item["status"]) for item in report["manualExportRequired"]}
+        self.assertIn(("github", "publish_pending"), pending)
+        self.assertIn(("xiaohongshu", "publish_pending"), pending)
+        self.assertIn(("douyin", "publish_pending"), pending)
 
     def test_publish_executor_github_dry_run_requires_explicit_execution(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-test-"))

@@ -189,6 +189,16 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+To recover metrics across a completed workflow, publish queue, published URLs, and business exports:
+
+```bash
+python scripts/metrics_recovery.py \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
 To configure periodic local automation:
 
 ```bash
@@ -251,6 +261,7 @@ The command writes:
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
+- `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
@@ -339,6 +350,7 @@ Use only real data supplied by the user or exported from platforms:
 
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
+Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, published URL list, or business export. It merges official GitHub/YouTube metrics with user-provided orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
 
 ### 7. Periodic Automation
 
@@ -346,6 +358,7 @@ Use `scripts/automation_scheduler.py` to run one or more product promotion jobs 
 
 The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
 If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publish_queue.py` after a successful workflow and records the queue report path in state. This still defaults to dry-run unless the job explicitly enables execution and supplies the approval phrase.
+If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
 
 ## Bundled Resources
 
@@ -360,6 +373,7 @@ If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publ
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
+- `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, and manual/browser-assisted publish tasks.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.

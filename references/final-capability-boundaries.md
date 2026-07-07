@@ -17,6 +17,7 @@ Use this reference when the user asks for full automation.
 - Capture multi-result browser-visible search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms without using private endpoints or hidden browser tokens.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
 - Import real post-publish metrics from CSV, JSON, text exports, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
+- Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Run a YouTube OAuth consent flow and upload in the same process without saving OAuth tokens.
