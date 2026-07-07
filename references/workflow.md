@@ -28,6 +28,17 @@ python scripts/product_intake.py --url "https://example.com/product" --out-dir "
 
 Create a competitor and trend research note before generating final content when the user wants current market positioning.
 
+Create platform search tasks first:
+
+```bash
+python scripts/competitor_discovery.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
+
 Start with:
 
 ```bash

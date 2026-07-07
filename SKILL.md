@@ -59,6 +59,15 @@ python scripts/competitor_intake.py \
   --out-dir "./promotion-output"
 ```
 
+To create platform search tasks for competitor discovery:
+
+```bash
+python scripts/competitor_discovery.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
 The command writes:
 
 - `docs/promotion-manager/01-platform-publishing-feasibility.md`
@@ -86,6 +95,7 @@ The command writes:
 - Save findings in the output reports. Do not claim a platform API exists without official evidence.
 - For detailed routing, read [references/platform-publishing.md](references/platform-publishing.md).
 - Use the script `research` command first when platform feasibility or self-learning notes are needed.
+- Use `scripts/competitor_discovery.py` to create platform search tasks and optional official API search results before importing evidence.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
 
 ### 3. Content Generation
@@ -150,6 +160,7 @@ If no real data exists, output `waiting_real_data`. Never estimate or fabricate 
 
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/product_intake.py`: public URL or saved HTML product-profile extractor.
+- `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/render_video.py`: ffmpeg-based MP4 draft renderer.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.

@@ -8,6 +8,7 @@ Use this reference when the user asks for full automation.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.
 - Render deterministic MP4 draft videos from generated platform content when `ffmpeg` is available.
 - Generate platform research docs, risk matrices, reference project notes, and self-learning notes.
+- Generate platform competitor discovery tasks and run official public search connectors where credentials/access allow.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
 
 ## What Requires Official Authorization

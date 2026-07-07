@@ -17,6 +17,7 @@ SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
+COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -189,6 +190,35 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(report["records"][0]["visibleMetrics"]["views"]["normalized"], 12000.0)
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 1)
         self.assertTrue((out_dir / "reports/promotion-manager/competitors/imported-competitors.md").exists())
+
+    def test_competitor_discovery_generates_platform_tasks(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="competitor-discovery-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPETITOR_DISCOVERY),
+                "--query",
+                "AI product copy generator",
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        tasks = {item["platform"]: item for item in report["tasks"]}
+        self.assertIn("youtube.com/results", tasks["youtube"]["searchUrl"])
+        self.assertIn("github.com/search", tasks["github"]["searchUrl"])
+        self.assertTrue(tasks["github"]["canRunFullyAutomatedNow"])
+        self.assertFalse(tasks["xiaohongshu"]["canRunFullyAutomatedNow"])
+        self.assertEqual(report["liveResults"], {})
+        self.assertTrue((out_dir / "reports/promotion-manager/competitors/competitor-discovery.md").exists())
 
     def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
         if shutil.which("ffmpeg") is None:
