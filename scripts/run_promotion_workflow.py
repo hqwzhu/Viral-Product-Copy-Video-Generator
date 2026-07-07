@@ -35,12 +35,13 @@ def main() -> None:
     search_captures = run_search_captures(args, product, out_dir, steps, browser_search)
     viral_library = run_viral_content_library(args, out_dir, steps, search_captures)
     creator_leaderboard = run_creator_leaderboard(args, out_dir, steps, viral_library)
+    creator_follow_up = run_creator_follow_up(args, out_dir, steps, creator_leaderboard)
     follow_up_captures = run_follow_up_captures(args, out_dir, steps, viral_library)
-    competitor_informed = run_competitor_content_enhancer(args, product, out_dir, steps, viral_library, follow_up_captures)
+    competitor_informed = run_competitor_content_enhancer(args, product, out_dir, steps, viral_library, follow_up_captures, creator_follow_up)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, creator_leaderboard, follow_up_captures, competitor_informed, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, creator_leaderboard, creator_follow_up, follow_up_captures, competitor_informed, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -71,6 +72,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--search-html-snapshot-dir", default="", help="Optional directory of saved <platform>.html search pages for auto search snapshots.")
     parser.add_argument("--skip-viral-library", action="store_true", help="Skip ranked viral material library generation after search captures.")
     parser.add_argument("--skip-creator-leaderboard", action="store_true", help="Skip creator/account leaderboard generation after the viral material library is built.")
+    parser.add_argument("--run-creator-follow-up", action="store_true", help="Run safe public creator/account follow-up research after the creator leaderboard is built.")
+    parser.add_argument("--creator-follow-up-limit", type=int, default=20)
+    parser.add_argument("--creator-follow-up-top-n", type=int, default=5)
+    parser.add_argument("--creator-follow-up-dry-run", action="store_true", help="Plan creator follow-up research without fetching public APIs.")
     parser.add_argument("--run-follow-up-captures", action="store_true", help="Run safe public follow-up captures after the viral material library is built.")
     parser.add_argument("--follow-up-capture-limit", type=int, default=20)
     parser.add_argument("--follow-up-dry-run", action="store_true", help="Plan follow-up captures without fetching public URLs.")
@@ -402,6 +407,50 @@ def run_creator_leaderboard(
     return summary
 
 
+def run_creator_follow_up(
+    args: argparse.Namespace,
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    creator_leaderboard: dict[str, Any],
+) -> dict[str, Any]:
+    if not args.run_creator_follow_up:
+        return {"status": "skipped", "reason": "--run-creator-follow-up was not supplied."}
+    tasks_path = creator_leaderboard.get("followUpTasks", "")
+    if not tasks_path or not Path(tasks_path).exists():
+        return {"status": "skipped", "reason": "No creator follow-up tasks were available."}
+    command = [
+        sys.executable,
+        str(SCRIPTS / "creator_follow_up_runner.py"),
+        "--tasks-json",
+        tasks_path,
+        "--limit",
+        str(args.creator_follow_up_limit),
+        "--top-n",
+        str(args.creator_follow_up_top_n),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if args.creator_follow_up_dry_run:
+        command.append("--dry-run")
+    step = run_command("creator_follow_up_runner", command, check=False)
+    steps.append(step)
+    results_path = out_dir / "reports/promotion-manager/competitors/creator-follow-up-results.json"
+    deep_path = out_dir / "reports/promotion-manager/competitors/creator-deep-library.json"
+    summary: dict[str, Any] = {
+        "status": "ready" if results_path.exists() and step["exitCode"] == 0 else "error",
+        "results": str(results_path),
+        "creatorDeepLibrary": str(deep_path),
+        "exitCode": step["exitCode"],
+    }
+    if results_path.exists():
+        report = json.loads(results_path.read_text(encoding="utf-8"))
+        summary["resultSummary"] = report.get("summary", {})
+    if deep_path.exists():
+        deep = json.loads(deep_path.read_text(encoding="utf-8"))
+        summary["deepRecordCount"] = deep.get("recordCount", 0)
+    return summary
+
+
 def run_follow_up_captures(
     args: argparse.Namespace,
     out_dir: Path,
@@ -453,6 +502,7 @@ def run_competitor_content_enhancer(
     steps: list[dict[str, Any]],
     viral_library: dict[str, Any],
     follow_up_captures: dict[str, Any],
+    creator_follow_up: dict[str, Any],
 ) -> dict[str, Any]:
     if args.skip_competitor_informed_content:
         return {"status": "skipped", "reason": "--skip-competitor-informed-content was supplied."}
@@ -463,6 +513,8 @@ def run_competitor_content_enhancer(
 
     viral_path = existing_path(viral_library.get("library", ""))
     deep_path = existing_path(follow_up_captures.get("deepCompetitorLibrary", ""))
+    if not deep_path:
+        deep_path = existing_path(creator_follow_up.get("creatorDeepLibrary", ""))
     if not viral_path and not deep_path:
         return {"status": "skipped", "reason": "No viral or deep competitor library was available."}
 
@@ -587,6 +639,7 @@ def build_manifest(
     search_captures: list[dict[str, Any]],
     viral_library: dict[str, Any],
     creator_leaderboard: dict[str, Any],
+    creator_follow_up: dict[str, Any],
     follow_up_captures: dict[str, Any],
     competitor_informed: dict[str, Any],
     videos: list[dict[str, Any]],
@@ -625,6 +678,8 @@ def build_manifest(
             "viralContentLibrary": viral_library.get("library", ""),
             "creatorLeaderboard": creator_leaderboard.get("leaderboard", ""),
             "creatorFollowUpTasks": creator_leaderboard.get("followUpTasks", ""),
+            "creatorFollowUpResults": creator_follow_up.get("results", ""),
+            "creatorDeepLibrary": creator_follow_up.get("creatorDeepLibrary", ""),
             "followUpCaptureTasks": viral_library.get("followUpTasks", ""),
             "followUpCaptureResults": follow_up_captures.get("results", ""),
             "deepCompetitorLibrary": follow_up_captures.get("deepCompetitorLibrary", ""),
@@ -641,6 +696,7 @@ def build_manifest(
             "searchCaptures": search_captures,
             "viralContentLibrary": viral_library,
             "creatorLeaderboard": creator_leaderboard,
+            "creatorFollowUpRun": creator_follow_up,
             "followUpCaptureRun": follow_up_captures,
             "competitorInformedContent": competitor_informed,
         },
@@ -705,6 +761,7 @@ def render_manifest(manifest: dict[str, Any]) -> str:
         f"- Query: {manifest['competitorDiscovery']['query']}",
         f"- Viral content library: `{manifest['competitorDiscovery']['viralContentLibrary'].get('status', 'skipped')}`",
         f"- Creator leaderboard: `{manifest['competitorDiscovery']['creatorLeaderboard'].get('status', 'skipped')}`",
+        f"- Creator follow-up: `{manifest['competitorDiscovery']['creatorFollowUpRun'].get('status', 'skipped')}`",
         f"- Follow-up captures: `{manifest['competitorDiscovery']['followUpCaptureRun'].get('status', 'skipped')}`",
         f"- Competitor-informed content: `{manifest['competitorDiscovery']['competitorInformedContent'].get('status', 'skipped')}`",
         "",

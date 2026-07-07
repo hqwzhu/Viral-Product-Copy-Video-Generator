@@ -17,6 +17,7 @@ Use this reference when the user asks for full automation.
 - Capture multi-result browser-visible search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms without using private endpoints or hidden browser tokens.
 - Rank captured cross-platform search results into a viral material library with top titles, hooks, creators, visible metrics, reusable patterns, and source evidence paths.
 - Group ranked viral materials into a creator/account leaderboard and safe creator follow-up tasks using only observed public/browser-visible evidence.
+- Run safe creator/account follow-up research through supported official/public connectors for YouTube and GitHub, while routing Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms to browser-visible evidence requests.
 - Generate follow-up capture tasks from the viral material library, routing public YouTube/GitHub URLs to safe capture candidates and routing Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms to browser-assisted or user-export evidence.
 - Execute safe public follow-up capture tasks into a deep competitor library, while writing manual/browser evidence requests for platforms that require visible user evidence or official access.
 - Rewrite generated platform content, video scripts, storyboards, and publish-pack content with observed viral/deep competitor structures before video rendering, while keeping competitor titles, hooks, and metrics as evidence metadata rather than product claims.
@@ -49,6 +50,7 @@ Use this reference when the user asks for full automation.
 - Do not claim auto-publishing works until code has executed through official APIs with real user authorization.
 - Do not claim competitor metrics unless they were observed from public pages, official APIs, exports, or user-provided evidence.
 - Do not infer hidden follower counts, private analytics, creator income, orders, or conversion performance from public creator ranking.
+- Do not treat creator follow-up dry-runs, queued evidence requests, or search plans as captured creator performance data.
 - Do not copy competitor wording into final product copy; reuse only structure, sequence, and safe pattern labels.
 - Do not claim revenue, orders, leads, views, likes, comments, or click data without evidence.
 - Do not call unofficial endpoints "official APIs."

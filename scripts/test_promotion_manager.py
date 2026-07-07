@@ -38,6 +38,7 @@ VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
 FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
 COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py"
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
+CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -631,6 +632,64 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Launch Lab", tasks["tasks"][0]["creatorName"])
         self.assertIn("official/public profile", tasks["tasks"][0]["requiredEvidence"][0])
 
+    def test_creator_follow_up_runner_plans_public_and_queues_manual_tasks(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="creator-follow-up-runner-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        tasks_path = out_dir / "creator-follow-up-tasks.json"
+        tasks_path.write_text(
+            json.dumps(
+                {
+                    "tasks": [
+                        {
+                            "id": "creator-follow-up-001",
+                            "creatorId": "creator-001",
+                            "priority": 1,
+                            "creatorName": "Launch Lab",
+                            "platform": "youtube",
+                            "trackingMode": "public_or_official_research_candidate",
+                            "status": "ready",
+                            "sampleUrls": ["https://www.youtube.com/watch?v=abc123"],
+                            "requiredEvidence": ["official/public profile or channel URL"],
+                        },
+                        {
+                            "id": "creator-follow-up-002",
+                            "creatorId": "creator-002",
+                            "priority": 2,
+                            "creatorName": "Growth Notes",
+                            "platform": "xiaohongshu",
+                            "trackingMode": "browser_assisted_or_user_export_required",
+                            "status": "queued_browser_assisted",
+                            "sampleUrls": ["https://www.xiaohongshu.com/explore/test-note-1"],
+                            "requiredEvidence": ["browser-visible creator profile or user export"],
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(CREATOR_FOLLOW_UP_RUNNER),
+                "--tasks-json",
+                str(tasks_path),
+                "--dry-run",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        result_path = out_dir / "output/reports/promotion-manager/competitors/creator-follow-up-results.json"
+        report = json.loads(result_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["statuses"]["dry_run"], 1)
+        self.assertEqual(report["summary"]["statuses"]["queued_manual_evidence"], 1)
+        self.assertIn("--platform", report["results"][0]["command"])
+        evidence_path = Path(report["results"][1]["evidenceRequest"])
+        self.assertTrue(evidence_path.exists())
+        library = json.loads((out_dir / "output/reports/promotion-manager/competitors/creator-deep-library.json").read_text(encoding="utf-8"))
+        self.assertEqual(library["recordCount"], 0)
+
     def test_follow_up_capture_runner_executes_public_and_queues_manual_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="follow-up-capture-runner-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1063,6 +1122,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "douyin",
                 "--search-snapshot-dir",
                 str(snapshot_dir),
+                "--run-creator-follow-up",
+                "--creator-follow-up-dry-run",
                 "--run-follow-up-captures",
                 "--skip-video",
                 "--out-dir",
@@ -1086,6 +1147,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(creator_leaderboard["status"], "ready")
         self.assertEqual(creator_leaderboard["creatorCount"], 1)
         self.assertTrue(Path(manifest["artifacts"]["creatorLeaderboard"]).exists())
+        creator_follow_up = manifest["competitorDiscovery"]["creatorFollowUpRun"]
+        self.assertEqual(creator_follow_up["status"], "ready")
+        self.assertEqual(creator_follow_up["deepRecordCount"], 0)
+        self.assertEqual(creator_follow_up["resultSummary"]["statuses"]["queued_manual_evidence"], 1)
+        self.assertTrue(Path(manifest["artifacts"]["creatorFollowUpResults"]).exists())
         library = json.loads(Path(viral_library["library"]).read_text(encoding="utf-8"))
         self.assertEqual(library["materials"][0]["platform"], "douyin")
         self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "browser_assisted_capture_required")
@@ -1282,6 +1348,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "input": {"structuredJson": "snapshot.json"},
                             "platforms": ["youtube"],
                             "skipCreatorLeaderboard": True,
+                            "creatorFollowUp": {"enabled": True, "limit": 7, "topN": 3, "dryRun": True},
                             "competitorInformedContent": {"enabled": True},
                             "skipVideo": True,
                         },
@@ -1316,6 +1383,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
         commands = {record["jobId"]: record["command"] for record in run_report["records"]}
         self.assertIn("--skip-creator-leaderboard", commands["enhancer-enabled"])
+        self.assertIn("--run-creator-follow-up", commands["enhancer-enabled"])
+        self.assertIn("--creator-follow-up-limit", commands["enhancer-enabled"])
+        self.assertIn("7", commands["enhancer-enabled"])
+        self.assertIn("--creator-follow-up-top-n", commands["enhancer-enabled"])
+        self.assertIn("3", commands["enhancer-enabled"])
+        self.assertIn("--creator-follow-up-dry-run", commands["enhancer-enabled"])
         self.assertIn("--use-competitor-informed-content", commands["enhancer-enabled"])
         self.assertIn("--skip-competitor-informed-content", commands["enhancer-disabled"])
 

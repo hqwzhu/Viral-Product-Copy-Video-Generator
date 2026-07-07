@@ -52,6 +52,8 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--auto-search-competitors", action="store_true")
     init.add_argument("--search-html-snapshot-dir", default="")
     init.add_argument("--skip-creator-leaderboard", action="store_true")
+    init.add_argument("--run-creator-follow-up", action="store_true")
+    init.add_argument("--creator-follow-up-dry-run", action="store_true")
     init.add_argument("--skip-competitor-informed-content", action="store_true")
 
     run = subparsers.add_parser("run", help="Run jobs that are due.")
@@ -87,6 +89,7 @@ def init_config(args: argparse.Namespace) -> None:
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
         "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False},
         "skipCreatorLeaderboard": args.skip_creator_leaderboard,
+        "creatorFollowUp": {"enabled": args.run_creator_follow_up, "limit": 20, "topN": 5, "dryRun": args.creator_follow_up_dry_run},
         "competitorInformedContent": {"enabled": not args.skip_competitor_informed_content},
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
@@ -356,6 +359,13 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
             command.append("--allow-localhost-follow-up")
     if job.get("skipCreatorLeaderboard"):
         command.append("--skip-creator-leaderboard")
+    creator_follow_up = job.get("creatorFollowUp") or {}
+    if creator_follow_up.get("enabled"):
+        command.append("--run-creator-follow-up")
+        command.extend(["--creator-follow-up-limit", str(creator_follow_up.get("limit") or 20)])
+        command.extend(["--creator-follow-up-top-n", str(creator_follow_up.get("topN") or 5)])
+        if creator_follow_up.get("dryRun"):
+            command.append("--creator-follow-up-dry-run")
     competitor_informed = job.get("competitorInformedContent")
     if isinstance(competitor_informed, dict):
         if competitor_informed.get("enabled") is False:

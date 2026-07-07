@@ -26,6 +26,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/competitors/viral-content-library.{json,md}` when `scripts/viral_content_library.py` ranks captured search records across platforms
 - `reports/promotion-manager/competitors/follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` creates next-step public/browser-assisted capture tasks
 - `reports/promotion-manager/competitors/creator-leaderboard.{json,md}` and `creator-follow-up-tasks.{json,md}` when `scripts/creator_leaderboard.py` groups viral materials by creator/account
+- `reports/promotion-manager/competitors/creator-follow-up-results.{json,md}` and `creator-deep-library.{json,md}` when `scripts/creator_follow_up_runner.py` runs safe creator/account follow-up research or queues manual evidence
 - `reports/promotion-manager/competitors/follow-up-capture-results.{json,md}` when `scripts/follow_up_capture_runner.py` executes or queues follow-up capture tasks
 - `reports/promotion-manager/competitors/deep-competitor-library.{json,md}` when safe public follow-up captures produce deeper competitor records
 - `reports/promotion-manager/competitors/follow-up-captures/manual-evidence/<task>.md` browser/manual evidence requests for platforms that cannot be safely fetched automatically
@@ -62,7 +63,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `product`: normalized product fields used by generation scripts
 - `input`: source type, confidence, and whether rendered snapshots are supported
 - `artifacts`: important output paths, including `browserSnapshot` when `--browser-url` is used
-- `competitorDiscovery`: search task status, official collection summaries, browser search snapshot summaries, normalized search capture summaries, viral material library status, creator leaderboard status, optional follow-up capture run status, and competitor-informed content rewrite status
+- `competitorDiscovery`: search task status, official collection summaries, browser search snapshot summaries, normalized search capture summaries, viral material library status, creator leaderboard status, optional creator follow-up run status, optional follow-up capture run status, and competitor-informed content rewrite status
 - `videoGeneration`: MP4 status and paths per video platform
 - `publishAutomation`: platform publish mode, approval requirement, and automation status
 - `metricsRecovery`: real-data recovery status and imported record count
@@ -115,6 +116,15 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `summary`: creator counts by platform and tracking mode
 
 `creator-follow-up-tasks.json` includes one safe next-step task per ranked creator. Public/official platforms can queue profile/channel research; browser-assisted platforms require visible profile evidence, screenshots, transcripts, or user exports.
+
+`creator-follow-up-results.json` includes:
+
+- `results[]`: one execution or evidence-request result per creator task
+- `results[].mode`: `official_or_public_creator_connector` or `browser_or_manual_creator_evidence`
+- `results[].status`: `ready`, `dry_run`, `queued_manual_evidence`, `blocked`, or `error`
+- `summary.importedRecords`: count of public/official records imported into `creator-deep-library.json`
+
+`creator-deep-library.json` includes official/public follow-up records enriched with `sourceCreatorTask`. It must contain observed metrics only from official/public connectors, browser-visible evidence, screenshots, transcripts, official APIs, or user exports.
 
 ## Competitor-Informed Content
 
@@ -206,6 +216,10 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].followUpCapture.limit`: optional max follow-up tasks to process
 - `jobs[].followUpCapture.dryRun`: optional boolean that plans follow-up captures without fetching public URLs
 - `jobs[].skipCreatorLeaderboard`: optional boolean that passes `--skip-creator-leaderboard`
+- `jobs[].creatorFollowUp.enabled`: optional boolean that passes `--run-creator-follow-up`
+- `jobs[].creatorFollowUp.limit`: optional max creator follow-up tasks to process
+- `jobs[].creatorFollowUp.topN`: optional per-creator official/public connector result count
+- `jobs[].creatorFollowUp.dryRun`: optional boolean that plans creator follow-up without fetching public APIs
 - `jobs[].competitorInformedContent.enabled`: optional boolean; `true` passes `--use-competitor-informed-content`, `false` passes `--skip-competitor-informed-content`
 - `jobs[].installBrowserIfMissing`: optional boolean that lets the workflow run the official Playwright Chromium install when `browserUrl` is used and Chromium is missing
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
