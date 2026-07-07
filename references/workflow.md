@@ -123,6 +123,17 @@ python scripts/platform_search_capture.py \
   --out-dir "./promotion-output"
 ```
 
+After search capture, build the cross-platform viral material library:
+
+```bash
+python scripts/viral_content_library.py \
+  --search-capture-dir "./promotion-output/reports/promotion-manager/competitors" \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
+This writes `viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}`. The library ranks captured records by observed viral score and preserves title, creator, hook, CTA, visible metrics, reusable patterns, and source report paths. The follow-up queue marks YouTube/GitHub public URLs as capture candidates and keeps Zhihu, Xiaohongshu, Douyin, TikTok, and unknown platforms as browser-assisted/manual evidence tasks unless official access is verified.
+
 For a full workflow, put platform files in a directory and pass it to the runner:
 
 ```bash
@@ -143,6 +154,7 @@ python scripts/run_promotion_workflow.py \
 ```
 
 Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platform>.html`, or `<platform>.htm`. Use this for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms when official API collection is unavailable. The script must not extract cookies, hidden tokens, or private endpoints; it only processes browser-visible evidence.
+The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
 
 Start with:
 

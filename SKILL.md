@@ -162,6 +162,15 @@ python scripts/platform_search_capture.py \
   --out-dir "./promotion-output"
 ```
 
+To rank captured platform search results into a viral material library and follow-up capture queue:
+
+```bash
+python scripts/viral_content_library.py \
+  --search-capture-dir "./promotion-output/reports/promotion-manager/competitors" \
+  --top-n 20 \
+  --out-dir "./promotion-output"
+```
+
 For a full workflow, place files such as `youtube.json`, `zhihu.json`, `xiaohongshu.json`, and `douyin.json` in one directory:
 
 ```bash
@@ -279,6 +288,7 @@ The command writes:
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
+- `reports/promotion-manager/competitors/viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` ranks captured search evidence.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` captures a browser-visible published page and registers the real URL.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence.
@@ -308,6 +318,7 @@ The command writes:
 - Use `scripts/competitor_collector.py` to automatically collect YouTube official API evidence or GitHub public API evidence when credentials/access allow.
 - Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
+- Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
 
 ### 3. Content Generation
@@ -394,6 +405,7 @@ If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scri
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
 - `scripts/platform_search_browser.py`: public search page browser snapshot generator for platform competitor discovery.
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
+- `scripts/viral_content_library.py`: ranked multi-platform viral material library and follow-up capture task generator.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.

@@ -33,10 +33,11 @@ def main() -> None:
     collections = run_competitor_collectors(args, product, out_dir, steps)
     browser_search = run_browser_search_snapshots(args, product, out_dir, steps)
     search_captures = run_search_captures(args, product, out_dir, steps, browser_search)
+    viral_library = run_viral_content_library(args, out_dir, steps, search_captures)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -65,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--auto-search-competitors", action="store_true", help="Open public platform search pages and write structured search snapshots before capture.")
     parser.add_argument("--search-snapshot-dir", default="", help="Directory of rendered search snapshots named <platform>.json/.txt/.html to capture.")
     parser.add_argument("--search-html-snapshot-dir", default="", help="Optional directory of saved <platform>.html search pages for auto search snapshots.")
+    parser.add_argument("--skip-viral-library", action="store_true", help="Skip ranked viral material library generation after search captures.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true", help="Allow browser_snapshot.py to run python -m playwright install chromium when Chromium is missing.")
 
@@ -306,6 +308,48 @@ def run_search_captures(
     return captures
 
 
+def run_viral_content_library(
+    args: argparse.Namespace,
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    search_captures: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if args.skip_viral_library:
+        return {"status": "skipped", "reason": "--skip-viral-library was supplied."}
+    capture_paths = [item.get("path") for item in search_captures if item.get("status") == "ready" and item.get("path")]
+    capture_paths = [path for path in capture_paths if Path(path).exists()]
+    if not capture_paths:
+        return {"status": "skipped", "reason": "No captured search result reports were available."}
+    command = [
+        sys.executable,
+        str(SCRIPTS / "viral_content_library.py"),
+        "--top-n",
+        str(args.top_n),
+        "--out-dir",
+        str(out_dir),
+    ]
+    for path in capture_paths:
+        command.extend(["--capture-report", path])
+    step = run_command("viral_content_library", command, check=False)
+    steps.append(step)
+    library_path = out_dir / "reports/promotion-manager/competitors/viral-content-library.json"
+    tasks_path = out_dir / "reports/promotion-manager/competitors/follow-up-capture-tasks.json"
+    summary = {
+        "status": "ready" if library_path.exists() else "error",
+        "library": str(library_path),
+        "followUpTasks": str(tasks_path),
+        "exitCode": step["exitCode"],
+    }
+    if library_path.exists():
+        report = json.loads(library_path.read_text(encoding="utf-8"))
+        summary["recordCount"] = report.get("recordCount", 0)
+        summary["platforms"] = report.get("platforms", [])
+    if tasks_path.exists():
+        tasks = json.loads(tasks_path.read_text(encoding="utf-8"))
+        summary["taskSummary"] = tasks.get("summary", {})
+    return summary
+
+
 def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path | str] | None:
     for suffix, flag in [(".json", "--structured-json"), (".txt", "--text-file"), (".html", "--html-file"), (".htm", "--html-file")]:
         path = snapshot_dir / f"{platform}{suffix}"
@@ -375,6 +419,7 @@ def build_manifest(
     collections: list[dict[str, Any]],
     browser_search: dict[str, Any] | None,
     search_captures: list[dict[str, Any]],
+    viral_library: dict[str, Any],
     videos: list[dict[str, Any]],
     metrics: dict[str, Any] | None,
     steps: list[dict[str, Any]],
@@ -408,6 +453,8 @@ def build_manifest(
             "contentJson": str(out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"),
             "publishPack": str(publish_packs),
             "competitorDiscovery": str(out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"),
+            "viralContentLibrary": viral_library.get("library", ""),
+            "followUpCaptureTasks": viral_library.get("followUpTasks", ""),
             "metricsReport": str(out_dir / "reports/promotion-manager/metrics/imported-metrics.json"),
         },
         "competitorDiscovery": {
@@ -417,6 +464,7 @@ def build_manifest(
             "officialCollections": collections,
             "browserSearchSnapshots": browser_search or {},
             "searchCaptures": search_captures,
+            "viralContentLibrary": viral_library,
         },
         "videoGeneration": videos,
         "publishAutomation": publish_queue,
@@ -477,6 +525,7 @@ def render_manifest(manifest: dict[str, Any]) -> str:
         "## Competitor Discovery",
         f"- Status: `{manifest['competitorDiscovery']['status']}`",
         f"- Query: {manifest['competitorDiscovery']['query']}",
+        f"- Viral content library: `{manifest['competitorDiscovery']['viralContentLibrary'].get('status', 'skipped')}`",
         "",
         "## Video Generation",
     ]

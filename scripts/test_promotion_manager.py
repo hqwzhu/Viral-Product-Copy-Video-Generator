@@ -32,6 +32,7 @@ RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
+VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -461,6 +462,88 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["records"][0]["contentFormat"], "note")
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
 
+    def test_viral_content_library_ranks_multiplatform_capture_reports(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-content-library-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        capture_dir = out_dir / "captures"
+        capture_dir.mkdir()
+        (capture_dir / "captured-search-results-youtube.json").write_text(
+            json.dumps(
+                {
+                    "platform": "youtube",
+                    "query": "AI product copy generator",
+                    "records": [
+                        {
+                            "id": "search-result-001",
+                            "platform": "youtube",
+                            "rank": 1,
+                            "normalizedRank": 1,
+                            "title": "One product URL into 30 launch videos",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "creatorName": "Launch Lab",
+                            "hook": "Your product page is already a content plan.",
+                            "contentExcerpt": "views 120k likes 9k comments 500",
+                            "visibleMetrics": {
+                                "views": {"raw": "120k", "normalized": 120000.0},
+                                "likes": {"raw": "9k", "normalized": 9000.0},
+                                "comments": {"raw": "500", "normalized": 500.0},
+                            },
+                            "viralSignals": {"score": 160000.0, "hasObservedMetrics": True},
+                            "reusablePatterns": ["visible_social_proof"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (capture_dir / "captured-search-results-xiaohongshu.json").write_text(
+            json.dumps(
+                {
+                    "platform": "xiaohongshu",
+                    "query": "AI product copy generator",
+                    "records": [
+                        {
+                            "id": "search-result-001",
+                            "platform": "xiaohongshu",
+                            "rank": 1,
+                            "normalizedRank": 1,
+                            "title": "7 prompts that turn one product page into launch notes",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-1",
+                            "creatorName": "Growth Notes",
+                            "hook": "Stop rewriting the same product intro.",
+                            "visibleMetrics": {"likes": {"raw": "1.2k", "normalized": 1200.0}},
+                            "viralSignals": {"score": 5800.0, "hasObservedMetrics": True},
+                            "reusablePatterns": ["numbered_title_or_claim"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_CONTENT_LIBRARY),
+                "--search-capture-dir",
+                str(capture_dir),
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        library = json.loads((out_dir / "output/reports/promotion-manager/competitors/viral-content-library.json").read_text(encoding="utf-8"))
+        self.assertEqual(library["recordCount"], 2)
+        self.assertEqual(library["materials"][0]["platform"], "youtube")
+        self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "public_url_capture_candidate")
+        self.assertEqual(library["materials"][1]["followUpCapture"]["mode"], "browser_assisted_capture_required")
+        tasks = json.loads((out_dir / "output/reports/promotion-manager/competitors/follow-up-capture-tasks.json").read_text(encoding="utf-8"))
+        self.assertEqual(tasks["summary"]["modes"]["public_url_capture_candidate"], 1)
+        self.assertEqual(tasks["summary"]["modes"]["browser_assisted_capture_required"], 1)
+        self.assertIn(str(out_dir / "output"), tasks["tasks"][0]["command"])
+
     def test_platform_search_browser_generates_snapshots_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-search-browser-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -625,6 +708,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(captures[0]["recordCount"], 1)
         report_path = out_dir / "output/reports/promotion-manager/competitors/captured-search-results-douyin.json"
         self.assertTrue(report_path.exists())
+        viral_library = manifest["competitorDiscovery"]["viralContentLibrary"]
+        self.assertEqual(viral_library["status"], "ready")
+        self.assertEqual(viral_library["recordCount"], 1)
+        self.assertTrue(Path(viral_library["library"]).exists())
+        library = json.loads(Path(viral_library["library"]).read_text(encoding="utf-8"))
+        self.assertEqual(library["materials"][0]["platform"], "douyin")
+        self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "browser_assisted_capture_required")
 
     def test_automation_scheduler_runs_due_workflow_job(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-test-"))
