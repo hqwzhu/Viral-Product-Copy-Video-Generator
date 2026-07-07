@@ -19,9 +19,27 @@ When the user sends a product link, do this:
 
 1. Inspect the product page or ask for missing basics: product name, target audience, pain points, value proposition, price, target platforms, and primary goal.
 2. Research platform constraints and competitors when the request depends on current information. Prefer official docs for API/publishing claims.
-3. Use `scripts/promotion_manager.py all` to generate deterministic local docs and reports.
+3. Use `scripts/run_promotion_workflow.py` for the default end-to-end local workflow: intake, competitor discovery, content generation, video rendering, publish automation map, and metrics recovery status.
 4. Review the generated content. If `cheat-on-content` is installed, use it for a second-pass content review; otherwise use the generated scorecard. Read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md) before writing prediction logs.
 5. Give the user publish packs and ask for approval before any publishing action.
+
+Default one-command workflow:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+For dynamic pages, Codex should inspect the rendered page first and pass a structured snapshot:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --structured-json "./rendered-product-page.json" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
 
 Example:
 
@@ -133,6 +151,7 @@ The command writes:
 - `docs/promotion-manager/05-browser-extension-roadmap.md`
 - `docs/promotion-manager/06-saas-product-roadmap.md`
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
+- `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
 ## Workflows
@@ -143,6 +162,7 @@ The command writes:
 - Mark uncertain details as assumptions; do not invent pricing, testimonials, sales, or usage numbers.
 - If a page cannot be read, ask for pasted product info.
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
+- Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
 
 ### 2. Competitor And Trend Research
 
@@ -219,6 +239,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 ## Bundled Resources
 
 - `scripts/promotion_manager.py`: deterministic report generator.
+- `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.

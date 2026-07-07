@@ -18,6 +18,26 @@ Required fields:
 
 If the user only provides a URL, inspect the page and derive a draft profile. Label uncertain facts as assumptions.
 
+For a full Codex-local agent run, prefer the orchestration entrypoint:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+For dynamic pages, Codex should inspect the rendered page first and pass a structured snapshot into the same workflow:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --structured-json "./rendered-product-page.json" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+The workflow writes `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` as the run ledger. Check it before telling the user what was produced, what can publish through official APIs, what remains browser-assisted, and whether real metrics are still missing.
+
 Use the deterministic extractor when possible:
 
 ```bash
@@ -125,6 +145,8 @@ python scripts/render_video.py \
 
 On Windows, `--generate-voiceover` can synthesize a review-quality voiceover through system SAPI. Use it for iteration; use a real voiceover file for publication quality.
 
+The workflow runner renders video artifacts by default for video platforms when `ffmpeg` is available. Use `--skip-video` only for tests or dry content-only runs.
+
 ## Stage 4: Review
 
 Use the bundled scorecard first. If `cheat-on-content` is installed, run it as a second-pass qualitative reviewer. Do not mutate real prediction logs unless the user asks.
@@ -177,6 +199,8 @@ python scripts/metrics_intake.py \
 ```
 
 Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--published-url`, `--github-repo`, and `--youtube-video-id`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
+
+The workflow runner can call metrics intake in the same run with `--metrics-csv`, `--metrics-json`, `--metrics-text`, `--published-url`, `--github-repo`, or `--youtube-video-id`. If no real evidence is supplied, its manifest must report `waiting_real_data`.
 
 ## Phase 2 And Phase 3 Boundaries
 

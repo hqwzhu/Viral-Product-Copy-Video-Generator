@@ -14,6 +14,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 ## Reports
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
+- `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
+- `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
 - `reports/promotion-manager/competitors/competitor-discovery.{json,md}` when `scripts/competitor_discovery.py` is run
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
 - `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run
@@ -33,6 +35,21 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
+
+## Workflow Manifest
+
+`workflow-manifest.json` is the run ledger for Codex operation. It includes:
+
+- `product`: normalized product fields used by generation scripts
+- `input`: source type, confidence, and whether rendered snapshots are supported
+- `artifacts`: important output paths
+- `competitorDiscovery`: search task status and official collection summaries
+- `videoGeneration`: MP4 status and paths per video platform
+- `publishAutomation`: platform publish mode, approval requirement, and automation status
+- `metricsRecovery`: real-data recovery status and imported record count
+- `selfEvolution`: controlled learning/upgrade capability status
+- `guardrails`: safety rules for the run
+- `steps`: command ledger with sanitized command arguments and output tails
 
 ## Publish Modes
 

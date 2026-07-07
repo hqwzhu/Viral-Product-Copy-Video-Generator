@@ -83,7 +83,7 @@ def parse_args() -> argparse.Namespace:
 def load_profile(args: argparse.Namespace) -> dict[str, Any]:
     if args.structured_json:
         path = Path(args.structured_json)
-        return extract_profile_from_structured_json(json.loads(path.read_text(encoding="utf-8")), str(path))
+        return extract_profile_from_structured_json(json.loads(path.read_text(encoding="utf-8-sig")), str(path))
     if args.text_file:
         path = Path(args.text_file)
         return extract_profile_from_text(path.read_text(encoding="utf-8"), str(path))

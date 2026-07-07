@@ -23,6 +23,7 @@ COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
+RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -169,7 +170,7 @@ class PromotionManagerScriptTest(unittest.TestCase):
                     "text": "AI Prompt Kit helps turn a product URL into platform-native promotion content.",
                 }
             ),
-            encoding="utf-8",
+            encoding="utf-8-sig",
         )
         subprocess.run(
             [
@@ -222,6 +223,56 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(profile["productName"], "AI Prompt Kit")
         self.assertEqual(profile["pricing"], "$19")
         self.assertIn("AI operators", profile["targetAudienceAssumptions"])
+
+    def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "pricing": "$19",
+                    "targetAudience": ["AI operators", "content marketers"],
+                    "painPoints": ["Blank page copywriting", "Slow launch content"],
+                    "text": "AI Prompt Kit helps turn a product URL into platform-native promotion content.",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--skip-video",
+                "--top-n",
+                "3",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        manifest_path = out_dir / "output/reports/promotion-manager/agent-run/workflow-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["product"]["name"], "AI Prompt Kit")
+        self.assertEqual(manifest["input"]["sourceType"], "structured_json")
+        self.assertEqual(manifest["competitorDiscovery"]["status"], "ready")
+        self.assertIn("youtube", manifest["competitorDiscovery"]["platforms"])
+        self.assertEqual(manifest["videoGeneration"][0]["status"], "skipped")
+        self.assertEqual(manifest["metricsRecovery"]["status"], "waiting_real_data")
+        publish_by_platform = {item["platform"]: item for item in manifest["publishAutomation"]}
+        self.assertEqual(publish_by_platform["youtube"]["automationStatus"], "dry_run_ready_requires_credentials_and_approval")
+        self.assertEqual(publish_by_platform["xiaohongshu"]["automationStatus"], "copy_pack_ready_manual_publish")
+        self.assertFalse(manifest["selfEvolution"]["canInstallWithoutReview"])
+        self.assertTrue((out_dir / "output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json").exists())
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/competitor-discovery.json").exists())
 
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
