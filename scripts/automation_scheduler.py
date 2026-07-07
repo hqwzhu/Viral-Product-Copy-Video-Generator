@@ -48,6 +48,8 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--output-root", default="./promotion-output/automation")
     init.add_argument("--skip-video", action="store_true")
     init.add_argument("--install-browser-if-missing", action="store_true")
+    init.add_argument("--auto-search-competitors", action="store_true")
+    init.add_argument("--search-html-snapshot-dir", default="")
 
     run = subparsers.add_parser("run", help="Run jobs that are due.")
     run.add_argument("--config", required=True)
@@ -78,6 +80,8 @@ def init_config(args: argparse.Namespace) -> None:
         "topN": 10,
         "liveOfficialCompetitors": False,
         "collectorPlatforms": ["youtube", "github"],
+        "autoSearchCompetitors": args.auto_search_competitors,
+        "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
@@ -270,6 +274,10 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
         command.append("--live-official-competitors")
     if job.get("collectorPlatforms"):
         command.extend(["--collector-platforms", comma_value(job.get("collectorPlatforms"))])
+    if job.get("autoSearchCompetitors"):
+        command.append("--auto-search-competitors")
+    if job.get("searchHtmlSnapshotDir"):
+        command.extend(["--search-html-snapshot-dir", str(resolve_path(base_dir, job["searchHtmlSnapshotDir"]))])
     if job.get("searchSnapshotDir"):
         command.extend(["--search-snapshot-dir", str(resolve_path(base_dir, job["searchSnapshotDir"]))])
     if job.get("skipCompetitorDiscovery"):

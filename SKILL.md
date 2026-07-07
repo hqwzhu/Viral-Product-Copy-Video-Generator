@@ -134,6 +134,15 @@ python scripts/competitor_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+To automatically open public platform search pages and create browser-visible search snapshots:
+
+```bash
+python scripts/platform_search_browser.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
 To automatically collect competitor evidence through supported official/public connectors:
 
 ```bash
@@ -159,6 +168,16 @@ For a full workflow, place files such as `youtube.json`, `zhihu.json`, `xiaohong
 python scripts/run_promotion_workflow.py \
   --product-url "https://example.com/product" \
   --search-snapshot-dir "./search-snapshots" \
+  --out-dir "./promotion-output"
+```
+
+Or let the workflow create public search snapshots first:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --browser-url "https://example.com/product" \
+  --auto-search-competitors \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
 
@@ -229,6 +248,7 @@ The command writes:
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
+- `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
@@ -254,6 +274,7 @@ The command writes:
 - Use the script `research` command first when platform feasibility or self-learning notes are needed.
 - Use `scripts/competitor_discovery.py` to create platform search tasks and optional official API search results before importing evidence.
 - Use `scripts/competitor_collector.py` to automatically collect YouTube official API evidence or GitHub public API evidence when credentials/access allow.
+- Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
 
@@ -335,6 +356,7 @@ If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publ
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
+- `scripts/platform_search_browser.py`: public search page browser snapshot generator for platform competitor discovery.
 - `scripts/platform_search_capture.py`: multi-result search snapshot capture for rendered browser pages, HTML, text, and public URLs.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.

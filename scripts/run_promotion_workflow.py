@@ -31,11 +31,12 @@ def main() -> None:
     run_promotion_manager(args, product, out_dir, steps)
     discovery = run_competitor_discovery(args, product, out_dir, steps)
     collections = run_competitor_collectors(args, product, out_dir, steps)
-    search_captures = run_search_captures(args, product, out_dir, steps)
+    browser_search = run_browser_search_snapshots(args, product, out_dir, steps)
+    search_captures = run_search_captures(args, product, out_dir, steps, browser_search)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, search_captures, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -61,7 +62,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-n", type=int, default=10)
     parser.add_argument("--live-official-competitors", action="store_true", help="Call official/public competitor connectors where credentials allow.")
     parser.add_argument("--collector-platforms", default="youtube,github", help="Comma-separated platforms for official/public competitor collectors.")
+    parser.add_argument("--auto-search-competitors", action="store_true", help="Open public platform search pages and write structured search snapshots before capture.")
     parser.add_argument("--search-snapshot-dir", default="", help="Directory of rendered search snapshots named <platform>.json/.txt/.html to capture.")
+    parser.add_argument("--search-html-snapshot-dir", default="", help="Optional directory of saved <platform>.html search pages for auto search snapshots.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true", help="Allow browser_snapshot.py to run python -m playwright install chromium when Chromium is missing.")
 
@@ -223,10 +226,53 @@ def run_competitor_collectors(args: argparse.Namespace, product: dict[str, Any],
     return reports
 
 
-def run_search_captures(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if not args.search_snapshot_dir:
+def run_browser_search_snapshots(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not args.auto_search_competitors:
+        return None
+    snapshot_dir = out_dir / "search-snapshots/browser-search"
+    command = [
+        sys.executable,
+        str(SCRIPTS / "platform_search_browser.py"),
+        "--query",
+        competitor_query(args, product),
+        "--platforms",
+        ",".join(product["platforms"]),
+        "--top-n",
+        str(args.top_n),
+        "--out-dir",
+        str(out_dir),
+        "--snapshot-dir",
+        str(snapshot_dir),
+    ]
+    if args.search_html_snapshot_dir:
+        command.extend(["--html-snapshot-dir", args.search_html_snapshot_dir])
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    step = run_command("platform_search_browser", command, check=False)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/competitors/browser-search-snapshots.json"
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        return {
+            "status": "ready" if step["exitCode"] == 0 else "error",
+            "path": str(report_path),
+            "snapshotDir": report.get("snapshotDir", str(snapshot_dir)),
+            "records": report.get("records", []),
+        }
+    return {"status": "error", "path": "", "snapshotDir": str(snapshot_dir), "records": []}
+
+
+def run_search_captures(
+    args: argparse.Namespace,
+    product: dict[str, Any],
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    browser_search: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    snapshot_dir_value = args.search_snapshot_dir or (browser_search or {}).get("snapshotDir", "")
+    if not snapshot_dir_value:
         return []
-    snapshot_dir = Path(args.search_snapshot_dir)
+    snapshot_dir = Path(snapshot_dir_value)
     query = competitor_query(args, product)
     captures = []
     for platform in product["platforms"]:
@@ -327,6 +373,7 @@ def build_manifest(
     profile: dict[str, Any],
     discovery: dict[str, Any] | None,
     collections: list[dict[str, Any]],
+    browser_search: dict[str, Any] | None,
     search_captures: list[dict[str, Any]],
     videos: list[dict[str, Any]],
     metrics: dict[str, Any] | None,
@@ -368,6 +415,7 @@ def build_manifest(
             "query": discovery.get("query") if discovery else "",
             "platforms": [task.get("platform") for task in discovery.get("tasks", [])] if discovery else [],
             "officialCollections": collections,
+            "browserSearchSnapshots": browser_search or {},
             "searchCaptures": search_captures,
         },
         "videoGeneration": videos,

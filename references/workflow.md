@@ -89,6 +89,17 @@ python scripts/competitor_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+Then capture public browser-visible search pages when direct official collection is unavailable:
+
+```bash
+python scripts/platform_search_browser.py \
+  --query "AI product copy generator" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+The search browser writes `search-snapshots/browser-search/<platform>.json` files plus `browser-search-snapshots.{json,md}`. It captures visible DOM only. If Chromium is missing, install it with `python -m playwright install chromium` or pass `--install-browser-if-missing` on trusted machines.
+
 Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
 
 Collect supported official/public competitor evidence:
@@ -118,6 +129,16 @@ For a full workflow, put platform files in a directory and pass it to the runner
 python scripts/run_promotion_workflow.py \
   --product-url "https://example.com/product" \
   --search-snapshot-dir "./search-snapshots" \
+  --out-dir "./promotion-output"
+```
+
+Or let the workflow create those search snapshots first:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --browser-url "https://example.com/product" \
+  --auto-search-competitors \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
 
@@ -292,6 +313,7 @@ Scheduled runs can generate new content, videos, publish packs, and metrics impo
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
+Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 
 ## Phase 2 And Phase 3 Boundaries
 

@@ -28,6 +28,7 @@ YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
+PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -456,6 +457,110 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["records"][0]["visibleMetrics"]["likes"]["normalized"], 1200.0)
         self.assertEqual(report["records"][0]["contentFormat"], "note")
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
+
+    def test_platform_search_browser_generates_snapshots_from_saved_html(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-browser-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_dir = out_dir / "html"
+        html_dir.mkdir()
+        (html_dir / "youtube.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>YouTube search</title></head>
+<body>
+  <section>
+    <a href="https://www.youtube.com/watch?v=abc123">One URL into 30 launch videos</a>
+    <p>Launch Lab shows a product URL workflow. views 120k likes 9k comments 500</p>
+  </section>
+  <section>
+    <a href="https://www.youtube.com/watch?v=def456">Product copy system teardown</a>
+    <p>Breaks title, hook, proof, and CTA. views 80k likes 5k comments 240</p>
+  </section>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        snapshot_dir = out_dir / "snapshots"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_BROWSER),
+                "--query",
+                "AI product copy generator",
+                "--platforms",
+                "youtube",
+                "--html-snapshot-dir",
+                str(html_dir),
+                "--snapshot-dir",
+                str(snapshot_dir),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        snapshot = json.loads((snapshot_dir / "youtube.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["platform"], "youtube")
+        self.assertEqual(snapshot["captureMode"], "saved_html_snapshot")
+        self.assertEqual(len(snapshot["items"]), 2)
+        self.assertIn("One URL", snapshot["items"][0]["title"])
+        summary = json.loads((out_dir / "output/reports/promotion-manager/competitors/browser-search-snapshots.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["records"][0]["status"], "ready")
+
+    def test_agent_workflow_auto_searches_competitors_from_saved_html(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-auto-search-workflow-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_path = out_dir / "product.json"
+        product_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        html_dir = out_dir / "html"
+        html_dir.mkdir()
+        (html_dir / "youtube.html").write_text(
+            """<!doctype html>
+<html><body>
+  <article>
+    <a href="https://www.youtube.com/watch?v=abc123">One URL into 30 launch videos</a>
+    <p>Hook: your product page is already a content plan. views 120k likes 9k comments 500</p>
+  </article>
+</body></html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(product_path),
+                "--platforms",
+                "youtube",
+                "--auto-search-competitors",
+                "--search-html-snapshot-dir",
+                str(html_dir),
+                "--skip-video",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        manifest = json.loads((out_dir / "output/reports/promotion-manager/agent-run/workflow-manifest.json").read_text(encoding="utf-8"))
+        browser_search = manifest["competitorDiscovery"]["browserSearchSnapshots"]
+        self.assertEqual(browser_search["status"], "ready")
+        self.assertEqual(browser_search["records"][0]["recordCount"], 1)
+        captures = manifest["competitorDiscovery"]["searchCaptures"]
+        self.assertEqual(captures[0]["status"], "ready")
+        self.assertEqual(captures[0]["recordCount"], 1)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-youtube.json").exists())
 
     def test_agent_workflow_captures_search_snapshot_directory(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-search-snapshot-workflow-test-"))
