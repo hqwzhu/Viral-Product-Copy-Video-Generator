@@ -19,6 +19,7 @@ RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
+PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -255,6 +256,70 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(report["aggregates"]["totals"]["orders"], 6.0)
         self.assertEqual(report["retrospective"]["status"], "ready")
         self.assertTrue((out_dir / "reports/promotion-manager/metrics/imported-metrics.md").exists())
+
+    def test_publish_executor_github_dry_run_requires_explicit_execution(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        body_path = out_dir / "README-promo.md"
+        body_path.write_text("# Launch draft\n\nPromotion copy.", encoding="utf-8")
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "github",
+                "--github-action",
+                "file",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--path",
+                "PROMOTION.md",
+                "--content-file",
+                str(body_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["platform"], "github")
+        self.assertTrue(report["approvalRequired"])
+        self.assertEqual(report["request"]["method"], "PUT")
+        self.assertNotIn("GITHUB_TOKEN", json.dumps(report))
+
+    def test_publish_executor_youtube_dry_run_uses_oauth_boundary(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for dry-run")
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "youtube",
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--description",
+                "Promotion video draft.",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["platform"], "youtube")
+        self.assertEqual(report["officialApi"], "YouTube Data API videos.insert")
+        self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
+        self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
 
     def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
         if shutil.which("ffmpeg") is None:

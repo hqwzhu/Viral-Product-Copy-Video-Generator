@@ -100,6 +100,26 @@ Use the bundled scorecard first. If `cheat-on-content` is installed, run it as a
 
 Create publish packs. Every pack requires human approval before execution. Browser-assisted publishing may fill forms, but the user must click the final publish button.
 
+Run official publishing actions through a dry run first:
+
+```bash
+python scripts/publish_executor.py \
+  --platform github \
+  --github-action file \
+  --github-repo owner/repo \
+  --path PROMOTION.md \
+  --content-file "./promotion-output/reports/promotion-manager/generated-content/product-platform-content.md" \
+  --out-dir "./promotion-output"
+```
+
+To execute a supported official write, the user must provide the relevant environment credential and explicit approval:
+
+```bash
+python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
+```
+
+Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, and YouTube `videos.insert` upload. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Zhihu, Xiaohongshu, and Douyin remain manual/browser-assisted unless official app permissions are configured and verified.
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.

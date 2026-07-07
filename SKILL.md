@@ -76,6 +76,18 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+To run an official publish action, start with a dry run:
+
+```bash
+python scripts/publish_executor.py \
+  --platform github \
+  --github-action file \
+  --github-repo owner/repo \
+  --path PROMOTION.md \
+  --content-file "./promotion-output/reports/promotion-manager/generated-content/product-platform-content.md" \
+  --out-dir "./promotion-output"
+```
+
 The command writes:
 
 - `docs/promotion-manager/01-platform-publishing-feasibility.md`
@@ -145,6 +157,7 @@ Every publish pack must include:
 
 YouTube and GitHub may be official API candidates. Zhihu, Xiaohongshu, and Douyin default to manual or browser-assisted publishing unless current official evidence proves otherwise.
 For full-automation boundaries, read [references/final-capability-boundaries.md](references/final-capability-boundaries.md).
+Use `scripts/publish_executor.py` for supported official publishing actions. It defaults to dry-run and only writes when `--execute --approval I_APPROVE_PUBLISH` is supplied with the required environment token.
 
 ### 6. Retrospective
 
@@ -172,6 +185,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
+- `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
 - `scripts/render_video.py`: ffmpeg-based MP4 draft renderer.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.

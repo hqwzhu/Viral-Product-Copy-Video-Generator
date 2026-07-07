@@ -23,6 +23,17 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 - No fabricated platform data.
 - All publishing requires human approval.
 
+## Official Executor Coverage
+
+`scripts/publish_executor.py` supports:
+
+- GitHub file create/update through the repository contents REST API.
+- GitHub issue creation through the issues REST API.
+- GitHub release creation through the releases REST API.
+- YouTube video upload through `videos.insert` when an OAuth access token is available.
+
+The executor defaults to dry-run. Real writes require `--execute --approval I_APPROVE_PUBLISH` plus the relevant environment credential. It must not write credentials to reports.
+
 ## Reference URLs
 
 - YouTube videos.insert: https://developers.google.com/youtube/v3/docs/videos/insert
