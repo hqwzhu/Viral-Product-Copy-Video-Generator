@@ -15,6 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
+BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
 
@@ -97,6 +98,7 @@ def init_config(args: argparse.Namespace) -> None:
         "metrics": {},
         "metricsRecovery": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
+        "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
     }
     config = {
         "version": 1,
@@ -190,6 +192,9 @@ def evaluate_job(
     if result.returncode == 0 and manifest_path.exists() and publish_enabled(job):
         publish_result = run_publish_queue(job, out_dir, base_dir, manifest_path)
         record["publishQueue"] = publish_result
+        if publish_result.get("report") and browser_publish_assistant_enabled(job):
+            browser_publish_result = run_browser_publish_assistant(job, out_dir, base_dir, publish_result["report"])
+            record["browserPublishAssistant"] = browser_publish_result
     if result.returncode == 0 and manifest_path.exists() and metrics_recovery_enabled(job):
         recovery_result = run_metrics_recovery(job, out_dir, base_dir, manifest_path, publish_result.get("report", ""))
         record["metricsRecovery"] = recovery_result
@@ -199,6 +204,8 @@ def evaluate_job(
     job_state["lastManifest"] = str(manifest_path) if manifest_path.exists() else ""
     if record.get("publishQueue", {}).get("report"):
         job_state["lastPublishQueue"] = record["publishQueue"]["report"]
+    if record.get("browserPublishAssistant", {}).get("report"):
+        job_state["lastBrowserPublishAssistant"] = record["browserPublishAssistant"]["report"]
     if record.get("metricsRecovery", {}).get("report"):
         job_state["lastMetricsRecovery"] = record["metricsRecovery"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
@@ -213,10 +220,35 @@ def metrics_recovery_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("metricsRecovery") or {}).get("enabled"))
 
 
+def browser_publish_assistant_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("browserPublishAssistant") or {}).get("enabled"))
+
+
 def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
     command = build_publish_queue_command(job, out_dir, base_dir, manifest_path)
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
     report_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+    summary: dict[str, Any] = {}
+    if report_path.exists():
+        try:
+            summary = json.loads(report_path.read_text(encoding="utf-8-sig")).get("summary", {})
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": "ready" if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "summary": summary,
+    }
+
+
+def run_browser_publish_assistant(job: dict[str, Any], out_dir: Path, base_dir: Path, publish_queue_path: str) -> dict[str, Any]:
+    command = build_browser_publish_assistant_command(job, out_dir, base_dir, publish_queue_path)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/browser-publish/browser-publish-assistant.json"
     summary: dict[str, Any] = {}
     if report_path.exists():
         try:
@@ -312,6 +344,27 @@ def build_publish_queue_command(job: dict[str, Any], out_dir: Path, base_dir: Pa
         command.extend(["--youtube-video-file", str(resolve_path(base_dir, youtube["videoFile"]))])
     append_if_present(command, "--youtube-privacy-status", youtube.get("privacyStatus"))
     append_if_present(command, "--youtube-category-id", youtube.get("categoryId"))
+    return command
+
+
+def build_browser_publish_assistant_command(job: dict[str, Any], out_dir: Path, base_dir: Path, publish_queue_path: str) -> list[str]:
+    assistant = job.get("browserPublishAssistant") or {}
+    command = [
+        sys.executable,
+        str(BROWSER_PUBLISH_ASSISTANT),
+        "--publish-queue",
+        publish_queue_path,
+        "--out-dir",
+        str(out_dir),
+    ]
+    append_if_present(command, "--platforms", comma_value(assistant.get("platforms")))
+    if assistant.get("openBrowser"):
+        command.append("--open-browser")
+    for item in key_value_options(assistant.get("platformPublishUrls"), base_dir=base_dir):
+        command.extend(["--platform-publish-url", item])
+    for item in key_value_options(assistant.get("publishedUrls")):
+        command.extend(["--published-url", item])
+    append_many(command, "--evidence", assistant.get("evidence"))
     return command
 
 
@@ -482,6 +535,8 @@ def render_run_report(report: dict[str, Any]) -> str:
         )
         if record.get("publishQueue"):
             lines.append(f"- Publish queue: {record['publishQueue'].get('report', '')}")
+        if record.get("browserPublishAssistant"):
+            lines.append(f"- Browser publish assistant: {record['browserPublishAssistant'].get('report', '')}")
         if record.get("metricsRecovery"):
             lines.append(f"- Metrics recovery: {record['metricsRecovery'].get('report', '')}")
     lines.extend(["", "## Guardrails"])
@@ -527,6 +582,31 @@ def append_many(command: list[str], flag: str, value: Any, base_dir: Path | None
         if base_dir is not None:
             text = str(resolve_path(base_dir, text))
         command.extend([flag, text])
+
+
+def key_value_options(value: Any, base_dir: Path | None = None) -> list[str]:
+    if isinstance(value, dict):
+        items = [f"{key}={val}" for key, val in value.items()]
+    elif isinstance(value, list):
+        items = [str(item) for item in value if str(item).strip()]
+    elif value:
+        items = [str(value)]
+    else:
+        items = []
+    if base_dir is None:
+        return items
+    result = []
+    for item in items:
+        if "=" not in item:
+            result.append(item)
+            continue
+        key, val = item.split("=", 1)
+        result.append(f"{key}={resolve_path(base_dir, val) if looks_like_local_path(val) else val}")
+    return result
+
+
+def looks_like_local_path(value: str) -> bool:
+    return bool(value) and not value.startswith(("http://", "https://"))
 
 
 def comma_value(value: Any) -> str:

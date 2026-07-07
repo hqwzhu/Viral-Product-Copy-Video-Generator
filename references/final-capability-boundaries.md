@@ -29,6 +29,7 @@ Use this reference when the user asks for full automation.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.
+- Prepare browser-assisted/manual publishing payloads for Zhihu, Xiaohongshu, Douyin, TikTok, and similar platforms with `scripts/browser_publish_assistant.py`, including clipboard text, form-fill helper scripts, publisher entry URLs, checklists, and post-publish URL registration commands.
 - Audit official platform access boundaries with `scripts/platform_access_audit.py`, mapping implemented official APIs, official app-review candidates, manual/browser-assisted fallback rules, required environment variable names, and metric evidence requirements.
 - Register proven published URLs from official execution reports, publish queues, or manual/browser-assisted evidence into a standard published-items report for later metrics recovery.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
@@ -49,6 +50,7 @@ Use this reference when the user asks for full automation.
 ## What Must Stay Browser-Assisted Or Manual
 
 - Zhihu and Xiaohongshu publishing should remain manual or browser-assisted unless stable official creator publishing access is verified.
+- Browser-assisted publish preparation may open a user-visible creator page and prepare field payloads, but it must not auto-login, solve challenges, or click the final publish/submit button.
 - Any platform flow that triggers captcha, risk control, account verification, or login prompts must stop for user action.
 - The agent must not extract, save, print, or reuse cookies, passwords, API keys, or hidden browser tokens.
 

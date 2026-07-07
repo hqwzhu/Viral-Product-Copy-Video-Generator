@@ -30,6 +30,7 @@ PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
+BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
@@ -1431,6 +1432,12 @@ Prompt templates for product copy, SEO content, and video scripts.
                                     "path": "PROMOTION.md",
                                 },
                             },
+                            "browserPublishAssistant": {
+                                "enabled": True,
+                                "platformPublishUrls": {"xiaohongshu": "https://creator.example.test/publish"},
+                                "publishedUrls": ["xiaohongshu=https://www.xiaohongshu.com/explore/note123"],
+                                "evidence": ["xhs-published.png"],
+                            },
                             "metricsRecovery": {
                                 "enabled": True,
                                 "businessCsv": "business.csv",
@@ -1462,11 +1469,16 @@ Prompt templates for product copy, SEO content, and video scripts.
         job_state = state["jobs"]["ai-prompt-kit-publish-weekly"]
         self.assertEqual(job_state["lastStatus"], "ready")
         self.assertTrue(Path(job_state["lastPublishQueue"]).exists())
+        self.assertTrue(Path(job_state["lastBrowserPublishAssistant"]).exists())
         run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
         publish_queue = run_report["records"][0]["publishQueue"]
         self.assertEqual(publish_queue["status"], "ready")
         self.assertEqual(publish_queue["summary"]["officialDryRuns"], 1)
         self.assertEqual(publish_queue["summary"]["manualQueued"], 1)
+        browser_publish = run_report["records"][0]["browserPublishAssistant"]
+        self.assertEqual(browser_publish["status"], "ready")
+        self.assertEqual(browser_publish["summary"]["prepared"], 1)
+        self.assertEqual(browser_publish["summary"]["registeredPublishedUrls"], 1)
         self.assertTrue(Path(job_state["lastMetricsRecovery"]).exists())
         recovery = run_report["records"][0]["metricsRecovery"]
         self.assertEqual(recovery["status"], "ready")
@@ -2246,8 +2258,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolutionAudit"]["ready"])
         self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
+        self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
@@ -2661,6 +2675,107 @@ Prompt templates for product copy, SEO content, and video scripts.
         serialized = json.dumps(queue)
         self.assertNotIn("GITHUB_TOKEN", serialized)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
+
+    def test_browser_publish_assistant_prepares_payloads_and_registers_real_url(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-publish-assistant-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        queue_dir = out_dir / "reports/promotion-manager/publish-queue"
+        drafts_dir = queue_dir / "drafts"
+        drafts_dir.mkdir(parents=True)
+        xhs_draft = drafts_dir / "xiaohongshu-draft.md"
+        xhs_draft.write_text(
+            "\n".join(
+                [
+                    "# xiaohongshu Publish Draft",
+                    "",
+                    "- Title: 3 steps to launch AI content",
+                    "- CTA: Try the product",
+                    "- Cover text: Launch faster",
+                    "- Tags: #AI #ProductLaunch",
+                    "",
+                    "## Description",
+                    "",
+                    "Use this tool to turn one product URL into a promotion pack.",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        douyin_draft = drafts_dir / "douyin-draft.md"
+        douyin_draft.write_text(
+            "\n".join(
+                [
+                    "# douyin Publish Draft",
+                    "",
+                    "- Title: AI launch script",
+                    "- Tags: #AI #工具",
+                    "",
+                    "## shortVideoScript",
+                    "",
+                    "Hook, proof, demo, CTA.",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        queue_path = queue_dir / "publish-queue.json"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "status": "queued_manual",
+                            "publishMode": "manual_publish_required",
+                            "contentDraft": str(xhs_draft),
+                        },
+                        {
+                            "platform": "douyin",
+                            "status": "queued_browser_assisted",
+                            "publishMode": "browser_assisted_publish",
+                            "contentDraft": str(douyin_draft),
+                        },
+                        {
+                            "platform": "github",
+                            "status": "dry_run",
+                            "publishMode": "official_api_publish",
+                            "contentDraft": "",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(BROWSER_PUBLISH_ASSISTANT),
+                "--publish-queue",
+                str(queue_path),
+                "--platform-publish-url",
+                "xiaohongshu=https://creator.example.test/publish",
+                "--published-url",
+                "xiaohongshu=https://www.xiaohongshu.com/explore/note123",
+                "--evidence",
+                "xhs-published.png",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/browser-publish/browser-publish-assistant.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["prepared"], 2)
+        self.assertEqual(report["summary"]["registeredPublishedUrls"], 1)
+        by_platform = {item["platform"]: item for item in report["records"]}
+        self.assertEqual(by_platform["xiaohongshu"]["publisherUrl"], "https://creator.example.test/publish")
+        self.assertTrue(Path(by_platform["xiaohongshu"]["payloadFiles"]["clipboard"]).exists())
+        self.assertTrue(Path(by_platform["douyin"]["payloadFiles"]["formFillScript"]).exists())
+        self.assertTrue(by_platform["douyin"]["finalPublishUserActionRequired"])
+        published = json.loads((out_dir / "reports/promotion-manager/published-items/published-items.json").read_text(encoding="utf-8"))
+        self.assertEqual(published["summary"]["published"], 1)
+        self.assertEqual(published["records"][0]["publishedUrl"], "https://www.xiaohongshu.com/explore/note123")
+        self.assertTrue((out_dir / "reports/promotion-manager/browser-publish/browser-publish-assistant.md").exists())
 
     def test_publish_readiness_runner_audits_queue_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-test-"))

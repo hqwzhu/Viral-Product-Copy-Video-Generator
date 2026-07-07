@@ -51,6 +51,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
+- `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads and registers supplied real published URLs
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
@@ -218,6 +219,22 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `steps[]`: sanitized publish-queue build command ledger when `--build-queue` is used
 - `guardrails`: no secret values, no auto-login, no captcha bypass, no private endpoints, and no claimed publishing without real evidence
 
+## Browser Publish Assistant
+
+`browser-publish-assistant.json` includes:
+
+- `status`: `ready` when browser/manual payloads or registered published URLs exist, otherwise `no_browser_publish_tasks`
+- `input`: publish queue path and whether publisher URLs were opened in the user's default browser
+- `records[]`: one prepared browser/manual task per queued platform
+- `records[].platform`, `queueStatus`, `publishMode`, `contentDraft`, `publisherUrl`, and `publisherUrlSource`
+- `records[].payload`: normalized title, body, tags, cover text, CTA, and preparation date
+- `records[].payloadFiles`: payload JSON, clipboard text, generic form-fill helper script, and checklist path
+- `records[].finalPublishUserActionRequired`: always true for browser/manual platforms
+- `records[].postPublish`: copy-ready commands for `published_items.py`, `publish_url_capture.py`, and `metrics_recovery.py`
+- `registeredPublishedItems`: sanitized command results when `--published-url platform=url` is supplied
+- `summary`: prepared task count, opened browser count, registered published URL count, and final-user-action count
+- `guardrails`: no auto-login, no final publish click, no captcha/risk-control bypass, and no cookie/token capture
+
 ## Platform Access Audit
 
 `platform-access-audit.json` includes:
@@ -310,7 +327,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `platformAccessAudit`: script readiness and command for generating the official access boundary report
 - `selfEvolutionAudit`: nested readiness, command, exit code, report path, and status from `scripts/self_evolution_audit.py`
 - `selfEvolution`: controlled autonomy status, allowed runtime installs, and blocked unsafe self-upgrade actions
-- `recommendedCommands`: copy-ready commands for one-command cycles, safe runtime setup, and periodic jobs
+- `recommendedCommands`: copy-ready commands for one-command cycles, browser-assisted publish preparation, safe runtime setup, and periodic jobs
 - `nextActions`: prioritized fixes needed to move closer to the final requested Agent
 
 ## Self-Evolution Audit
@@ -368,3 +385,9 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`
 - `jobs[].publish.youtube`: optional YouTube queue settings such as `videoFile`, `privacyStatus`, and `categoryId`
 - `jobs[].publish.execute`: defaults to false; final writes still require official credentials and `jobs[].publish.approval` equal to `I_APPROVE_PUBLISH`
+- `jobs[].browserPublishAssistant.enabled`: optional boolean; when true, the scheduler runs `scripts/browser_publish_assistant.py` after publish queue generation
+- `jobs[].browserPublishAssistant.openBrowser`: optional boolean; opens publisher entry URLs in the user's default browser, without login automation or final publish clicks
+- `jobs[].browserPublishAssistant.platforms`: optional platform filter for browser-assisted payload preparation
+- `jobs[].browserPublishAssistant.platformPublishUrls`: optional object or list of `platform=url` entries that override default creator/publisher entry URLs
+- `jobs[].browserPublishAssistant.publishedUrls`: optional URL registrations as a list of `platform=url` strings after the user has published
+- `jobs[].browserPublishAssistant.evidence`: optional evidence URL/path list attached to registered published URLs

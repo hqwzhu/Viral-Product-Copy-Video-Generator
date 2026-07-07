@@ -364,6 +364,28 @@ python scripts/publish_readiness_runner.py \
 
 This writes `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}`. The report checks queue state, target information, credential presence by environment variable name, approval status, and next actions. It does not write credential values and does not execute final platform writes unless the publish queue is explicitly run with execution and the required approval phrase.
 
+Prepare browser-assisted publishing materials for non-official direct-publish platforms:
+
+```bash
+python scripts/browser_publish_assistant.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` plus per-platform payload JSON, clipboard text, form-fill helper scripts, and checklists. It can open user-visible publisher entry URLs with `--open-browser`, but the user must complete login, account checks, media review, and the final publish action. Override moved creator pages with `--platform-publish-url platform=url`.
+
+After the user publishes manually or in a user-visible browser session, register the real published URL:
+
+```bash
+python scripts/browser_publish_assistant.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --published-url "xiaohongshu=https://www.xiaohongshu.com/explore/real-note-id" \
+  --evidence "./screenshots/xhs-published.png" \
+  --out-dir "./promotion-output"
+```
+
+The assistant calls `scripts/published_items.py` for supplied real URLs, so metrics recovery can start from the standard `published-items` report.
+
 Run official publishing actions through a dry run first:
 
 ```bash
@@ -515,6 +537,7 @@ The scheduler writes `promotion-automation-state.json` next to the config unless
 Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
+Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.

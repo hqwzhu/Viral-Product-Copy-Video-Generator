@@ -37,6 +37,7 @@ SCRIPT_REQUIREMENTS = {
     "render_video": "render_video.py",
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
+    "browser_publish_assistant": "browser_publish_assistant.py",
     "platform_access_audit": "platform_access_audit.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
@@ -331,7 +332,10 @@ def requirement_status(
             "follow_up_capture_runner",
         ],
     )
-    publish_ready = scripts_ready(scripts, ["publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"])
+    publish_ready = scripts_ready(
+        scripts,
+        ["publish_queue", "publish_readiness", "browser_publish_assistant", "publish_executor", "youtube_oauth_publish"],
+    )
     metrics_ready = scripts_ready(scripts, ["published_items", "publish_url_capture", "metrics_intake", "metrics_recovery"])
     cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler"])
     full_platform_publish_ready = all(
@@ -385,7 +389,14 @@ def requirement_status(
             "status": "ready" if publish_ready and full_platform_publish_ready else "blocked_by_authorization_or_platform_limits",
             "evidence": scripts_present(
                 scripts,
-                ["platform_access_audit", "publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"],
+                [
+                    "platform_access_audit",
+                    "publish_queue",
+                    "publish_readiness",
+                    "browser_publish_assistant",
+                    "publish_executor",
+                    "youtube_oauth_publish",
+                ],
             ),
             "missing": missing_publish_credentials(credentials),
             "limits": [
@@ -570,6 +581,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
                 f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "prepare_browser_assisted_publish",
+            "command": (
+                f"python scripts/browser_publish_assistant.py --publish-queue "
+                f"\"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\""
             ),
         },
         {
