@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
+COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -144,6 +145,50 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(profile["pricing"], "19")
         self.assertIn("Prompt templates", profile["valueProposition"])
         self.assertTrue((out_dir / "intake" / "product-profile.md").exists())
+
+    def test_competitor_intake_imports_html_evidence(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "competitor.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>One URL Into 30 Posts</title>
+  <meta property="og:title" content="One URL Into 30 Posts">
+  <meta property="og:description" content="A creator breaks down a product URL into platform-native posts.">
+  <meta property="og:site_name" content="Growth Creator">
+</head>
+<body>
+  <h1>One URL Into 30 Posts</h1>
+  <p>Hook: Stop writing from a blank page. Turn one product URL into a week of content.</p>
+  <p>12K views 1.2K likes 87 comments. Visit the template link to try it.</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPETITOR_INTAKE),
+                "--html-file",
+                str(html_path),
+                "--platform",
+                "youtube",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/competitors/imported-competitors.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["records"][0]["platform"], "youtube")
+        self.assertEqual(report["records"][0]["title"], "One URL Into 30 Posts")
+        self.assertEqual(report["records"][0]["creatorName"], "Growth Creator")
+        self.assertEqual(report["records"][0]["visibleMetrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 1)
+        self.assertTrue((out_dir / "reports/promotion-manager/competitors/imported-competitors.md").exists())
 
     def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
         if shutil.which("ffmpeg") is None:

@@ -14,6 +14,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 ## Reports
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run
+- `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run
 - `reports/promotion-manager/research/platform-publishing-feasibility.{json,md}`
 - `reports/promotion-manager/research/github-reference-projects.{json,md}`
 - `reports/promotion-manager/research/platform-risk-matrix.{json,md}`

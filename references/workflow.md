@@ -52,6 +52,17 @@ Minimum research output:
 - why it works
 - reusable pattern
 
+Use the competitor importer when you have public URLs saved as HTML, copied transcripts, screenshots converted to text, or platform exports:
+
+```bash
+python scripts/competitor_intake.py \
+  --html-file "./competitor.html" \
+  --platform youtube \
+  --out-dir "./promotion-output"
+```
+
+Supported inputs are `--url`, `--html-file`, `--json-file`, and `--text-file`. Use `--url` only for public pages that can be fetched as static HTML. For login-only or anti-bot-protected pages, use browser-assisted review or user-provided exports instead of bypassing controls.
+
 Use live research for platform/API claims because publishing capabilities change.
 Generated self-learning docs must be written to `docs/promotion-manager/`, not only printed in chat.
 
