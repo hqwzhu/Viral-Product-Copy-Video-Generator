@@ -1,0 +1,4 @@
+interface:
+  display_name: "Viral Product Copy Video Generator"
+  short_description: "Viral product promotion skill"
+  default_prompt: "Use $viral-product-copy-video-generator to turn this product URL into multi-platform copy, video scripts, publish packs, and a retrospective template."
