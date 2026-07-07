@@ -152,6 +152,77 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertIn("Prompt templates", profile["valueProposition"])
         self.assertTrue((out_dir / "intake" / "product-profile.md").exists())
 
+    def test_product_intake_accepts_structured_page_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-structured-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "pricing": "$19",
+                    "images": [{"url": "https://example.com/cover.png"}],
+                    "targetAudience": ["AI operators", "content marketers"],
+                    "painPoints": ["Blank page copywriting", "Slow launch content"],
+                    "text": "AI Prompt Kit helps turn a product URL into platform-native promotion content.",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_INTAKE),
+                "--structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir / "intake"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        profile = json.loads((out_dir / "intake" / "product-profile.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["sourceType"], "structured_json")
+        self.assertEqual(profile["productName"], "AI Prompt Kit")
+        self.assertEqual(profile["pricing"], "$19")
+        self.assertEqual(profile["targetAudienceAssumptions"], ["AI operators", "content marketers"])
+        self.assertEqual(profile["painPointAssumptions"], ["Blank page copywriting", "Slow launch content"])
+
+    def test_product_intake_accepts_rendered_text_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-text-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        text_path = out_dir / "rendered.txt"
+        text_path.write_text(
+            """Product: AI Prompt Kit
+URL: https://example.com/ai-prompt-kit
+Pricing: $19
+Audience: AI operators, content marketers
+Pain Points: Blank page copywriting, slow launch content
+
+Prompt templates for product copy, SEO content, and video scripts.
+""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_INTAKE),
+                "--text-file",
+                str(text_path),
+                "--out-dir",
+                str(out_dir / "intake"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        profile = json.loads((out_dir / "intake" / "product-profile.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["sourceType"], "text")
+        self.assertEqual(profile["productName"], "AI Prompt Kit")
+        self.assertEqual(profile["pricing"], "$19")
+        self.assertIn("AI operators", profile["targetAudienceAssumptions"])
+
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

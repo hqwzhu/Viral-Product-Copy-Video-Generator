@@ -24,6 +24,16 @@ Use the deterministic extractor when possible:
 python scripts/product_intake.py --url "https://example.com/product" --out-dir "./promotion-output/intake"
 ```
 
+For dynamic pages, have Codex/browser tooling inspect the rendered page first, then pass a structured snapshot or rendered text into the same extractor:
+
+```bash
+python scripts/product_intake.py \
+  --structured-json "./rendered-product-page.json" \
+  --out-dir "./promotion-output/intake"
+```
+
+Supported intake sources are `--url`, `--html-file`, `--text-file`, and `--structured-json`. The structured snapshot can include fields such as `url`, `title`, `description`, `pricing`, `images`, `targetAudience`, `painPoints`, and rendered `text`.
+
 ## Stage 2: Research
 
 Create a competitor and trend research note before generating final content when the user wants current market positioning.

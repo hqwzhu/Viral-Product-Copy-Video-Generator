@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract a structured product profile from a public URL or saved HTML file."""
+"""Extract a structured product profile from a public URL, HTML, text, or rendered page snapshot."""
 
 from __future__ import annotations
 
@@ -59,8 +59,7 @@ class MetadataParser(HTMLParser):
 
 def main() -> None:
     args = parse_args()
-    html, source = load_html(args)
-    profile = extract_profile(html, source)
+    profile = load_profile(args)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "product-profile.json"
@@ -71,12 +70,25 @@ def main() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Extract product metadata from a URL or HTML file.")
+    parser = argparse.ArgumentParser(description="Extract product metadata from a URL, HTML file, text file, or structured page snapshot.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--url", help="Public product URL to fetch.")
     source.add_argument("--html-file", help="Saved product HTML file to parse.")
+    source.add_argument("--text-file", help="Rendered page text captured by Codex/browser tooling.")
+    source.add_argument("--structured-json", help="Structured page snapshot JSON captured by Codex/browser tooling.")
     parser.add_argument("--out-dir", default="./promotion-output/intake")
     return parser.parse_args()
+
+
+def load_profile(args: argparse.Namespace) -> dict[str, Any]:
+    if args.structured_json:
+        path = Path(args.structured_json)
+        return extract_profile_from_structured_json(json.loads(path.read_text(encoding="utf-8")), str(path))
+    if args.text_file:
+        path = Path(args.text_file)
+        return extract_profile_from_text(path.read_text(encoding="utf-8"), str(path))
+    html, source = load_html(args)
+    return extract_profile_from_html(html, source)
 
 
 def load_html(args: argparse.Namespace) -> tuple[str, str]:
@@ -95,7 +107,7 @@ def load_html(args: argparse.Namespace) -> tuple[str, str]:
         return response.read().decode(charset, errors="replace"), args.url
 
 
-def extract_profile(html: str, source: str) -> dict[str, Any]:
+def extract_profile_from_html(html: str, source: str) -> dict[str, Any]:
     parser = MetadataParser()
     parser.feed(html)
     title = first_non_empty(
@@ -123,8 +135,9 @@ def extract_profile(html: str, source: str) -> dict[str, Any]:
     )
     keywords = infer_keywords(title, description, parser.meta.get("keywords", ""))
     value_proposition = infer_value_proposition(inferred_name, description)
-    return {
+    profile = {
         "source": source,
+        "sourceType": "html",
         "canonicalUrl": canonical or source,
         "productName": inferred_name,
         "title": title,
@@ -140,6 +153,87 @@ def extract_profile(html: str, source: str) -> dict[str, Any]:
         "notes": [
             "Derived from public page metadata. Verify product claims, pricing, audience, and legal terms before publishing.",
             "Dynamic pages may expose less metadata than the rendered browser page.",
+        ],
+    }
+    return profile
+
+
+def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> dict[str, Any]:
+    flattened = flatten_snapshot(data)
+    title = first_non_empty(
+        flattened.get("productName"),
+        flattened.get("name"),
+        flattened.get("title"),
+        flattened.get("og:title"),
+        flattened.get("twitter:title"),
+    )
+    description = first_non_empty(
+        flattened.get("valueProposition"),
+        flattened.get("description"),
+        flattened.get("metaDescription"),
+        flattened.get("og:description"),
+        flattened.get("twitter:description"),
+        flattened.get("summary"),
+        flattened.get("text"),
+    )
+    url = first_non_empty(flattened.get("canonicalUrl"), flattened.get("url"), flattened.get("href"), source)
+    image = first_non_empty(flattened.get("image"), flattened.get("og:image"), flattened.get("twitter:image"), first_list_value(data, "images"))
+    pricing = first_non_empty(
+        flattened.get("pricing"),
+        flattened.get("price"),
+        flattened.get("offers.price"),
+        extract_price(" ".join([title, description, flattened.get("text", "")])),
+        "unknown",
+    )
+    keywords = infer_keywords(title, description, flattened.get("keywords", ""), flattened.get("text", ""))
+    text = " ".join([title, description, flattened.get("text", "")])
+    return {
+        "source": source,
+        "sourceType": "structured_json",
+        "canonicalUrl": url,
+        "productName": first_non_empty(flattened.get("productName"), flattened.get("name"), title, "Unknown product"),
+        "title": title,
+        "description": description,
+        "valueProposition": infer_value_proposition(title or "Product", description),
+        "pricing": pricing,
+        "image": image,
+        "keywords": keywords,
+        "targetAudienceAssumptions": explicit_or_infer_list(data, ["targetAudience", "audience", "audiences"], infer_audience(keywords, text)),
+        "painPointAssumptions": explicit_or_infer_list(data, ["painPoints", "painPointAssumptions", "problems"], infer_pain_points(keywords, text)),
+        "jsonLdTypes": list_from_any(data.get("jsonLdTypes") or data.get("jsonLdType")),
+        "confidence": confidence_score(title, description, [{"source": "structured_json"}]),
+        "notes": [
+            "Derived from a structured page snapshot supplied by Codex/browser tooling.",
+            "Verify product claims, pricing, audience, and legal terms before publishing.",
+        ],
+    }
+
+
+def extract_profile_from_text(text: str, source: str) -> dict[str, Any]:
+    fields = parse_labeled_lines(text)
+    title = first_non_empty(fields.get("product"), fields.get("product name"), fields.get("title"), first_content_line(text))
+    description = first_non_empty(fields.get("description"), fields.get("summary"), fields.get("value proposition"), first_paragraph(text, title))
+    url = first_non_empty(fields.get("url"), fields.get("canonical url"), first_url(text), source)
+    pricing = first_non_empty(fields.get("pricing"), fields.get("price"), extract_price(text), "unknown")
+    keywords = infer_keywords(title, description, text)
+    return {
+        "source": source,
+        "sourceType": "text",
+        "canonicalUrl": url,
+        "productName": title or "Unknown product",
+        "title": title,
+        "description": description,
+        "valueProposition": infer_value_proposition(title or "Product", description),
+        "pricing": pricing,
+        "image": first_non_empty(fields.get("image"), first_image_url(text)),
+        "keywords": keywords,
+        "targetAudienceAssumptions": explicit_text_list(fields, ["audience", "target audience"]) or infer_audience(keywords, text),
+        "painPointAssumptions": explicit_text_list(fields, ["pain points", "painpoints", "problems"]) or infer_pain_points(keywords, text),
+        "jsonLdTypes": [],
+        "confidence": confidence_score(title, description, []),
+        "notes": [
+            "Derived from rendered page text supplied by Codex/browser tooling.",
+            "Verify product claims, pricing, audience, and legal terms before publishing.",
         ],
     }
 
@@ -181,6 +275,114 @@ def canonical_url(links: list[dict[str, str]]) -> str:
         rel = link.get("rel", "").lower()
         if "canonical" in rel and link.get("href"):
             return link["href"]
+    return ""
+
+
+def flatten_snapshot(data: Any, prefix: str = "") -> dict[str, str]:
+    flattened: dict[str, str] = {}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            dotted = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, (dict, list)):
+                flattened.update(flatten_snapshot(value, dotted))
+            elif value not in (None, ""):
+                flattened[dotted] = normalize_space(str(value))
+                flattened.setdefault(str(key), normalize_space(str(value)))
+    elif isinstance(data, list):
+        for index, value in enumerate(data):
+            flattened.update(flatten_snapshot(value, f"{prefix}.{index}" if prefix else str(index)))
+    return flattened
+
+
+def first_list_value(data: Any, key: str) -> str:
+    if not isinstance(data, dict):
+        return ""
+    value = data.get(key)
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+            if isinstance(item, dict):
+                candidate = first_non_empty(str(item.get("url") or ""), str(item.get("src") or ""), str(item.get("href") or ""))
+                if candidate:
+                    return candidate
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def explicit_or_infer_list(data: dict[str, Any], keys: list[str], fallback: list[str]) -> list[str]:
+    for key in keys:
+        if key in data:
+            values = list_from_any(data[key])
+            if values:
+                return values
+    return fallback
+
+
+def list_from_any(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [normalize_space(str(item)) for item in value if normalize_space(str(item))]
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[,;\n]+", value) if item.strip()]
+    return []
+
+
+def parse_labeled_lines(text: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = normalize_space(key).lower()
+        value = normalize_space(value)
+        if key and value:
+            fields[key] = value
+    return fields
+
+
+def first_content_line(text: str) -> str:
+    for line in text.splitlines():
+        line = normalize_space(line)
+        if line and ":" not in line:
+            return line
+    return ""
+
+
+def first_paragraph(text: str, skip: str = "") -> str:
+    for block in re.split(r"\n\s*\n", text):
+        block = normalize_space(block)
+        if block and block != skip and ":" not in block[:40]:
+            return block
+    return ""
+
+
+def first_url(text: str) -> str:
+    match = re.search(r"https?://[^\s)>\]\"']+", text)
+    return match.group(0) if match else ""
+
+
+def first_image_url(text: str) -> str:
+    for url in re.findall(r"https?://[^\s)>\]\"']+", text):
+        if re.search(r"\.(png|jpe?g|webp|gif)(\?|$)", url, re.IGNORECASE):
+            return url
+    return ""
+
+
+def explicit_text_list(fields: dict[str, str], keys: list[str]) -> list[str]:
+    for key in keys:
+        if fields.get(key):
+            return list_from_any(fields[key])
+    return []
+
+
+def extract_price(text: str) -> str:
+    match = re.search(r"([$¥￥]\s?\d+(?:[.,]\d+)?)", text)
+    if match:
+        return normalize_space(match.group(1))
+    match = re.search(r"(?i)(?:price|pricing|价格|售价)[:：]?\s*([\w$¥￥.,/\-\s]+)", text)
+    if match:
+        return normalize_space(match.group(1))[:80]
     return ""
 
 

@@ -13,7 +13,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 ## Reports
 
-- `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run
+- `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
 - `reports/promotion-manager/competitors/competitor-discovery.{json,md}` when `scripts/competitor_discovery.py` is run
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
 - `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run

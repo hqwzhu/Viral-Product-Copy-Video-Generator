@@ -41,6 +41,14 @@ To extract a product profile directly from a public page or saved HTML:
 python scripts/product_intake.py --url "https://example.com/product" --out-dir "./promotion-output/intake"
 ```
 
+To parse a rendered page snapshot captured by Codex/browser tooling:
+
+```bash
+python scripts/product_intake.py \
+  --structured-json "./rendered-product-page.json" \
+  --out-dir "./promotion-output/intake"
+```
+
 To render a real MP4 draft video after content generation:
 
 ```bash
@@ -134,7 +142,7 @@ The command writes:
 - Extract factual product information from the page.
 - Mark uncertain details as assumptions; do not invent pricing, testimonials, sales, or usage numbers.
 - If a page cannot be read, ask for pasted product info.
-- Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML or saved product pages.
+- Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 
 ### 2. Competitor And Trend Research
 
@@ -211,7 +219,7 @@ Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTu
 ## Bundled Resources
 
 - `scripts/promotion_manager.py`: deterministic report generator.
-- `scripts/product_intake.py`: public URL or saved HTML product-profile extractor.
+- `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.

@@ -4,7 +4,7 @@ Use this reference when the user asks for full automation.
 
 ## What The Skill Can Automate Locally
 
-- Parse public product URLs or saved HTML into structured product profiles.
+- Parse public product URLs, saved HTML, rendered page text, or Codex/browser structured snapshots into product profiles.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.
 - Render deterministic MP4 videos from generated platform content with captions, optional voiceover audio files, or Windows SAPI review voiceover when `ffmpeg` is available.
 - Generate platform research docs, risk matrices, reference project notes, and self-learning notes.
