@@ -43,6 +43,7 @@ COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
+SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 
@@ -2148,6 +2149,44 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 88.0)
         self.assertTrue((out_dir / "output/reports/promotion-manager/cycle/promotion-cycle.md").exists())
 
+    def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env = os.environ.copy()
+        secret_value = "super-secret-self-evolution-token"
+        env["GITHUB_TOKEN"] = secret_value
+        subprocess.run(
+            [
+                sys.executable,
+                str(SELF_EVOLUTION_AUDIT),
+                "--skip-runtime-checks",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertIn(
+            report["status"],
+            {
+                "ready_controlled_autonomy",
+                "partial_ready_skill_drift_detected",
+                "partial_ready_installed_skill_missing",
+                "partial_ready_runtime_gaps",
+            },
+        )
+        self.assertEqual(report["selfUpgradePolicy"]["mode"], "controlled_autonomy")
+        self.assertIn("installedSkill", report)
+        self.assertIn("repository", report)
+        self.assertTrue(any(item["id"] == "playwright_chromium" for item in report["safeInstallCandidates"]))
+        self.assertEqual(report["syncInstalledSkill"]["status"], "not_requested")
+        self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
+
     def test_final_capability_audit_reports_real_limits_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-capability-audit-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2205,6 +2244,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
         self.assertTrue(report["platformAccessAudit"]["ready"])
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
+        self.assertTrue(report["selfEvolutionAudit"]["ready"])
+        self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
+        self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
+        self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
+        self.assertTrue(report["selfEvolution"]["safeSkillSync"])
+        self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
 
     def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:

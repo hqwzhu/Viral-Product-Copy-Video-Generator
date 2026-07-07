@@ -8,7 +8,13 @@ Before claiming the Skill has final Agent readiness, run the capability audit:
 python scripts/final_capability_audit.py --out-dir "./promotion-output"
 ```
 
-The audit writes `reports/promotion-manager/capability/final-capability-audit.{json,md}` and checks the exact requested end-state: product URL parsing, viral creator/content search, copy/video generation, publishing, metrics/orders/revenue recovery, periodic Codex operation, and self-evolution. It records credential presence only by environment variable name and must not write secret values.
+The audit writes `reports/promotion-manager/capability/final-capability-audit.{json,md}` and checks the exact requested end-state: product URL parsing, viral creator/content search, copy/video generation, publishing, metrics/orders/revenue recovery, periodic Codex operation, and self-evolution. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path. It records credential presence only by environment variable name and must not write secret values.
+
+Run the self-evolution audit directly when the Skill needs to inspect local tool gaps, repository state, installed Skill drift, and safe upgrade actions:
+
+```bash
+python scripts/self_evolution_audit.py --out-dir "./promotion-output"
+```
 
 If the machine is trusted and browser runtime installation is explicitly acceptable, the audit can install only the allowlisted Chromium runtime:
 
@@ -16,6 +22,15 @@ If the machine is trusted and browser runtime installation is explicitly accepta
 python scripts/final_capability_audit.py \
   --install-safe-missing-tools \
   --safe-install playwright_chromium \
+  --out-dir "./promotion-output"
+```
+
+After a reviewed local Skill change passes tests and secret scanning, sync it into the installed Codex Skill directory only with the explicit sync approval phrase:
+
+```bash
+python scripts/self_evolution_audit.py \
+  --sync-installed-skill \
+  --approval I_APPROVE_SKILL_SYNC \
   --out-dir "./promotion-output"
 ```
 

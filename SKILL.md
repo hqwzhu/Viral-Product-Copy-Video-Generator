@@ -374,12 +374,27 @@ To audit final-agent readiness before a real run:
 python scripts/final_capability_audit.py --out-dir "./promotion-output"
 ```
 
+To audit controlled self-evolution, local tool gaps, repository state, and installed Skill drift:
+
+```bash
+python scripts/self_evolution_audit.py --out-dir "./promotion-output"
+```
+
 To explicitly install the allowlisted browser runtime if missing:
 
 ```bash
 python scripts/final_capability_audit.py \
   --install-safe-missing-tools \
   --safe-install playwright_chromium \
+  --out-dir "./promotion-output"
+```
+
+To sync reviewed local Skill files into the installed Codex Skill after verification:
+
+```bash
+python scripts/self_evolution_audit.py \
+  --sync-installed-skill \
+  --approval I_APPROVE_SKILL_SYNC \
   --out-dir "./promotion-output"
 ```
 
@@ -421,6 +436,7 @@ The command writes:
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, and metrics recovery as one local operating cycle.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks scripts, tools, credential presence, platform limits, and final requirement gaps.
+- `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
@@ -434,7 +450,8 @@ The command writes:
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
 - Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
-- Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values.
+- Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path.
+- Use `scripts/self_evolution_audit.py` when the Skill needs to inspect local tool gaps, repo/installed-Skill drift, safe runtime install candidates, or approved local Skill sync actions.
 - Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
 
 ### 2. Competitor And Trend Research
@@ -569,6 +586,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
 - `scripts/promotion_cycle_runner.py`: one-command local operating cycle for workflow generation, guarded publish queue, published item registration, and metrics recovery.
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.
+- `scripts/self_evolution_audit.py`: controlled self-evolution auditor for runtime gaps, repository status, installed Skill drift, safe install candidates, and approved local Skill sync.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.

@@ -34,6 +34,7 @@ Use this reference when the user asks for full automation.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
 - Run a one-command local operating cycle that chains workflow generation, guarded publish queue, published URL registration, and metrics recovery while preserving approval gates and evidence requirements.
 - Audit final-agent readiness with `scripts/final_capability_audit.py`, including local scripts, browser runtime, `ffmpeg`, credential presence, platform publishing limits, real metrics inputs, and self-evolution boundaries.
+- Audit controlled self-evolution with `scripts/self_evolution_audit.py`, including runtime gaps, repository status, installed Codex Skill drift, safe install candidates, and approved local Skill sync.
 - Run a YouTube OAuth consent flow and upload in the same process without saving OAuth tokens.
 
 ## What Requires Official Authorization
@@ -64,4 +65,4 @@ Use this reference when the user asks for full automation.
 
 ## Self-Evolution Rule
 
-The Skill may research, write notes, check local tool availability, and propose upgrades. `scripts/final_capability_audit.py` may install only explicit allowlisted runtime dependencies, such as Playwright Chromium, when the command includes `--install-safe-missing-tools`. It must not silently install arbitrary packages, modify itself from unreviewed network code, or upgrade dependencies without an explicit command and a clear source/risk note.
+The Skill may research, write notes, check local tool availability, detect installed Skill drift, and propose upgrades. `scripts/final_capability_audit.py` and `scripts/self_evolution_audit.py` may install only explicit allowlisted runtime dependencies, such as Playwright Chromium, when the command includes `--install-safe-missing-tools`. `scripts/self_evolution_audit.py` may sync reviewed local Skill files into the installed Codex Skill directory only when the command includes `--sync-installed-skill --approval I_APPROVE_SKILL_SYNC`. It must not silently install arbitrary packages, modify itself from unreviewed network code, delete installed Skill files during sync, or upgrade dependencies without an explicit command and a clear source/risk note.

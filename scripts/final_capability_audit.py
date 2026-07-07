@@ -46,6 +46,7 @@ SCRIPT_REQUIREMENTS = {
     "metrics_recovery": "metrics_recovery.py",
     "automation_scheduler": "automation_scheduler.py",
     "promotion_cycle_runner": "promotion_cycle_runner.py",
+    "self_evolution_audit": "self_evolution_audit.py",
 }
 
 
@@ -143,7 +144,8 @@ def build_report(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
     tools = tool_status(skip_runtime_checks=args.skip_runtime_checks)
     credentials = credential_status()
     platforms = platform_status(scripts, tools, credentials)
-    requirements = requirement_status(scripts, tools, credentials, platforms)
+    self_evolution_audit = run_self_evolution_audit(args, out_dir, scripts)
+    requirements = requirement_status(scripts, tools, credentials, platforms, self_evolution_audit)
     actions = next_actions(requirements, tools, credentials, out_dir)
     return {
         "generatedAt": TODAY,
@@ -156,7 +158,8 @@ def build_report(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "credentials": credentials,
         "scripts": scripts,
         "platformAccessAudit": platform_access_audit_status(scripts, out_dir),
-        "selfEvolution": self_evolution_status(tools),
+        "selfEvolutionAudit": self_evolution_audit,
+        "selfEvolution": self_evolution_status(tools, self_evolution_audit),
         "recommendedCommands": recommended_commands(out_dir),
         "nextActions": actions,
         "officialSources": OFFICIAL_SOURCES,
@@ -308,6 +311,7 @@ def requirement_status(
     tools: dict[str, dict[str, Any]],
     credentials: dict[str, dict[str, Any]],
     platforms: dict[str, dict[str, Any]],
+    self_evolution_audit: dict[str, Any],
 ) -> list[dict[str, Any]]:
     browser_intake_ready = scripts_ready(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"])
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
@@ -412,10 +416,12 @@ def requirement_status(
             "id": "fully_autonomous_self_evolution",
             "label": "Research, install tools, keep learning, and upgrade the Skill itself",
             "status": "blocked_by_safety_boundary",
-            "evidence": ["final_capability_audit.py can audit tools and produce upgrade actions"],
+            "evidence": scripts_present(scripts, ["final_capability_audit", "self_evolution_audit"])
+            + ([str(self_evolution_audit.get("report"))] if self_evolution_audit.get("reportExists") else []),
             "missing": ["explicit review/approval for dependency upgrades and self-modifying code"],
             "limits": [
-                "The Skill can install explicit allowlisted runtime dependencies when commanded.",
+                "The Skill can audit runtime tools, repository state, installed Skill drift, and safe upgrade actions.",
+                "The Skill can install explicit allowlisted runtime dependencies and sync reviewed local Skill files when commanded with approval.",
                 "It must not silently download unreviewed network code, store secrets, or replace itself without a clear source/risk note.",
             ],
         },
@@ -449,12 +455,15 @@ def missing_publish_credentials(credentials: dict[str, dict[str, Any]]) -> list[
     return missing
 
 
-def self_evolution_status(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def self_evolution_status(tools: dict[str, dict[str, Any]], audit: dict[str, Any]) -> dict[str, Any]:
     return {
         "mode": "controlled_autonomy",
+        "audit": audit,
         "canDoNow": [
             "audit local scripts, tools, and credential presence",
+            "audit installed Skill drift against the reviewed local repository",
             "write capability reports and next-action plans",
+            "sync reviewed local Skill files into the installed Skill directory when explicitly approved",
             "install Playwright Chromium when explicitly requested through --install-safe-missing-tools",
             "use official docs and public repos as research inputs for reviewed upgrades",
         ],
@@ -471,6 +480,62 @@ def self_evolution_status(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "command": "python scripts/final_capability_audit.py --install-safe-missing-tools --safe-install playwright_chromium",
             }
         ],
+        "safeSkillSync": [
+            {
+                "id": "sync_installed_skill",
+                "approvalRequired": "I_APPROVE_SKILL_SYNC",
+                "command": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC",
+            }
+        ],
+    }
+
+
+def run_self_evolution_audit(
+    args: argparse.Namespace,
+    out_dir: Path,
+    scripts: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    script = Path(str(scripts.get("self_evolution_audit", {}).get("file", "")))
+    report_path = out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.json"
+    command = [sys.executable, str(script), "--out-dir", str(out_dir)]
+    if args.skip_runtime_checks:
+        command.append("--skip-runtime-checks")
+    if not script.exists():
+        return {
+            "ready": False,
+            "status": "script_missing",
+            "script": str(script),
+            "command": " ".join(command),
+            "report": str(report_path),
+            "reportExists": False,
+        }
+    try:
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=90, check=False)
+    except subprocess.TimeoutExpired:
+        return {
+            "ready": False,
+            "status": "timeout",
+            "script": str(script),
+            "command": " ".join(command),
+            "report": str(report_path),
+            "reportExists": report_path.exists(),
+        }
+    status = "error"
+    if report_path.exists():
+        try:
+            status = str(json.loads(report_path.read_text(encoding="utf-8")).get("status", "unknown"))
+        except json.JSONDecodeError:
+            status = "invalid_report"
+    return {
+        "ready": result.returncode == 0 and report_path.exists(),
+        "status": status,
+        "script": str(script),
+        "command": " ".join(command),
+        "exitCode": result.returncode,
+        "report": str(report_path),
+        "reportExists": report_path.exists(),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
     }
 
 
@@ -497,6 +562,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": f"python scripts/platform_access_audit.py --out-dir \"{out_dir}\"",
         },
         {
+            "purpose": "audit_self_evolution",
+            "command": f"python scripts/self_evolution_audit.py --out-dir \"{out_dir}\"",
+        },
+        {
             "purpose": "audit_publish_readiness",
             "command": (
                 f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
@@ -513,6 +582,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "install_browser_runtime_when_explicitly_allowed",
             "command": "python scripts/final_capability_audit.py --install-safe-missing-tools --safe-install playwright_chromium",
+        },
+        {
+            "purpose": "sync_installed_skill_when_approved",
+            "command": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC --out-dir \"./promotion-output\"",
         },
         {
             "purpose": "run_periodic_jobs",
@@ -629,6 +702,18 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Command: `{access.get('command')}`",
             ]
         )
+    self_audit = report.get("selfEvolutionAudit") or {}
+    if self_audit:
+        lines.extend(
+            [
+                "",
+                "## Self-Evolution Audit",
+                f"- Ready: {self_audit.get('ready')}",
+                f"- Status: `{self_audit.get('status')}`",
+                f"- Report: {self_audit.get('report')}",
+                f"- Command: `{self_audit.get('command')}`",
+            ]
+        )
     lines.extend(["", "## Next Actions"])
     for action in report["nextActions"]:
         lines.append(f"- P{action['priority']} {action['area']}: {action['action']}")
@@ -641,6 +726,13 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def audit_dir(out_dir: Path) -> Path:
     return out_dir / "reports/promotion-manager/capability"
+
+
+def tail(value: str, limit: int = 1200) -> str:
+    text = (value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
 
 
 if __name__ == "__main__":

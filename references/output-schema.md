@@ -61,6 +61,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, and metrics recovery as one operating cycle
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
+- `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
 
@@ -307,9 +308,27 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `credentials`: environment variable names that are present, never secret values
 - `scripts`: bundled script existence map
 - `platformAccessAudit`: script readiness and command for generating the official access boundary report
+- `selfEvolutionAudit`: nested readiness, command, exit code, report path, and status from `scripts/self_evolution_audit.py`
 - `selfEvolution`: controlled autonomy status, allowed runtime installs, and blocked unsafe self-upgrade actions
 - `recommendedCommands`: copy-ready commands for one-command cycles, safe runtime setup, and periodic jobs
 - `nextActions`: prioritized fixes needed to move closer to the final requested Agent
+
+## Self-Evolution Audit
+
+`self-evolution-audit.json` includes:
+
+- `status`: `ready_controlled_autonomy`, `partial_ready_skill_drift_detected`, `partial_ready_installed_skill_missing`, or `partial_ready_runtime_gaps`
+- `installedSkill`: installed Codex Skill path, managed file count, missing files, mismatched files, and approved sync command
+- `repository`: Git branch, head, remote, short status, and whether the working tree is clean
+- `localTools`: Python, Git, `ffmpeg`, Winget, Playwright module, and Playwright Chromium availability
+- `runtimeGaps[]`: missing tools and their impact on product intake, browser-visible research, video rendering, or reviewed upgrades
+- `safeInstallCandidates[]`: allowlisted or review-required install actions with command templates and source notes
+- `installResults[]`: sanitized result records when an allowlisted install was explicitly requested
+- `syncInstalledSkill`: whether local reviewed files were copied into the installed Skill, the required approval phrase, copied files, and status
+- `learningAndUpgradeLoop[]`: repeatable commands for capability audit, official platform access refresh, self-evolution audit, tests, compile checks, and sensitive scan
+- `selfUpgradePolicy`: what the Skill can do autonomously, what needs approval, and what is not allowed
+- `nextActions[]`: prioritized runtime, sync, and learning-loop actions
+- `guardrails`: no secret values, no arbitrary network code installs, no unapproved self-replacement, and no claim of full autonomous self-evolution while approval gates remain required
 
 ## Automation Scheduler Config
 
