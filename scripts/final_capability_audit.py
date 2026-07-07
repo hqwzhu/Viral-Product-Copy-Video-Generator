@@ -87,9 +87,9 @@ OFFICIAL_SOURCES = [
     },
     {
         "platform": "douyin",
-        "capability": "publishing_candidate",
+        "capability": "upload_create_publish",
         "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
-        "notes": "Official open-platform publishing path requires app permission approval and user authorization.",
+        "notes": "Official open-platform upload/create path is integrated through publish_executor.py; app permission approval, user authorization, and platform review still apply.",
     },
     {
         "platform": "xiaohongshu",
@@ -295,9 +295,9 @@ def platform_status(
         },
         "douyin": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
-            "directPublish": "official_app_authorization_required"
+            "directPublish": "ready_with_open_platform_authorization"
             if credentials["douyin_publish"]["ready"]
-            else "browser_assisted_until_official_access_verified",
+            else "needs_douyin_open_platform_credentials_and_user_authorization",
             "metricsRecovery": "manual_structured_snapshot_or_official_export_required",
             "ordersRevenue": "business_export_required",
         },
@@ -428,7 +428,8 @@ def requirement_status(
             "limits": [
                 "GitHub and YouTube writes require official credentials plus explicit publish approval.",
                 "Zhihu and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is verified.",
-                "Douyin/TikTok require approved open-platform apps, scopes, and user authorization.",
+                "Douyin has an official upload/create executor, but still requires approved open-platform app scopes, user authorization, and platform review.",
+                "TikTok requires approved open-platform app scopes and user authorization.",
             ],
         },
         {
@@ -625,7 +626,8 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "purpose": "audit_publish_readiness",
             "command": (
                 f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
-                f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" --out-dir \"{out_dir}\""
+                f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" "
+                f"--douyin-video-file \"{out_dir}/videos/product-douyin.mp4\" --out-dir \"{out_dir}\""
             ),
         },
         {

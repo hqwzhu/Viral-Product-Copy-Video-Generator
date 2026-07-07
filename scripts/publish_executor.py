@@ -29,6 +29,8 @@ def main() -> None:
         result = execute_github(args, execution)
     elif args.platform == "youtube":
         result = execute_youtube(args, execution)
+    elif args.platform == "douyin":
+        result = execute_douyin(args, execution)
     else:
         raise SystemExit(f"Unsupported platform: {args.platform}")
     write_result(args.out_dir, result)
@@ -37,7 +39,7 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run approved official publishing actions.")
-    parser.add_argument("--platform", required=True, choices=["github", "youtube"])
+    parser.add_argument("--platform", required=True, choices=["github", "youtube", "douyin"])
     parser.add_argument("--execute", action="store_true", help="Perform the write action. Default is dry run.")
     parser.add_argument("--approval", default="", help=f"Must equal {APPROVAL_PHRASE} when --execute is used.")
     parser.add_argument("--out-dir", default="./promotion-output")
@@ -64,6 +66,11 @@ def parse_args() -> argparse.Namespace:
     youtube.add_argument("--tags", default="", help="Comma-separated YouTube tags.")
     youtube.add_argument("--category-id", default="22")
     youtube.add_argument("--privacy-status", default="private", choices=["private", "public", "unlisted"])
+
+    douyin = parser.add_argument_group("Douyin")
+    douyin.add_argument("--douyin-video-file", default="", help="MP4 to upload through the Douyin Open Platform API.")
+    douyin.add_argument("--douyin-text", default="", help="Douyin post text. Defaults to --title.")
+    douyin.add_argument("--douyin-text-file", default="", help="File containing Douyin post text.")
     return parser.parse_args()
 
 
@@ -284,6 +291,141 @@ def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def execute_douyin(args: argparse.Namespace, execution: dict[str, Any]) -> dict[str, Any]:
+    video_file = args.douyin_video_file or args.video_file or ""
+    text = read_optional_text_argument(args.douyin_text, args.douyin_text_file) or args.title
+    token_status = "present" if douyin_token() and douyin_open_id() else "missing"
+    plan = {
+        **execution,
+        "officialApi": "Douyin Open Platform video upload/create",
+        "action": "video_upload_create",
+        "credentialStatus": token_status,
+        "request": douyin_request_preview(video_file, text),
+        "platformReview": "created Douyin videos are subject to platform review before they should be treated as published.",
+    }
+    if not video_file:
+        return blocked(plan, "missing_video_file", "Provide --douyin-video-file for Douyin upload.")
+    if not text:
+        return blocked(plan, "missing_text", "Provide --title, --douyin-text, or --douyin-text-file for Douyin upload.")
+    validation = validate_write_gate(args, token_status, "DOUYIN_ACCESS_TOKEN and DOUYIN_OPEN_ID")
+    if validation:
+        return {**plan, **validation}
+    return {**plan, **douyin_upload_and_create(video_file, text)}
+
+
+def douyin_request_preview(video_file: str, text: str) -> dict[str, Any]:
+    return {
+        "upload": {
+            "method": "POST",
+            "endpoint": "/api/douyin/v1/video/upload_video/",
+            "query": {"open_id": "<DOUYIN_OPEN_ID>"},
+            "headers": {"access-token": "<DOUYIN_ACCESS_TOKEN>"},
+            "videoFile": video_file,
+        },
+        "create": {
+            "method": "POST",
+            "endpoint": "/api/douyin/v1/video/create_video/",
+            "query": {"open_id": "<DOUYIN_OPEN_ID>"},
+            "headers": {"access-token": "<DOUYIN_ACCESS_TOKEN>"},
+            "body": {"video_id": "<returned by upload_video>", "text": text},
+        },
+    }
+
+
+def douyin_upload_and_create(video_file: str, text: str) -> dict[str, Any]:
+    video_path = Path(video_file)
+    if not video_path.exists():
+        return {"status": "blocked", "reason": f"Video file not found: {video_path}"}
+    upload = douyin_upload_video(video_path)
+    if upload["status"] != "ready":
+        return upload
+    video_id = str(upload.get("videoId") or "")
+    if not video_id:
+        return {"status": "error", "reason": "Douyin upload did not return video_id."}
+    create = douyin_create_video(video_id, text)
+    if create["status"] != "ready":
+        return create
+    return {
+        "status": "submitted_for_review",
+        "publishStatus": "platform_review_pending",
+        "contentId": str(create.get("itemId") or video_id),
+        "publishedUrl": "",
+        "evidence": [str(create.get("shareId") or create.get("itemId") or video_id)],
+    }
+
+
+def douyin_upload_video(video_path: Path) -> dict[str, Any]:
+    boundary = "===============%s==" % uuid.uuid4().hex
+    media_type = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
+    body = build_form_multipart_body(boundary, "video", video_path, media_type)
+    return douyin_api(
+        "POST",
+        "/api/douyin/v1/video/upload_video/",
+        body,
+        f"multipart/form-data; boundary={boundary}",
+        expected_id_keys=("video_id",),
+    )
+
+
+def douyin_create_video(video_id: str, text: str) -> dict[str, Any]:
+    body = json.dumps({"video_id": video_id, "text": text}, ensure_ascii=False).encode("utf-8")
+    return douyin_api(
+        "POST",
+        "/api/douyin/v1/video/create_video/",
+        body,
+        "application/json",
+        expected_id_keys=("item_id", "share_id"),
+    )
+
+
+def douyin_api(
+    method: str,
+    path: str,
+    body: bytes,
+    content_type: str,
+    expected_id_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    url = "https://open.douyin.com" + path + "?" + urllib.parse.urlencode({"open_id": douyin_open_id()})
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method=method,
+        headers={
+            "access-token": douyin_token(),
+            "Content-Type": content_type,
+            "Content-Length": str(len(body)),
+            "User-Agent": "ViralProductPromotionSkill/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        message = exc.read().decode("utf-8", errors="replace")
+        return {"status": "error", "httpStatus": exc.code, "reason": message[:500]}
+    except Exception as exc:  # noqa: BLE001 - CLI reports connector errors compactly.
+        return {"status": "error", "reason": str(exc)}
+
+    payload_obj = payload if isinstance(payload, dict) else {}
+    data = payload_obj.get("data")
+    data = data if isinstance(data, dict) else {}
+    error_code = data.get("error_code", payload_obj.get("error_code"))
+    if error_code not in (None, 0, "0"):
+        description = data.get("description") or payload_obj.get("description") or payload_obj.get("message") or "Douyin API returned an error."
+        return {"status": "error", "httpStatus": response.status, "reason": str(description)[:500]}
+    result: dict[str, Any] = {"status": "ready", "httpStatus": response.status}
+    for key in expected_id_keys:
+        value = data.get(key) or payload_obj.get(key)
+        if value:
+            if key == "video_id":
+                result["videoId"] = value
+            elif key == "item_id":
+                result["itemId"] = value
+            elif key == "share_id":
+                result["shareId"] = value
+    return result
+
+
 def build_multipart_body(boundary: str, metadata: dict[str, Any], video_path: Path, media_type: str) -> bytes:
     metadata_part = (
         f"--{boundary}\r\n"
@@ -296,6 +438,16 @@ def build_multipart_body(boundary: str, metadata: dict[str, Any], video_path: Pa
     ).encode("utf-8")
     closing = f"\r\n--{boundary}--\r\n".encode("utf-8")
     return metadata_part + media_header + video_path.read_bytes() + closing
+
+
+def build_form_multipart_body(boundary: str, field_name: str, file_path: Path, media_type: str) -> bytes:
+    header = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="{field_name}"; filename="{file_path.name}"\r\n'
+        f"Content-Type: {media_type}\r\n\r\n"
+    ).encode("utf-8")
+    closing = f"\r\n--{boundary}--\r\n".encode("utf-8")
+    return header + file_path.read_bytes() + closing
 
 
 def validate_write_gate(args: argparse.Namespace, token_status: str, credential_name: str) -> dict[str, Any] | None:
@@ -375,6 +527,14 @@ def github_token() -> str:
 
 def youtube_token() -> str:
     return os.environ.get("YOUTUBE_OAUTH_ACCESS_TOKEN") or ""
+
+
+def douyin_token() -> str:
+    return os.environ.get("DOUYIN_ACCESS_TOKEN") or ""
+
+
+def douyin_open_id() -> str:
+    return os.environ.get("DOUYIN_OPEN_ID") or ""
 
 
 def split_csv(value: str) -> list[str]:

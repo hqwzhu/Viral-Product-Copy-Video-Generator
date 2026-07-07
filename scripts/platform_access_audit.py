@@ -90,16 +90,20 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
     "douyin": {
         "label": "Douyin",
         "publish": {
-            "access": "official_candidate_not_integrated",
-            "mode": "browser_assisted_or_official_app_required",
-            "implementedBy": [],
+            "access": "implemented_official_api",
+            "mode": "official_api_publish",
+            "implementedBy": ["publish_executor.py"],
             "requiredEnvAll": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
             "approvalRequired": True,
-            "notes": "Official publishing requires approved open-platform app permissions, scopes, and user authorization; no direct executor is bundled yet.",
+            "notes": "Official video upload/create is implemented through publish_executor.py, but execution still requires approved open-platform app permissions, scopes, user authorization, and platform review.",
             "officialDocs": [
                 {
                     "title": "Douyin Open Platform publishing solution",
                     "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
+                },
+                {
+                    "title": "Douyin upload/create video APIs",
+                    "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/upload/",
                 }
             ],
         },

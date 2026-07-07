@@ -30,8 +30,8 @@ Use this reference when the user asks for full automation.
 - Capture public/browser-visible comments and demand signals from registered published URLs, saved HTML, copied text, or structured snapshots with `scripts/comment_evidence_capture.py`, then use those questions, objections, integration requests, pain points, and CTA-intent signals for the next content round.
 - Attribute user-provided order/revenue exports to proven published content with `scripts/business_attribution.py` when rows contain exact URLs, referrer URLs, landing pages, UTM content, content IDs, or title/campaign evidence.
 - Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, structured metric snapshots, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
-- Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
-- Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
+- Execute approved official publishing actions for GitHub, YouTube, and Douyin when the correct environment credentials, target files, official account authorization, and explicit approval phrase are supplied.
+- Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls, routes Douyin into official dry-run/approved upload-create calls when `--douyin-video-file` is supplied, and routes Zhihu, Xiaohongshu, unconfigured Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.
 - Prepare browser-assisted/manual publishing payloads for Zhihu, Xiaohongshu, Douyin, TikTok, and similar platforms with `scripts/browser_publish_assistant.py`, including clipboard text, form-fill helper scripts, publisher entry URLs, checklists, and post-publish URL registration commands.
 - Fill visible title/body/tags/cover fields from one prepared browser publish payload with `scripts/browser_publish_form_fill.py`, save a screenshot/report, and stop before any final publish/submit action.
@@ -48,7 +48,7 @@ Use this reference when the user asks for full automation.
 - YouTube uploads require Google/YouTube OAuth, approved scopes, quota, and explicit user approval.
 - GitHub repository writes require a GitHub token or GitHub App permissions and explicit user approval.
 - TikTok Direct Post requires developer app access, approved scopes, and creator authorization.
-- Douyin official publishing requires open-platform app permissions, approved scopes, and user authorization.
+- Douyin official publishing requires open-platform app permissions, approved scopes, `DOUYIN_ACCESS_TOKEN`, `DOUYIN_OPEN_ID`, user authorization, explicit approval, and platform review after upload/create.
 - Platform analytics require official API access or user-exported evidence.
 - Orders and revenue require business-system exports or user-provided analytics evidence; public social platforms generally cannot prove those values.
 - Public post pages may expose views, likes, comments, saves, shares, or similar counters, but hidden analytics, order attribution, and revenue still require official exports, screenshots, or business-system evidence.
@@ -58,6 +58,7 @@ Use this reference when the user asks for full automation.
 ## What Must Stay Browser-Assisted Or Manual
 
 - Zhihu and Xiaohongshu publishing should remain manual or browser-assisted unless stable official creator publishing access is verified.
+- Douyin publishing remains browser-assisted/manual when no approved open-platform app authorization, user authorization, or video file is available.
 - Browser-assisted publish preparation may open a user-visible creator page, prepare field payloads, and fill visible fields from those payloads, but it must not auto-login, solve challenges, or click the final publish/submit button.
 - Any platform flow that triggers captcha, risk control, account verification, or login prompts must stop for user action.
 - The agent must not extract, save, print, or reuse cookies, passwords, API keys, or hidden browser tokens.

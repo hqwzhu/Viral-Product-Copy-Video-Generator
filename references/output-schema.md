@@ -227,7 +227,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `records[]`: one platform task per selected publish pack
 - `records[].status`: `dry_run`, `published`, `blocked`, `queued_manual`, `queued_browser_assisted`, `unsupported`, or `error`
 - `records[].contentDraft`: copy-ready Markdown draft path
-- `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube tasks
+- `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube/Douyin official tasks
 - `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
 - `guardrails`: publishing safety rules used for the queue run
 
@@ -357,7 +357,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `records[]`: normalized real metric records with platform, published URL, content id, title, metrics, evidence, source, confidence, and derived rates
 - `records[].source.type`: `user_export`, `user_text`, `structured_snapshot`, or `official_api`
 - `aggregates`: totals, records with metrics, records with evidence, best by views, best by revenue, and platforms
-- `connectorStatus[]`: official connector status for GitHub/YouTube or unsupported platform reasons
+- `connectorStatus[]`: official connector status for GitHub/YouTube/Douyin where implemented, or unsupported/manual platform reasons
 - `retrospective`: `ready` only when real metric evidence exists, otherwise `waiting_real_data`
 - `guardrails`: no fabricated metrics, no secret values, no cookies, and no browser tokens
 
@@ -485,6 +485,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].publish.platforms`: optional platform filter for queue generation
 - `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`
 - `jobs[].publish.youtube`: optional YouTube queue settings such as `videoFile`, `privacyStatus`, and `categoryId`
+- `jobs[].publish.douyin`: optional Douyin queue settings such as `videoFile`
 - `jobs[].publish.execute`: defaults to false; final writes still require official credentials and `jobs[].publish.approval` equal to `I_APPROVE_PUBLISH`
 - `jobs[].browserPublishAssistant.enabled`: optional boolean; when true, the scheduler runs `scripts/browser_publish_assistant.py` after publish queue generation
 - `jobs[].browserPublishAssistant.openBrowser`: optional boolean; opens publisher entry URLs in the user's default browser, without login automation or final publish clicks

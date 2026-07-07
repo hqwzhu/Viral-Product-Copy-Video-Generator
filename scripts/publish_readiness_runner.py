@@ -52,11 +52,11 @@ PLATFORM_RULES = {
         "notes": "No verified stable public note publishing API is integrated.",
     },
     "douyin": {
-        "mode": "browser_assisted_publish",
+        "mode": "official_api_publish",
         "requiredEnvAll": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
-        "target": "douyinOpenPlatformApp",
-        "executor": "",
-        "notes": "Official publishing needs approved open-platform app scopes and user authorization; direct executor is not integrated.",
+        "target": "douyinVideoFile",
+        "executor": "publish_executor.py",
+        "notes": "Official Douyin upload/create is supported through publish_executor.py, but still requires approved open-platform app scopes, user authorization, and platform review.",
     },
     "tiktok": {
         "mode": "official_api_candidate",
@@ -91,6 +91,7 @@ def main() -> None:
             "publishQueue": str(queue_path) if queue_path else "",
             "githubRepo": args.github_repo,
             "youtubeVideoFile": args.youtube_video_file,
+            "douyinVideoFile": args.douyin_video_file,
         },
         "records": records,
         "summary": summarize(records),
@@ -123,6 +124,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--youtube-video-file", default="")
     parser.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
     parser.add_argument("--youtube-category-id", default="22")
+    parser.add_argument("--douyin-video-file", default="")
     return parser.parse_args()
 
 
@@ -156,6 +158,7 @@ def resolve_or_build_queue(args: argparse.Namespace, out_dir: Path, steps: list[
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
     append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
     append_if_present(command, "--youtube-category-id", args.youtube_category_id)
+    append_if_present(command, "--douyin-video-file", args.douyin_video_file)
     step = run_command("publish_queue", command)
     steps.append(step)
     queue_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
@@ -222,7 +225,10 @@ def target_status(args: argparse.Namespace, platform: str, rule: dict[str, Any],
     if platform == "youtube":
         value = args.youtube_video_file or youtube_file_from_queue(queue_item)
         return {"ready": bool(value), "field": "youtubeVideoFile", "valuePresent": bool(value), "missing": "" if value else "--youtube-video-file"}
-    if platform in {"douyin", "tiktok"}:
+    if platform == "douyin":
+        value = args.douyin_video_file or douyin_file_from_queue(queue_item)
+        return {"ready": bool(value), "field": "douyinVideoFile", "valuePresent": bool(value), "missing": "" if value else "--douyin-video-file"}
+    if platform == "tiktok":
         return {"ready": False, "field": rule.get("target", ""), "valuePresent": False, "missing": "approved developer/open-platform app integration"}
     return {"ready": True, "field": "", "valuePresent": False, "missing": ""}
 
@@ -251,7 +257,7 @@ def platform_readiness(
         return "already_published"
     if platform in {"zhihu", "xiaohongshu"}:
         return "manual_publish_required"
-    if platform == "douyin":
+    if platform == "douyin" and queue_status == "queued_browser_assisted":
         return "browser_assisted_or_official_app_required"
     if platform == "tiktok":
         return "official_app_integration_required"
@@ -399,6 +405,15 @@ def youtube_file_from_queue(queue_item: dict[str, Any]) -> str:
     command = ((queue_item.get("officialExecution") or {}).get("command") or [])
     if "--video-file" in command:
         index = command.index("--video-file")
+        if index + 1 < len(command):
+            return str(command[index + 1])
+    return ""
+
+
+def douyin_file_from_queue(queue_item: dict[str, Any]) -> str:
+    command = ((queue_item.get("officialExecution") or {}).get("command") or [])
+    if "--douyin-video-file" in command:
+        index = command.index("--douyin-video-file")
         if index + 1 < len(command):
             return str(command[index + 1])
     return ""

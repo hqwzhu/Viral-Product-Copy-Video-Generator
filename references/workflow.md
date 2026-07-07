@@ -357,10 +357,11 @@ python scripts/publish_queue.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --github-repo owner/repo \
   --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
   --out-dir "./promotion-output"
 ```
 
-The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, and keeps Zhihu, Xiaohongshu, Douyin, and similar platforms as manual/browser-assisted queue items.
+The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, calls the Douyin official upload/create executor in dry-run mode when `--douyin-video-file` is supplied, and keeps Zhihu, Xiaohongshu, unconfigured Douyin, and similar platforms as manual/browser-assisted queue items.
 It also writes `reports/promotion-manager/published-items/published-items.{json,md}`. Official dry-runs, queued manual tasks, blocked writes, and browser-assisted tasks remain pending until a real published URL exists.
 
 Before execution, audit publish readiness:
@@ -371,6 +372,7 @@ python scripts/publish_readiness_runner.py \
   --build-queue \
   --github-repo owner/repo \
   --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
   --out-dir "./promotion-output"
 ```
 
@@ -426,7 +428,18 @@ To execute a supported official write, the user must provide the relevant enviro
 python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
 ```
 
-Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, and YouTube `videos.insert` upload. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Zhihu, Xiaohongshu, and Douyin remain manual/browser-assisted unless official app permissions are configured and verified.
+Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, YouTube `videos.insert` upload, and Douyin Open Platform upload/create. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Douyin requires official app permissions plus user-authorized `DOUYIN_ACCESS_TOKEN` and `DOUYIN_OPEN_ID`. Zhihu and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is configured and verified.
+Douyin official upload/create is available through:
+
+```bash
+python scripts/publish_executor.py \
+  --platform douyin \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
+  --title "Product launch draft #AI" \
+  --out-dir "./promotion-output"
+```
+
+Execution requires `DOUYIN_ACCESS_TOKEN`, `DOUYIN_OPEN_ID`, official app permissions, user authorization, and `--execute --approval I_APPROVE_PUBLISH`. A successful create response is still subject to platform review; register the real published URL before metrics recovery.
 
 Before claiming a platform can be fully automated, generate the official access boundary report:
 
@@ -507,7 +520,7 @@ python scripts/promotion_cycle_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube execution through `--execute-publish --approval I_APPROVE_PUBLISH`, but queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
+This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube/Douyin execution through `--execute-publish --approval I_APPROVE_PUBLISH` when targets and credentials are supplied, but queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
 
 ## Stage 6: Retrospective
 
@@ -605,6 +618,7 @@ The scheduler writes `promotion-automation-state.json` next to the config unless
 Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
+Set `jobs[].publish.douyin.videoFile` to pass a rendered MP4 into the Douyin official dry-run queue.
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Set `jobs[].commentEvidenceCapture.enabled` to `true` to run `scripts/comment_evidence_capture.py` after the workflow. Use `publishedItemsJson`, `publishedUrls`, `structuredJson`, `htmlFile`, `textFile`, `captureBrowserAssisted`, and `allowLocalhost` for explicit public/browser-visible comment evidence sources. The scheduler records `lastCommentEvidenceCapture` in state.

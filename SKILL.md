@@ -378,6 +378,16 @@ python scripts/publish_executor.py \
   --out-dir "./promotion-output"
 ```
 
+To prepare an official Douyin Open Platform upload/create dry run, provide the rendered MP4 and post text:
+
+```bash
+python scripts/publish_executor.py \
+  --platform douyin \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
+  --title "Product launch draft #AI" \
+  --out-dir "./promotion-output"
+```
+
 To turn a completed workflow into a guarded publish queue for all target platforms:
 
 ```bash
@@ -385,6 +395,7 @@ python scripts/publish_queue.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --github-repo owner/repo \
   --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
   --out-dir "./promotion-output"
 ```
 
@@ -396,6 +407,7 @@ python scripts/publish_readiness_runner.py \
   --build-queue \
   --github-repo owner/repo \
   --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
   --out-dir "./promotion-output"
 ```
 
@@ -594,11 +606,12 @@ Every publish pack must include:
 - tracking fields
 - schedule suggestion
 
-YouTube and GitHub may be official API candidates. Zhihu, Xiaohongshu, and Douyin default to manual or browser-assisted publishing unless current official evidence proves otherwise.
+YouTube, GitHub, and Douyin have official API executor paths, but execution still requires platform credentials, user authorization, and explicit approval. Zhihu and Xiaohongshu remain manual or browser-assisted unless current official creator-publishing evidence proves otherwise.
 For full-automation boundaries, read [references/final-capability-boundaries.md](references/final-capability-boundaries.md).
 Use `scripts/publish_executor.py` for supported official publishing actions. It defaults to dry-run and only writes when `--execute --approval I_APPROVE_PUBLISH` is supplied with the required environment token.
+For Douyin, `scripts/publish_executor.py --platform douyin` uses the official upload/create flow with `--douyin-video-file` and requires `DOUYIN_ACCESS_TOKEN` plus `DOUYIN_OPEN_ID` for execution. App approval, `video.create.bind`-style publishing permission, user authorization, and platform review remain external requirements.
 Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAuth consent flow before upload. It requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for execution and does not save OAuth tokens.
-Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, Douyin, and other unsupported direct-publish platforms.
+Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs, Douyin official dry-runs when `--douyin-video-file` is supplied, plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, and other unsupported direct-publish platforms.
 Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes.
 Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare browser-assisted payload files, platform entry URLs, generic form-fill helper scripts, browser form-fill commands, and post-publish URL registration commands for Zhihu, Xiaohongshu, Douyin, TikTok, or similar platforms. It may open publisher entry URLs in the user's default browser with `--open-browser`, but it must not auto-login, solve captcha, or click the final publish button.
 Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when the user wants Codex to fill visible publisher fields. It writes a screenshot and report, does not submit the form, and must stop for login, captcha, risk control, account verification, or final publish.
@@ -606,7 +619,7 @@ Use `scripts/platform_access_audit.py` when you need a machine-readable official
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
 Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
 Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.
-Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, and metrics recovery. Official GitHub/YouTube writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
+Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, and metrics recovery. Official GitHub/YouTube/Douyin writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
 
 ### 6. Retrospective
 
@@ -637,6 +650,7 @@ Use `scripts/automation_scheduler.py` to run one or more product promotion jobs 
 
 The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
 If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publish_queue.py` after a successful workflow and records the queue report path in state. This still defaults to dry-run unless the job explicitly enables execution and supplies the approval phrase.
+Scheduled jobs can set `publish.douyin.videoFile` to pass a rendered MP4 into the Douyin official dry-run queue; execution still requires approved open-platform credentials and `I_APPROVE_PUBLISH`.
 If a scheduled job has `browserPublishAssistant.enabled: true`, the scheduler runs `scripts/browser_publish_assistant.py` after publish queue generation and records the browser/manual payload report path in state.
 If a scheduled job has `postPublishMetricsCapture.enabled: true`, the scheduler runs `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Captured metrics are passed into `scripts/metrics_recovery.py` as a JSON metrics source when `metricsRecovery.enabled` is also true.
 If a scheduled job has `commentEvidenceCapture.enabled: true`, the scheduler runs `scripts/comment_evidence_capture.py` after the workflow and records the public/browser-visible comment evidence report path in state.
@@ -675,12 +689,12 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/post_publish_metrics_capture.py`: public/browser-visible post-publish metrics capturer for registered URLs; writes a metrics export for recovery and manual evidence requests when metrics are hidden.
 - `scripts/comment_evidence_capture.py`: public/browser-visible comment and demand-signal capturer for post-publish retrospectives and next-round content optimization.
 - `scripts/business_attribution.py`: order/revenue export attribution to proven published content using URL, UTM content, referrer, content ID, or title/campaign evidence.
-- `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, and manual/browser-assisted publish tasks.
+- `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, Douyin official dry-runs when a video file is supplied, and manual/browser-assisted publish tasks.
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
 - `scripts/browser_publish_form_fill.py`: controlled Playwright helper that fills visible publisher fields from a prepared payload, screenshots the result, and stops before final publish.
 - `scripts/platform_access_audit.py`: official access boundary auditor for platform publishing, metrics recovery, app-review requirements, and manual/browser-assisted fallback rules.
-- `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
+- `scripts/publish_executor.py`: approved official publish executor for GitHub, YouTube, and Douyin Open Platform video upload/create.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
 - `scripts/promotion_cycle_runner.py`: one-command local operating cycle for workflow generation, guarded publish queue, published item registration, and metrics recovery.
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.

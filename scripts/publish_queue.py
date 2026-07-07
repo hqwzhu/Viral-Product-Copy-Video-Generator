@@ -66,6 +66,9 @@ def parse_args() -> argparse.Namespace:
     youtube.add_argument("--youtube-video-file", default="", help="MP4 to upload. Defaults to the workflow manifest YouTube video when available.")
     youtube.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
     youtube.add_argument("--youtube-category-id", default="22")
+
+    douyin = parser.add_argument_group("Douyin")
+    douyin.add_argument("--douyin-video-file", default="", help="MP4 to upload through the Douyin Open Platform API.")
     return parser.parse_args()
 
 
@@ -114,7 +117,8 @@ def build_queue(
             continue
         platform_content = pack.get("content") or content.get(platform) or {}
         draft_path = write_platform_draft(out_dir, platform, platform_content, pack)
-        mode = str(pack.get("publishMode") or "manual_publish_required")
+        official_douyin_requested = platform == "douyin" and bool(args.douyin_video_file)
+        mode = "official_api_publish" if official_douyin_requested else str(pack.get("publishMode") or "manual_publish_required")
         record: dict[str, Any] = {
             "id": f"{TODAY}-{platform}",
             "platform": platform,
@@ -125,7 +129,7 @@ def build_queue(
             "trackingFields": pack.get("trackingFields", []),
             "warnings": pack.get("warnings", []),
         }
-        if platform in OFFICIAL_PLATFORMS and mode == "official_api_publish":
+        if (platform in OFFICIAL_PLATFORMS or official_douyin_requested) and mode == "official_api_publish":
             record.update(run_official_queue_item(args, out_dir, promotion_dir, manifest, platform, platform_content, draft_path))
         elif mode in MANUAL_MODES:
             record.update(manual_queue_item(mode, platform))
@@ -144,7 +148,8 @@ def build_queue(
         "guardrails": [
             "Official API writes require --execute and the exact approval phrase.",
             "Credentials are read from environment variables by publish_executor.py and are never written to queue reports.",
-            "Zhihu, Xiaohongshu, Douyin, and unverified platforms remain browser-assisted or manual.",
+            "Zhihu, Xiaohongshu, and unverified platforms remain browser-assisted or manual.",
+            "Douyin can use the official executor only when a video file, user-authorized open-platform credentials, and explicit approval are supplied.",
             "Do not bypass login, captcha, risk control, platform review, or account verification.",
             "Record published URLs and metrics only after real evidence exists.",
         ],
@@ -164,6 +169,8 @@ def run_official_queue_item(
         return run_github_queue_item(args, out_dir, content, draft_path)
     if platform == "youtube":
         return run_youtube_queue_item(args, out_dir, promotion_dir, manifest, content, draft_path)
+    if platform == "douyin":
+        return run_douyin_queue_item(args, out_dir, content)
     return {"status": "unsupported", "reason": f"No official queue runner for {platform}."}
 
 
@@ -237,6 +244,31 @@ def run_youtube_queue_item(
     if args.execute:
         command.extend(["--execute", "--approval", args.approval])
     return execute_publish_command("youtube", command)
+
+
+def run_douyin_queue_item(args: argparse.Namespace, out_dir: Path, content: dict[str, Any]) -> dict[str, Any]:
+    video_file = Path(args.douyin_video_file)
+    if not video_file.exists():
+        return {
+            "status": "blocked",
+            "reason": "Provide --douyin-video-file or render a Douyin MP4 before queue execution.",
+            "executionReport": "",
+        }
+    command = [
+        sys.executable,
+        str(SCRIPTS / "publish_executor.py"),
+        "--platform",
+        "douyin",
+        "--douyin-video-file",
+        str(video_file),
+        "--title",
+        content_title(content),
+        "--out-dir",
+        str(execution_out_dir(out_dir, "douyin")),
+    ]
+    if args.execute:
+        command.extend(["--execute", "--approval", args.approval])
+    return execute_publish_command("douyin", command)
 
 
 def execute_publish_command(platform: str, command: list[str]) -> dict[str, Any]:

@@ -105,7 +105,7 @@ def init_config(args: argparse.Namespace) -> None:
         "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
         "businessAttribution": {"enabled": False, "businessCsv": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
         "metricsRecovery": {"enabled": False},
-        "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
+        "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
     }
     config = {
@@ -592,6 +592,10 @@ def build_publish_queue_command(job: dict[str, Any], out_dir: Path, base_dir: Pa
         command.extend(["--youtube-video-file", str(resolve_path(base_dir, youtube["videoFile"]))])
     append_if_present(command, "--youtube-privacy-status", youtube.get("privacyStatus"))
     append_if_present(command, "--youtube-category-id", youtube.get("categoryId"))
+
+    douyin = publish.get("douyin") or {}
+    if douyin.get("videoFile"):
+        command.extend(["--douyin-video-file", str(resolve_path(base_dir, douyin["videoFile"]))])
     return command
 
 

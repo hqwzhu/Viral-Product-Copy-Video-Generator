@@ -1489,6 +1489,75 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
 
+    def test_automation_scheduler_passes_douyin_video_file_to_publish_queue(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-douyin-publish-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        video_path = out_dir / "douyin-draft.mp4"
+        video_path.write_bytes(b"dry-run douyin video placeholder")
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-douyin-publish-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["douyin"],
+                            "skipVideo": True,
+                            "publish": {
+                                "enabled": True,
+                                "platforms": ["douyin"],
+                                "douyin": {"videoFile": "douyin-draft.mp4"},
+                            },
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        publish_queue = run_report["records"][0]["publishQueue"]
+        self.assertEqual(publish_queue["status"], "ready")
+        self.assertEqual(publish_queue["summary"]["officialDryRuns"], 1)
+        queue = json.loads(Path(publish_queue["report"]).read_text(encoding="utf-8"))
+        record = queue["records"][0]
+        self.assertEqual(record["platform"], "douyin")
+        self.assertEqual(record["publishMode"], "official_api_publish")
+        self.assertEqual(record["status"], "dry_run")
+
     def test_automation_scheduler_runs_business_attribution_before_recovery(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-attribution-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2938,7 +3007,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["github"]["publish"]["access"], "implemented_official_api")
         self.assertEqual(by_platform["xiaohongshu"]["publish"]["access"], "no_verified_public_creator_publish_endpoint")
         self.assertEqual(by_platform["zhihu"]["publish"]["mode"], "manual_or_browser_assisted_until_verified")
-        self.assertEqual(by_platform["douyin"]["publish"]["access"], "official_candidate_not_integrated")
+        self.assertEqual(by_platform["douyin"]["publish"]["access"], "implemented_official_api")
+        self.assertIn("publish_executor.py", by_platform["douyin"]["publish"]["implementedBy"])
+        self.assertFalse(by_platform["douyin"]["publish"]["readyForAutomation"])
         self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
         self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
@@ -3489,6 +3560,78 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
 
+    def test_publish_executor_douyin_dry_run_uses_official_upload_and_create_boundary(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-douyin-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for dry-run")
+        env = os.environ.copy()
+        secret_value = "act.super-secret-douyin-token"
+        env["DOUYIN_ACCESS_TOKEN"] = secret_value
+        env["DOUYIN_OPEN_ID"] = "open-id-for-test"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "douyin",
+                "--douyin-video-file",
+                str(video_path),
+                "--title",
+                "Launch draft #AI",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["platform"], "douyin")
+        self.assertEqual(report["officialApi"], "Douyin Open Platform video upload/create")
+        self.assertEqual(report["request"]["upload"]["endpoint"], "/api/douyin/v1/video/upload_video/")
+        self.assertEqual(report["request"]["create"]["endpoint"], "/api/douyin/v1/video/create_video/")
+        self.assertEqual(report["request"]["create"]["body"]["text"], "Launch draft #AI")
+        self.assertTrue(report["approvalRequired"])
+
+    def test_publish_executor_douyin_execute_requires_user_authorized_credentials(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-douyin-blocked-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for blocked execute")
+        env = os.environ.copy()
+        for name in ["DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"]:
+            env.pop(name, None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "douyin",
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--douyin-video-file",
+                str(video_path),
+                "--title",
+                "Launch draft #AI",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("DOUYIN_ACCESS_TOKEN", report["reason"])
+        self.assertIn("DOUYIN_OPEN_ID", report["reason"])
+
     def test_publish_queue_builds_official_dry_runs_and_manual_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-queue-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3563,6 +3706,69 @@ Prompt templates for product copy, SEO content, and video scripts.
         serialized = json.dumps(queue)
         self.assertNotIn("GITHUB_TOKEN", serialized)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
+
+    def test_publish_queue_can_build_douyin_official_dry_run_when_video_file_supplied(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-queue-douyin-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        workflow_out = out_dir / "output"
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "douyin",
+                "--skip-video",
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        video_path = out_dir / "douyin-draft.mp4"
+        video_path.write_bytes(b"dry-run douyin video placeholder")
+        manifest_path = workflow_out / "reports/promotion-manager/agent-run/workflow-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_QUEUE),
+                "--workflow-manifest",
+                str(manifest_path),
+                "--promotion-out-dir",
+                str(workflow_out),
+                "--out-dir",
+                str(workflow_out),
+                "--douyin-video-file",
+                str(video_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        queue_path = workflow_out / "reports/promotion-manager/publish-queue/publish-queue.json"
+        queue_text = queue_path.read_text(encoding="utf-8")
+        queue = json.loads(queue_text)
+        record = queue["records"][0]
+        self.assertEqual(record["platform"], "douyin")
+        self.assertEqual(record["status"], "dry_run")
+        self.assertEqual(record["publishMode"], "official_api_publish")
+        self.assertIn("publish_executor.py", " ".join(record["officialExecution"]["command"]))
+        self.assertTrue(Path(record["officialExecution"]["report"]).exists())
+        self.assertNotIn("DOUYIN_ACCESS_TOKEN", queue_text)
+        self.assertNotIn("DOUYIN_OPEN_ID", queue_text)
 
     def test_browser_publish_assistant_prepares_payloads_and_registers_real_url(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-publish-assistant-test-"))
@@ -3835,6 +4041,69 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["douyin"]["readiness"], "browser_assisted_or_official_app_required")
         self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
         self.assertTrue((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.md").exists())
+
+    def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-douyin-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        workflow_out = out_dir / "output"
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "douyin",
+                "--skip-video",
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        video_path = out_dir / "douyin-draft.mp4"
+        video_path.write_bytes(b"dry-run douyin video placeholder")
+        env = os.environ.copy()
+        for name in ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"]:
+            env.pop(name, None)
+        manifest_path = workflow_out / "reports/promotion-manager/agent-run/workflow-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_READINESS),
+                "--workflow-manifest",
+                str(manifest_path),
+                "--build-queue",
+                "--douyin-video-file",
+                str(video_path),
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report = json.loads((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["platform"], "douyin")
+        self.assertEqual(record["publishMode"], "official_api_publish")
+        self.assertEqual(record["readiness"], "missing_credentials")
+        self.assertTrue(record["targetStatus"]["ready"])
+        self.assertIn("DOUYIN_ACCESS_TOKEN", record["credentialStatus"]["missingEnv"])
+        self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
 
     def test_youtube_oauth_publish_dry_run_generates_auth_url_without_tokens(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-test-"))

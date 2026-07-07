@@ -9,7 +9,7 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 | YouTube | `official_api_publish` candidate | Official YouTube Data API can upload videos with OAuth and quota constraints. Generate packs first; publish only after user approval. |
 | GitHub | `official_api_publish` candidate | Official APIs can create/update repository content, releases, issues, and discussions. Do not write to repos without approval. |
 | TikTok | `official_api_publish` candidate | Content Posting API requires developer access and scopes. Treat as candidate until verified. |
-| Douyin | `browser_assisted_publish` | Official publishing APIs exist, but first version uses browser-assisted/manual mode until app permissions, review, and user authorization are verified. |
+| Douyin | `official_api_publish` candidate with browser-assisted fallback | Official upload/create APIs are integrated through the guarded executor when a video file and authorized open-platform credentials are supplied. App permissions, user authorization, and platform review still apply. |
 | Xiaohongshu | `manual_publish_required` | Default to manual/browser-assisted drafts. Do not use unverified direct publishing endpoints. |
 | Zhihu | `manual_publish_required` | Default to manual/browser-assisted drafts. Do not use unofficial direct publishing endpoints. |
 
@@ -28,7 +28,8 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 `scripts/publish_queue.py` converts generated publish packs into a single queue:
 
 - GitHub and YouTube records can call `scripts/publish_executor.py` in dry-run mode by default.
-- Zhihu, Xiaohongshu, Douyin, and unverified platforms are written as manual or browser-assisted tasks with copy-ready drafts.
+- Douyin records can call `scripts/publish_executor.py --platform douyin` in dry-run mode when `--douyin-video-file` is supplied.
+- Zhihu, Xiaohongshu, Douyin without official video/credentials, and unverified platforms are written as manual or browser-assisted tasks with copy-ready drafts.
 - Real official writes still require `--execute --approval I_APPROVE_PUBLISH` and the relevant environment credential.
 
 `scripts/browser_publish_assistant.py` prepares payload JSON, clipboard text, checklist files, and a copy-ready `scripts/browser_publish_form_fill.py` command for manual/browser-assisted platforms. `scripts/browser_publish_form_fill.py` may fill visible form fields from one payload and write a screenshot/report, but it must not login, bypass challenges, or click the final publish/submit button.
@@ -43,10 +44,12 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 - GitHub issue creation through the issues REST API.
 - GitHub release creation through the releases REST API.
 - YouTube video upload through `videos.insert` when an OAuth access token is available.
+- Douyin Open Platform video upload/create when `DOUYIN_ACCESS_TOKEN`, `DOUYIN_OPEN_ID`, approved app permissions, and user authorization are available.
 - YouTube OAuth consent and same-process upload through `scripts/youtube_oauth_publish.py`.
 
 The executor defaults to dry-run. Real writes require `--execute --approval I_APPROVE_PUBLISH` plus the relevant environment credential. It must not write credentials to reports.
 The YouTube OAuth helper also defaults to dry-run. Execution requires a Google OAuth client ID and client secret from environment variables, opens or prints a Google authorization URL, exchanges the authorization code for a temporary access token, uploads, and does not save the token.
+Douyin execution performs upload then create; created videos are subject to platform review and must not be treated as published until a real published URL or official result evidence exists.
 
 ## Reference URLs
 
