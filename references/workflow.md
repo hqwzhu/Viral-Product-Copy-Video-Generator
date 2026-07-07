@@ -522,6 +522,21 @@ python scripts/promotion_cycle_runner.py \
 
 This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube/Douyin execution through `--execute-publish --approval I_APPROVE_PUBLISH` when targets and credentials are supplied, but queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
 
+The same cycle can also capture public/browser-visible post-publish metrics, public comment evidence, and matched business attribution before recovery:
+
+```bash
+python scripts/promotion_cycle_runner.py \
+  --browser-url "https://example.com/product" \
+  --published-url "xiaohongshu=https://www.xiaohongshu.com/explore/real-note-id" \
+  --run-post-publish-metrics-capture \
+  --run-comment-evidence-capture \
+  --run-business-attribution \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+Captured public metrics are passed to `metrics_recovery.py --metrics-json`; matched business attribution is passed to `metrics_recovery.py --business-json`. Comment evidence is recorded for the next content round and is not treated as a performance metric unless it is present in public/browser-visible evidence.
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.

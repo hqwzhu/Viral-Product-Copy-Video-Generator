@@ -65,7 +65,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run from CSV, JSON, text, structured browser snapshot, published URL, GitHub, or YouTube input
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
-- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, and metrics recovery as one operating cycle
+- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, and metrics recovery as one operating cycle
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -398,6 +398,9 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `workflow`: status, workflow manifest path, output directory, and whether the workflow was generated or loaded from an existing manifest
 - `publishQueue`: guarded publish queue status, queue path, and queue summary
 - `publishedItems`: published URL registration status, report path, optional manual input path, and published/pending summary
+- `postPublishMetricsCapture`: optional public/browser-visible metrics capture status, report path, metric export path, and summary
+- `commentEvidenceCapture`: optional comment and demand-signal capture status, report path, comment evidence export path, and summary
+- `businessAttribution`: optional business attribution status, report path, attribution export path, and summary
 - `metricsRecovery`: metrics recovery report status, path, recovery status, retrospective status, real metric record count, and pending/manual requirements
 - `automationStatus`: `ready_with_real_metrics`, `partial_ready_with_real_metrics`, `ready_waiting_real_data`, or a failure status
 - `approval`: whether publish execution was requested and whether the approval phrase matched

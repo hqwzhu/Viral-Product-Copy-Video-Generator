@@ -2840,6 +2840,111 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 88.0)
         self.assertTrue((out_dir / "output/reports/promotion-manager/cycle/promotion-cycle.md").exists())
 
+    def test_promotion_cycle_runner_captures_public_metrics_comments_and_business_attribution(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-cycle-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>views: 4,200 likes: 360 comments: 41</p>
+    <section class="comments">
+      <p>Comment by Alice: How does pricing work? likes: 9</p>
+      <p>Bob: Need Zapier integration replies: 2</p>
+      <p>Carol: This solved our content workflow</p>
+    </section>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        published_url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        business_csv = out_dir / "orders.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "orderId,utm_source,referrer,revenue,status",
+                    f"order-1,xiaohongshu,{published_url},99.00,paid",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        output_dir = out_dir / "output"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PROMOTION_CYCLE_RUNNER),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--skip-publish-queue",
+                "--published-url",
+                f"xiaohongshu={published_url}",
+                "--run-post-publish-metrics-capture",
+                "--post-publish-metrics-allow-localhost",
+                "--run-comment-evidence-capture",
+                "--comment-evidence-allow-localhost",
+                "--run-business-attribution",
+                "--business-csv",
+                str(business_csv),
+                "--out-dir",
+                str(output_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        cycle = json.loads((output_dir / "reports/promotion-manager/cycle/promotion-cycle.json").read_text(encoding="utf-8"))
+        self.assertEqual(cycle["automationStatus"], "partial_ready_with_real_metrics")
+        self.assertEqual(cycle["postPublishMetricsCapture"]["status"], "ready")
+        self.assertEqual(cycle["postPublishMetricsCapture"]["summary"]["capturedMetricRecords"], 1)
+        self.assertEqual(cycle["commentEvidenceCapture"]["status"], "ready")
+        self.assertEqual(cycle["commentEvidenceCapture"]["summary"]["commentCount"], 3)
+        self.assertEqual(cycle["businessAttribution"]["status"], "ready")
+        self.assertEqual(cycle["businessAttribution"]["summary"]["matchedRows"], 1)
+        recovery = json.loads(Path(cycle["metricsRecovery"]["metricsRecovery"]).read_text(encoding="utf-8"))
+        self.assertEqual(recovery["aggregates"]["totals"]["views"], 4200.0)
+        self.assertEqual(recovery["aggregates"]["totals"]["orders"], 1.0)
+        self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 99.0)
+        self.assertTrue(Path(cycle["postPublishMetricsCapture"]["metricExport"]).exists())
+        self.assertTrue(Path(cycle["commentEvidenceCapture"]["commentEvidenceExport"]).exists())
+        self.assertTrue(Path(cycle["businessAttribution"]["businessAttributionExport"]).exists())
+
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -20,6 +20,9 @@ RUN_WORKFLOW = SCRIPTS / "run_promotion_workflow.py"
 PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 PUBLISHED_ITEMS = SCRIPTS / "published_items.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
+POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
+COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
+BUSINESS_ATTRIBUTION = SCRIPTS / "business_attribution.py"
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
@@ -34,8 +37,11 @@ def main() -> None:
     workflow = prepare_workflow(args, out_dir, steps)
     publish = run_publish_queue(args, out_dir, workflow, steps)
     published = run_published_items(args, out_dir, publish, steps)
-    metrics = run_metrics_recovery(args, out_dir, workflow, publish, published, steps)
-    report = build_cycle_report(args, out_dir, workflow, publish, published, metrics, steps)
+    post_publish_metrics = run_post_publish_metrics_capture(args, out_dir, published, steps)
+    comment_evidence = run_comment_evidence_capture(args, out_dir, published, steps)
+    business_attribution = run_business_attribution(args, out_dir, published, steps)
+    metrics = run_metrics_recovery(args, out_dir, workflow, publish, published, post_publish_metrics, business_attribution, steps)
+    report = build_cycle_report(args, out_dir, workflow, publish, published, post_publish_metrics, comment_evidence, business_attribution, metrics, steps)
     write_cycle_report(out_dir, report)
     print(f"Promotion cycle report written to: {(cycle_dir(out_dir) / 'promotion-cycle.json').resolve()}")
 
@@ -88,6 +94,7 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--youtube-video-file", default="")
     publish.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
     publish.add_argument("--youtube-category-id", default="22")
+    publish.add_argument("--douyin-video-file", default="")
 
     metrics = parser.add_argument_group("Metrics")
     metrics.add_argument("--skip-metrics-recovery", action="store_true")
@@ -97,6 +104,21 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--business-csv", action="append", default=[])
     metrics.add_argument("--business-json", action="append", default=[])
     metrics.add_argument("--business-text", action="append", default=[])
+    metrics.add_argument("--run-post-publish-metrics-capture", action="store_true")
+    metrics.add_argument("--post-publish-metrics-limit", type=int, default=20)
+    metrics.add_argument("--post-publish-metrics-allow-localhost", action="store_true")
+    metrics.add_argument("--post-publish-metrics-capture-browser-assisted", action="store_true")
+    metrics.add_argument("--post-publish-metrics-install-browser-if-missing", action="store_true")
+    metrics.add_argument("--run-comment-evidence-capture", action="store_true")
+    metrics.add_argument("--comment-evidence-limit", type=int, default=20)
+    metrics.add_argument("--comment-evidence-platform", default="")
+    metrics.add_argument("--comment-evidence-structured-json", default="")
+    metrics.add_argument("--comment-evidence-html-file", default="")
+    metrics.add_argument("--comment-evidence-text-file", default="")
+    metrics.add_argument("--comment-evidence-allow-localhost", action="store_true")
+    metrics.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
+    metrics.add_argument("--comment-evidence-install-browser-if-missing", action="store_true")
+    metrics.add_argument("--run-business-attribution", action="store_true")
 
     parser.add_argument("--out-dir", default="./promotion-output")
     return parser.parse_args()
@@ -191,6 +213,7 @@ def run_publish_queue(args: argparse.Namespace, out_dir: Path, workflow: dict[st
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
     append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
     append_if_present(command, "--youtube-category-id", args.youtube_category_id)
+    append_if_present(command, "--douyin-video-file", args.douyin_video_file)
     step = run_command("publish_queue", command)
     steps.append(step)
     queue_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
@@ -205,11 +228,11 @@ def run_publish_queue(args: argparse.Namespace, out_dir: Path, workflow: dict[st
 
 def run_published_items(args: argparse.Namespace, out_dir: Path, publish: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
     manual_items_path = write_manual_published_items(out_dir, args.published_url)
-    queue_path = Path(str(publish.get("queue", "")))
-    if not queue_path.exists() and not manual_items_path:
+    queue_path = existing_path(publish.get("queue", ""))
+    if not queue_path and not manual_items_path:
         return {"status": "skipped", "reason": "No publish queue or real published URLs were available."}
     command = [sys.executable, str(PUBLISHED_ITEMS), "--out-dir", str(out_dir)]
-    if queue_path.exists():
+    if queue_path:
         command.extend(["--publish-queue", str(queue_path)])
     if manual_items_path:
         command.extend(["--published-items-json", str(manual_items_path)])
@@ -226,12 +249,112 @@ def run_published_items(args: argparse.Namespace, out_dir: Path, publish: dict[s
     }
 
 
+def run_post_publish_metrics_capture(args: argparse.Namespace, out_dir: Path, published: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    if not args.run_post_publish_metrics_capture:
+        return {"status": "skipped", "reason": "--run-post-publish-metrics-capture was not supplied."}
+    command = [
+        sys.executable,
+        str(POST_PUBLISH_METRICS_CAPTURE),
+        "--out-dir",
+        str(out_dir),
+        "--limit",
+        str(args.post_publish_metrics_limit),
+    ]
+    items_path = existing_path(published.get("publishedItems", ""))
+    if items_path:
+        command.extend(["--published-items-json", str(items_path)])
+    append_published_urls(command, args.published_url)
+    if args.post_publish_metrics_allow_localhost:
+        command.append("--allow-localhost")
+    if args.post_publish_metrics_capture_browser_assisted:
+        command.append("--capture-browser-assisted")
+    if args.post_publish_metrics_install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    step = run_command("post_publish_metrics_capture", command)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.json"
+    export_path = out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json"
+    summary = read_summary(report_path)
+    return {
+        "status": "ready" if step["exitCode"] == 0 and report_path.exists() else "error",
+        "report": str(report_path),
+        "metricExport": str(export_path) if export_path.exists() else "",
+        "exitCode": step["exitCode"],
+        "summary": summary,
+    }
+
+
+def run_comment_evidence_capture(args: argparse.Namespace, out_dir: Path, published: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    if not args.run_comment_evidence_capture:
+        return {"status": "skipped", "reason": "--run-comment-evidence-capture was not supplied."}
+    command = [
+        sys.executable,
+        str(COMMENT_EVIDENCE_CAPTURE),
+        "--out-dir",
+        str(out_dir),
+        "--limit",
+        str(args.comment_evidence_limit),
+    ]
+    items_path = existing_path(published.get("publishedItems", ""))
+    if items_path:
+        command.extend(["--published-items-json", str(items_path)])
+    append_published_urls(command, args.published_url)
+    append_if_present(command, "--platform", args.comment_evidence_platform)
+    append_if_present(command, "--structured-json", args.comment_evidence_structured_json)
+    append_if_present(command, "--html-file", args.comment_evidence_html_file)
+    append_if_present(command, "--text-file", args.comment_evidence_text_file)
+    if args.comment_evidence_allow_localhost:
+        command.append("--allow-localhost")
+    if args.comment_evidence_capture_browser_assisted:
+        command.append("--capture-browser-assisted")
+    if args.comment_evidence_install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    step = run_command("comment_evidence_capture", command)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-capture.json"
+    export_path = out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-export.json"
+    summary = read_summary(report_path)
+    return {
+        "status": "ready" if step["exitCode"] == 0 and report_path.exists() else "error",
+        "report": str(report_path),
+        "commentEvidenceExport": str(export_path) if export_path.exists() else "",
+        "exitCode": step["exitCode"],
+        "summary": summary,
+    }
+
+
+def run_business_attribution(args: argparse.Namespace, out_dir: Path, published: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    if not args.run_business_attribution:
+        return {"status": "skipped", "reason": "--run-business-attribution was not supplied."}
+    command = [sys.executable, str(BUSINESS_ATTRIBUTION), "--out-dir", str(out_dir)]
+    append_many(command, "--business-csv", args.business_csv)
+    append_many(command, "--business-json", args.business_json)
+    items_path = existing_path(published.get("publishedItems", ""))
+    if items_path:
+        command.extend(["--published-items-json", str(items_path)])
+    append_published_urls(command, args.published_url)
+    step = run_command("business_attribution", command)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/business-attribution/business-attribution.json"
+    export_path = out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json"
+    summary = read_summary(report_path)
+    return {
+        "status": "ready" if step["exitCode"] == 0 and report_path.exists() else "error",
+        "report": str(report_path),
+        "businessAttributionExport": str(export_path) if export_path.exists() else "",
+        "exitCode": step["exitCode"],
+        "summary": summary,
+    }
+
+
 def run_metrics_recovery(
     args: argparse.Namespace,
     out_dir: Path,
     workflow: dict[str, Any],
     publish: dict[str, Any],
     published: dict[str, Any],
+    post_publish_metrics: dict[str, Any],
+    business_attribution: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     if args.skip_metrics_recovery:
@@ -240,19 +363,26 @@ def run_metrics_recovery(
     command = [sys.executable, str(METRICS_RECOVERY), "--out-dir", str(out_dir)]
     if manifest_path.exists():
         command.extend(["--workflow-manifest", str(manifest_path)])
-    queue_path = Path(str(publish.get("queue", "")))
-    if queue_path.exists():
+    queue_path = existing_path(publish.get("queue", ""))
+    if queue_path:
         command.extend(["--publish-queue", str(queue_path)])
-    items_path = Path(str(published.get("publishedItems", "")))
-    if items_path.exists():
+    items_path = existing_path(published.get("publishedItems", ""))
+    if items_path:
         command.extend(["--published-items-json", str(items_path)])
     for value in args.published_url:
         _, url = parse_published_url(value)
         command.extend(["--published-url", url])
     append_many(command, "--github-repo", args.metrics_github_repo)
     append_many(command, "--youtube-video-id", args.metrics_youtube_video_id)
-    append_many(command, "--business-csv", args.business_csv)
-    append_many(command, "--business-json", args.business_json)
+    metric_export = post_publish_metrics.get("metricExport", "")
+    if metric_export:
+        command.extend(["--metrics-json", str(metric_export)])
+    attribution_export = business_attribution.get("businessAttributionExport", "")
+    if attribution_export:
+        command.extend(["--business-json", str(attribution_export)])
+    else:
+        append_many(command, "--business-csv", args.business_csv)
+        append_many(command, "--business-json", args.business_json)
     append_many(command, "--business-text", args.business_text)
     step = run_command("metrics_recovery", command)
     steps.append(step)
@@ -272,6 +402,9 @@ def build_cycle_report(
     workflow: dict[str, Any],
     publish: dict[str, Any],
     published: dict[str, Any],
+    post_publish_metrics: dict[str, Any],
+    comment_evidence: dict[str, Any],
+    business_attribution: dict[str, Any],
     metrics: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -281,8 +414,11 @@ def build_cycle_report(
         "workflow": workflow,
         "publishQueue": publish,
         "publishedItems": published,
+        "postPublishMetricsCapture": post_publish_metrics,
+        "commentEvidenceCapture": comment_evidence,
+        "businessAttribution": business_attribution,
         "metricsRecovery": metrics,
-        "automationStatus": cycle_status(workflow, publish, published, metrics),
+        "automationStatus": cycle_status(workflow, publish, published, post_publish_metrics, comment_evidence, business_attribution, metrics),
         "approval": {
             "approvalPhrase": APPROVAL_PHRASE,
             "publishExecutionRequested": args.execute_publish,
@@ -299,13 +435,27 @@ def build_cycle_report(
     }
 
 
-def cycle_status(workflow: dict[str, Any], publish: dict[str, Any], published: dict[str, Any], metrics: dict[str, Any]) -> str:
+def cycle_status(
+    workflow: dict[str, Any],
+    publish: dict[str, Any],
+    published: dict[str, Any],
+    post_publish_metrics: dict[str, Any],
+    comment_evidence: dict[str, Any],
+    business_attribution: dict[str, Any],
+    metrics: dict[str, Any],
+) -> str:
     if workflow.get("status") != "ready":
         return "workflow_failed"
     if publish.get("status") not in {"ready", "skipped"}:
         return "publish_queue_failed"
     if published.get("status") not in {"ready", "skipped"}:
         return "published_items_failed"
+    if post_publish_metrics.get("status") not in {"ready", "skipped"}:
+        return "post_publish_metrics_capture_failed"
+    if comment_evidence.get("status") not in {"ready", "skipped"}:
+        return "comment_evidence_capture_failed"
+    if business_attribution.get("status") not in {"ready", "skipped"}:
+        return "business_attribution_failed"
     if metrics.get("status") != "ready":
         return "metrics_recovery_failed"
     recovery_status = (metrics.get("summary") or {}).get("recoveryStatus", "")
@@ -344,6 +494,21 @@ def render_cycle_markdown(report: dict[str, Any]) -> str:
         f"- Status: `{report['publishedItems'].get('status', '')}`",
         f"- Report: {report['publishedItems'].get('publishedItems', '')}",
         f"- Summary: {report['publishedItems'].get('summary', {})}",
+        "",
+        "## Post-Publish Metrics Capture",
+        f"- Status: `{report['postPublishMetricsCapture'].get('status', '')}`",
+        f"- Report: {report['postPublishMetricsCapture'].get('report', '')}",
+        f"- Summary: {report['postPublishMetricsCapture'].get('summary', {})}",
+        "",
+        "## Comment Evidence Capture",
+        f"- Status: `{report['commentEvidenceCapture'].get('status', '')}`",
+        f"- Report: {report['commentEvidenceCapture'].get('report', '')}",
+        f"- Summary: {report['commentEvidenceCapture'].get('summary', {})}",
+        "",
+        "## Business Attribution",
+        f"- Status: `{report['businessAttribution'].get('status', '')}`",
+        f"- Report: {report['businessAttribution'].get('report', '')}",
+        f"- Summary: {report['businessAttribution'].get('summary', {})}",
         "",
         "## Metrics Recovery",
         f"- Status: `{report['metricsRecovery'].get('status', '')}`",
@@ -433,6 +598,19 @@ def append_many(command: list[str], flag: str, values: list[str]) -> None:
     for value in values:
         if value:
             command.extend([flag, value])
+
+
+def existing_path(value: Any) -> Path | None:
+    if not value:
+        return None
+    path = Path(str(value))
+    return path if path.exists() else None
+
+
+def append_published_urls(command: list[str], values: list[str]) -> None:
+    for value in values:
+        if value:
+            command.extend(["--published-url", value])
 
 
 def display_command(command: list[str]) -> list[str]:
