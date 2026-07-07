@@ -33,6 +33,8 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 
 `scripts/publish_readiness_runner.py` audits an existing queue or builds one first with `--build-queue`. It reports per-platform readiness, missing target fields, credential presence by environment variable name, approval status, and next actions. It does not store secret values and does not bypass the explicit approval gate.
 
+`scripts/platform_access_audit.py` creates the official access boundary report before implementation or execution decisions. It maps each platform to implemented official API paths, official app-review candidates, manual/browser-assisted fallbacks, metrics evidence sources, required environment variable names, and implementation gaps. Use `--check-live` only when you want to verify that official documentation URLs are reachable.
+
 `scripts/publish_executor.py` supports:
 
 - GitHub file create/update through the repository contents REST API.

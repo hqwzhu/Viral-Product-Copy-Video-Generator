@@ -366,6 +366,14 @@ python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
 
 Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, and YouTube `videos.insert` upload. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Zhihu, Xiaohongshu, and Douyin remain manual/browser-assisted unless official app permissions are configured and verified.
 
+Before claiming a platform can be fully automated, generate the official access boundary report:
+
+```bash
+python scripts/platform_access_audit.py --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/platform-access/platform-access-audit.{json,md}`. The report maps each platform to implemented official API paths, official app-review candidates, manual/browser-assisted fallbacks, required environment variable names, and metrics recovery evidence rules. It records only environment variable names, never credential values.
+
 For a YouTube upload when no access token exists yet, use the OAuth helper:
 
 ```bash

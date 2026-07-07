@@ -43,6 +43,7 @@ COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
+PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 
 
@@ -2111,7 +2112,60 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
+        self.assertTrue(report["platformAccessAudit"]["ready"])
+        self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
+
+    def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-access-audit-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env = os.environ.copy()
+        secret_value = "super-secret-platform-token"
+        for name in [
+            "YOUTUBE_API_KEY",
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "DOUYIN_CLIENT_KEY",
+            "DOUYIN_CLIENT_SECRET",
+            "DOUYIN_ACCESS_TOKEN",
+            "DOUYIN_OPEN_ID",
+            "TIKTOK_CLIENT_KEY",
+            "TIKTOK_CLIENT_SECRET",
+            "TIKTOK_ACCESS_TOKEN",
+            "TIKTOK_OPEN_ID",
+        ]:
+            env.pop(name, None)
+        env["YOUTUBE_OAUTH_ACCESS_TOKEN"] = secret_value
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_ACCESS_AUDIT),
+                "--platforms",
+                "youtube,github,xiaohongshu,zhihu,douyin,tiktok",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/platform-access/platform-access-audit.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        by_platform = {item["platform"]: item for item in report["platforms"]}
+        self.assertEqual(by_platform["youtube"]["publish"]["access"], "implemented_official_api")
+        self.assertTrue(by_platform["youtube"]["publish"]["readyForAutomation"])
+        self.assertEqual(by_platform["github"]["publish"]["access"], "implemented_official_api")
+        self.assertEqual(by_platform["xiaohongshu"]["publish"]["access"], "no_verified_public_creator_publish_endpoint")
+        self.assertEqual(by_platform["zhihu"]["publish"]["mode"], "manual_or_browser_assisted_until_verified")
+        self.assertEqual(by_platform["douyin"]["publish"]["access"], "official_candidate_not_integrated")
+        self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
+        self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
+        self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
 
     def test_viral_discovery_runner_builds_multiplatform_library_and_creator_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-runner-test-"))

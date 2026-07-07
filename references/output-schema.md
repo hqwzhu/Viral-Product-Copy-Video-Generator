@@ -50,6 +50,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
+- `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
@@ -213,6 +214,21 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `steps[]`: sanitized publish-queue build command ledger when `--build-queue` is used
 - `guardrails`: no secret values, no auto-login, no captcha bypass, no private endpoints, and no claimed publishing without real evidence
 
+## Platform Access Audit
+
+`platform-access-audit.json` includes:
+
+- `status`: `full_official_access_ready`, `partial_ready_credentials_required`, or `partial_ready_official_paths_mapped`
+- `checkLive`: whether official documentation URLs were fetched during the run
+- `platforms[]`: one access record per requested platform
+- `platforms[].publish`: official API, official app-review candidate, or manual/browser-assisted publishing access mode
+- `platforms[].metrics`: official API, public API, official export, manual export, or structured-snapshot metric access mode
+- `platforms[].credentialStatus`: required environment variable names, present environment variable names, missing names, and `valuesStored: false`
+- `platforms[].officialDocs`: official documentation URLs used as evidence
+- `platforms[].automationLevel`: `official_publish_and_metrics_ready`, `official_publish_ready_when_credentials_present`, `official_app_integration_required`, or `manual_or_browser_assisted_required`
+- `implementationGaps[]`: missing official executors, missing verified creator publish APIs, or metric evidence requirements
+- `guardrails`: no private endpoints, no hidden tokens, no captcha bypass, and no fully automated claim without official access
+
 ## Published Items
 
 `published-items.json` includes:
@@ -287,6 +303,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `localTools`: Python, Git, `ffmpeg`, Playwright, and Playwright Chromium availability
 - `credentials`: environment variable names that are present, never secret values
 - `scripts`: bundled script existence map
+- `platformAccessAudit`: script readiness and command for generating the official access boundary report
 - `selfEvolution`: controlled autonomy status, allowed runtime installs, and blocked unsafe self-upgrade actions
 - `recommendedCommands`: copy-ready commands for one-command cycles, safe runtime setup, and periodic jobs
 - `nextActions`: prioritized fixes needed to move closer to the final requested Agent

@@ -29,6 +29,7 @@ Use this reference when the user asks for full automation.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.
+- Audit official platform access boundaries with `scripts/platform_access_audit.py`, mapping implemented official APIs, official app-review candidates, manual/browser-assisted fallback rules, required environment variable names, and metric evidence requirements.
 - Register proven published URLs from official execution reports, publish queues, or manual/browser-assisted evidence into a standard published-items report for later metrics recovery.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
 - Run a one-command local operating cycle that chains workflow generation, guarded publish queue, published URL registration, and metrics recovery while preserving approval gates and evidence requirements.

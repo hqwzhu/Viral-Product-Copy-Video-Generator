@@ -37,6 +37,7 @@ SCRIPT_REQUIREMENTS = {
     "render_video": "render_video.py",
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
+    "platform_access_audit": "platform_access_audit.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
     "published_items": "published_items.py",
@@ -154,6 +155,7 @@ def build_report(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "localTools": tools,
         "credentials": credentials,
         "scripts": scripts,
+        "platformAccessAudit": platform_access_audit_status(scripts, out_dir),
         "selfEvolution": self_evolution_status(tools),
         "recommendedCommands": recommended_commands(out_dir),
         "nextActions": actions,
@@ -377,7 +379,10 @@ def requirement_status(
             "id": "all_platform_auto_publish",
             "label": "Automatically publish to YouTube, Zhihu, Xiaohongshu, Douyin, and GitHub",
             "status": "ready" if publish_ready and full_platform_publish_ready else "blocked_by_authorization_or_platform_limits",
-            "evidence": scripts_present(scripts, ["publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"]),
+            "evidence": scripts_present(
+                scripts,
+                ["platform_access_audit", "publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"],
+            ),
             "missing": missing_publish_credentials(credentials),
             "limits": [
                 "GitHub and YouTube writes require official credentials plus explicit publish approval.",
@@ -469,6 +474,15 @@ def self_evolution_status(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def platform_access_audit_status(scripts: dict[str, dict[str, Any]], out_dir: Path) -> dict[str, Any]:
+    return {
+        "ready": bool(scripts.get("platform_access_audit", {}).get("exists")),
+        "script": str(scripts.get("platform_access_audit", {}).get("file", "")),
+        "command": f"python scripts/platform_access_audit.py --out-dir \"{out_dir}\"",
+        "purpose": "machine-readable official API, manual publishing, and metrics access boundary audit",
+    }
+
+
 def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
     return [
         {
@@ -477,6 +491,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
             ),
+        },
+        {
+            "purpose": "audit_platform_official_access",
+            "command": f"python scripts/platform_access_audit.py --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "audit_publish_readiness",
@@ -600,6 +618,16 @@ def render_markdown(report: dict[str, Any]) -> str:
     for platform, info in report["platforms"].items():
         lines.append(
             f"- {platform}: search=`{info['viralSearch']}`, publish=`{info['directPublish']}`, metrics=`{info['metricsRecovery']}`"
+        )
+    access = report.get("platformAccessAudit") or {}
+    if access:
+        lines.extend(
+            [
+                "",
+                "## Platform Access Audit",
+                f"- Ready: {access.get('ready')}",
+                f"- Command: `{access.get('command')}`",
+            ]
         )
     lines.extend(["", "## Next Actions"])
     for action in report["nextActions"]:
