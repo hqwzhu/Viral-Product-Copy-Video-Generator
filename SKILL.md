@@ -210,6 +210,14 @@ python scripts/published_items.py \
   --out-dir "./promotion-output"
 ```
 
+To capture a browser-visible published page snapshot and register its real URL:
+
+```bash
+python scripts/publish_url_capture.py \
+  --structured-json "./published-page-snapshot.json" \
+  --out-dir "./promotion-output"
+```
+
 To configure periodic local automation:
 
 ```bash
@@ -272,6 +280,7 @@ The command writes:
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
+- `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` captures a browser-visible published page and registers the real URL.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
@@ -344,6 +353,7 @@ Use `scripts/publish_executor.py` for supported official publishing actions. It 
 Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAuth consent flow before upload. It requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for execution and does not save OAuth tokens.
 Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, Douyin, and other unsupported direct-publish platforms.
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
+Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
 
 ### 6. Retrospective
 
@@ -388,6 +398,7 @@ If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scri
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
+- `scripts/publish_url_capture.py`: post-publish browser snapshot/HTML/text capturer that registers real published URLs.
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, and manual/browser-assisted publish tasks.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub and YouTube.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.

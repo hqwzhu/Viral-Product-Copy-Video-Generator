@@ -274,6 +274,16 @@ python scripts/published_items.py \
   --out-dir "./promotion-output"
 ```
 
+If Codex or the user has a browser-visible post-publish page snapshot, saved HTML, or copied page text, capture and register it directly:
+
+```bash
+python scripts/publish_url_capture.py \
+  --structured-json "./published-page-snapshot.json" \
+  --out-dir "./promotion-output"
+```
+
+The capture script extracts the real platform URL, title, content id, and evidence, then updates `reports/promotion-manager/published-items/published-items.{json,md}`. It must block draft, editor, preview, localhost, and unknown-platform URLs instead of registering them as published content.
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.

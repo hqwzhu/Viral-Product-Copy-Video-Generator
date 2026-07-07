@@ -26,6 +26,7 @@ METRICS_RECOVERY = ROOT / "scripts" / "metrics_recovery.py"
 PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
+PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
@@ -1232,6 +1233,99 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("xhs-screenshot.png", by_platform["xiaohongshu"]["evidence"])
         self.assertEqual(report["pendingQueueItems"][0]["platform"], "douyin")
         self.assertTrue((out_dir / "reports/promotion-manager/published-items/published-items.md").exists())
+
+    def test_publish_url_capture_registers_structured_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "published-snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://www.xiaohongshu.com/explore/note123",
+                    "title": "AI Prompt Kit launch note",
+                    "text": "Published note page visible in browser.",
+                    "screenshot": "xhs-published.png",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_URL_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        capture = json.loads((out_dir / "reports/promotion-manager/publish-capture/publish-url-capture.json").read_text(encoding="utf-8"))
+        self.assertEqual(capture["status"], "ready")
+        self.assertEqual(capture["record"]["platform"], "xiaohongshu")
+        self.assertEqual(capture["record"]["contentId"], "note123")
+        published = json.loads((out_dir / "reports/promotion-manager/published-items/published-items.json").read_text(encoding="utf-8"))
+        self.assertEqual(published["summary"]["published"], 1)
+        self.assertEqual(published["records"][0]["publishedUrl"], "https://www.xiaohongshu.com/explore/note123")
+
+    def test_publish_url_capture_extracts_html_canonical_url(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-html-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "published.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>知乎发布文章</title>
+  <link rel="canonical" href="https://zhuanlan.zhihu.com/p/123456">
+  <meta property="og:title" content="AI Prompt Kit launch article">
+</head>
+<body><h1>AI Prompt Kit launch article</h1></body>
+</html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_URL_CAPTURE),
+                "--html-file",
+                str(html_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/publish-capture/publish-url-capture.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["record"]["platform"], "zhihu")
+        self.assertEqual(report["record"]["publishedUrl"], "https://zhuanlan.zhihu.com/p/123456")
+
+    def test_publish_url_capture_blocks_preview_urls(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-preview-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        text_path = out_dir / "preview.txt"
+        text_path.write_text(
+            "Platform: douyin\nURL: https://www.douyin.com/user/self/preview/video123\nTitle: Draft preview\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_URL_CAPTURE),
+                "--text-file",
+                str(text_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/publish-capture/publish-url-capture.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("url_looks_like_draft_or_preview", report["issues"])
+        self.assertFalse((out_dir / "reports/promotion-manager/published-items/published-items.json").exists())
 
     def test_metrics_recovery_reads_default_published_items_report(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-published-items-test-"))

@@ -38,6 +38,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` when `scripts/publish_queue.py` turns publish packs into official dry-run tasks and manual/browser-assisted tasks
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
+- `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
@@ -91,6 +92,17 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `summary`: counts for published records, pending queue items, and platforms
 - `sources[]`: publish queues, publish execution reports, existing published-items files, or direct CLI registration evidence used to build the report
 - `guardrails`: rules that prevent treating dry-runs or queued tasks as published content
+
+## Publish URL Capture
+
+`publish-url-capture.json` includes:
+
+- `status`: `ready` when a real platform URL was registered, or `blocked` when URL/platform evidence is missing or unsafe
+- `inputMode`: `structured_json`, `html_file`, `text_file`, or `public_url_fetch`
+- `candidate`: extracted platform, published URL, content id, title, and evidence
+- `record`: the normalized published item written into `published-items.json` when ready
+- `issues[]`: validation blockers such as `missing_published_url`, `unknown_platform`, or `url_looks_like_draft_or_preview`
+- `guardrails`: no cookies, passwords, hidden tokens, preview URLs, drafts, or fabricated publishing evidence
 
 ## Result Data Rule
 
