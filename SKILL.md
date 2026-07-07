@@ -35,6 +35,21 @@ python scripts/promotion_manager.py all \
   --out-dir "./promotion-output"
 ```
 
+To extract a product profile directly from a public page or saved HTML:
+
+```bash
+python scripts/product_intake.py --url "https://example.com/product" --out-dir "./promotion-output/intake"
+```
+
+To render a real MP4 draft video after content generation:
+
+```bash
+python scripts/render_video.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json" \
+  --platform douyin \
+  --out "./promotion-output/videos/ai-prompt-kit-douyin.mp4"
+```
+
 The command writes:
 
 - `docs/promotion-manager/01-platform-publishing-feasibility.md`
@@ -44,6 +59,7 @@ The command writes:
 - `docs/promotion-manager/05-browser-extension-roadmap.md`
 - `docs/promotion-manager/06-saas-product-roadmap.md`
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
+- `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
 ## Workflows
 
@@ -52,6 +68,7 @@ The command writes:
 - Extract factual product information from the page.
 - Mark uncertain details as assumptions; do not invent pricing, testimonials, sales, or usage numbers.
 - If a page cannot be read, ask for pasted product info.
+- Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML or saved product pages.
 
 ### 2. Competitor And Trend Research
 
@@ -70,6 +87,8 @@ Generate platform-native material:
 - Xiaohongshu: note titles, post bodies, cover text, tags, comment prompts.
 - Douyin: 30-second hooks, voiceover scripts, storyboard, captions, hashtags.
 - GitHub: README promotion copy, Release/Issue/Discussion drafts.
+
+When the user asks for a video file, run `scripts/render_video.py` to create a draft MP4 from the generated content JSON. This creates a silent review artifact with burned-in captions; replace it with real voiceover and visuals before final publication if production quality is required.
 
 ### 4. Review And Score
 
@@ -97,6 +116,7 @@ Every publish pack must include:
 - schedule suggestion
 
 YouTube and GitHub may be official API candidates. Zhihu, Xiaohongshu, and Douyin default to manual or browser-assisted publishing unless current official evidence proves otherwise.
+For full-automation boundaries, read [references/final-capability-boundaries.md](references/final-capability-boundaries.md).
 
 ### 6. Retrospective
 
@@ -119,8 +139,11 @@ If no real data exists, output `waiting_real_data`. Never estimate or fabricate 
 ## Bundled Resources
 
 - `scripts/promotion_manager.py`: deterministic report generator.
+- `scripts/product_intake.py`: public URL or saved HTML product-profile extractor.
+- `scripts/render_video.py`: ffmpeg-based MP4 draft renderer.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.
 - `references/platform-publishing.md`: platform publishing modes and safety rules.
+- `references/final-capability-boundaries.md`: final automation, authorization, and self-evolution limits.
 - `references/cheat-on-content-integration.md`: optional review integration and prediction-cycle boundary.
 - `references/output-schema.md`: report and field schema.

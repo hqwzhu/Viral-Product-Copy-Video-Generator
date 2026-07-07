@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
+PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
+RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -113,6 +115,60 @@ class PromotionManagerScriptTest(unittest.TestCase):
         retrospective = self.load_json(out_dir, "reports/promotion-manager/retrospectives/ai-prompt-kit-retrospective.json")
         self.assertEqual(retrospective["status"], "waiting_real_data")
         self.assertEqual(retrospective["publishedItems"], [])
+
+    def test_product_intake_extracts_profile_from_html(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "product.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit - ENHE</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <meta property="og:title" content="AI Prompt Kit">
+  <meta property="og:image" content="https://example.com/cover.png">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>AI Prompt Kit</body>
+</html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(PRODUCT_INTAKE), "--html-file", str(html_path), "--out-dir", str(out_dir / "intake")],
+            check=True,
+            cwd=ROOT,
+        )
+        profile = json.loads((out_dir / "intake" / "product-profile.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["productName"], "AI Prompt Kit")
+        self.assertEqual(profile["pricing"], "19")
+        self.assertIn("Prompt templates", profile["valueProposition"])
+        self.assertTrue((out_dir / "intake" / "product-profile.md").exists())
+
+    def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is not installed")
+        out_dir = self.run_all()
+        content_json = out_dir / "reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json"
+        video_path = out_dir / "videos" / "ai-prompt-kit-douyin.mp4"
+        subprocess.run(
+            [
+                sys.executable,
+                str(RENDER_VIDEO),
+                "--content-json",
+                str(content_json),
+                "--platform",
+                "douyin",
+                "--out",
+                str(video_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        self.assertTrue(video_path.exists())
+        self.assertGreater(video_path.stat().st_size, 1000)
+        metadata = json.loads(video_path.with_suffix(".json").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["platform"], "douyin")
 
 
 if __name__ == "__main__":

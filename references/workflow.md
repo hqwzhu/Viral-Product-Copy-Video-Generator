@@ -18,6 +18,12 @@ Required fields:
 
 If the user only provides a URL, inspect the page and derive a draft profile. Label uncertain facts as assumptions.
 
+Use the deterministic extractor when possible:
+
+```bash
+python scripts/product_intake.py --url "https://example.com/product" --out-dir "./promotion-output/intake"
+```
+
 ## Stage 2: Research
 
 Create a competitor and trend research note before generating final content when the user wants current market positioning.
@@ -52,6 +58,17 @@ Generated self-learning docs must be written to `docs/promotion-manager/`, not o
 ## Stage 3: Generate
 
 Generate one platform-native content pack per target platform. Content must include a CTA and compliance note.
+
+To create a reviewable MP4 after content generation:
+
+```bash
+python scripts/render_video.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json" \
+  --platform douyin \
+  --out "./promotion-output/videos/ai-prompt-kit-douyin.mp4"
+```
+
+The rendered video is a draft artifact with silent audio and burned-in text. Do not treat it as final production creative unless the user accepts that quality level.
 
 ## Stage 4: Review
 

@@ -13,6 +13,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 ## Reports
 
+- `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run
 - `reports/promotion-manager/research/platform-publishing-feasibility.{json,md}`
 - `reports/promotion-manager/research/github-reference-projects.{json,md}`
 - `reports/promotion-manager/research/platform-risk-matrix.{json,md}`
@@ -25,6 +26,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-packs/platform-publish-capability-map.{json,md}`
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
+- `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run
 
 ## Publish Modes
 
