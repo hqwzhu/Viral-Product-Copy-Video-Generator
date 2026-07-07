@@ -19,8 +19,8 @@ When the user sends a product link, do this:
 
 1. Inspect the product page or ask for missing basics: product name, target audience, pain points, value proposition, price, target platforms, and primary goal.
 2. Research platform constraints and competitors when the request depends on current information. Prefer official docs for API/publishing claims.
-3. Use `scripts/promotion_manager.py all` to generate deterministic local reports.
-4. Review the generated content. If `cheat-on-content` is installed, use it for a second-pass content review; otherwise use the generated scorecard.
+3. Use `scripts/promotion_manager.py all` to generate deterministic local docs and reports.
+4. Review the generated content. If `cheat-on-content` is installed, use it for a second-pass content review; otherwise use the generated scorecard. Read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md) before writing prediction logs.
 5. Give the user publish packs and ask for approval before any publishing action.
 
 Example:
@@ -34,6 +34,16 @@ python scripts/promotion_manager.py all \
   --goal leads \
   --out-dir "./promotion-output"
 ```
+
+The command writes:
+
+- `docs/promotion-manager/01-platform-publishing-feasibility.md`
+- `docs/promotion-manager/02-github-reference-projects.md`
+- `docs/promotion-manager/03-platform-risk-matrix.md`
+- `docs/promotion-manager/04-self-learning-notes.md`
+- `docs/promotion-manager/05-browser-extension-roadmap.md`
+- `docs/promotion-manager/06-saas-product-roadmap.md`
+- `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 
 ## Workflows
 
@@ -49,6 +59,7 @@ python scripts/promotion_manager.py all \
 - For Zhihu, Xiaohongshu, and Douyin, use manual links, browser-assisted review, or user-provided screenshots/content where automated access is risky.
 - Save findings in the output reports. Do not claim a platform API exists without official evidence.
 - For detailed routing, read [references/platform-publishing.md](references/platform-publishing.md).
+- Use the script `research` command first when platform feasibility or self-learning notes are needed.
 
 ### 3. Content Generation
 
@@ -72,7 +83,7 @@ Score every platform draft for:
 - SEO/GEO value
 - compliance risk
 
-If `cheat-on-content` is available, run a qualitative review through that skill. Do not write immutable prediction logs unless the user explicitly asks to start a real `cheat-on-content` prediction cycle.
+If `cheat-on-content` is available, run a qualitative review through that skill. Do not write immutable prediction logs unless the user explicitly asks to start a real `cheat-on-content` prediction cycle. For details, read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md).
 
 ### 5. Publish Pack
 
@@ -108,7 +119,8 @@ If no real data exists, output `waiting_real_data`. Never estimate or fabricate 
 ## Bundled Resources
 
 - `scripts/promotion_manager.py`: deterministic report generator.
+- `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.
 - `references/platform-publishing.md`: platform publishing modes and safety rules.
+- `references/cheat-on-content-integration.md`: optional review integration and prediction-cycle boundary.
 - `references/output-schema.md`: report and field schema.
-

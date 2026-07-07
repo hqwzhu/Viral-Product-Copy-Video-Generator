@@ -22,6 +22,16 @@ If the user only provides a URL, inspect the page and derive a draft profile. La
 
 Create a competitor and trend research note before generating final content when the user wants current market positioning.
 
+Start with:
+
+```bash
+python scripts/promotion_manager.py research \
+  --product-name "AI Prompt Kit" \
+  --product-url "https://www.enhe-tech.com.cn/validation/ai-prompt-kit" \
+  --audience "AI tool operators, creators, ecommerce sellers" \
+  --value-proposition "Prompt templates for product copy, SEO content, and video scripts"
+```
+
 Minimum research output:
 
 - platform
@@ -37,6 +47,7 @@ Minimum research output:
 - reusable pattern
 
 Use live research for platform/API claims because publishing capabilities change.
+Generated self-learning docs must be written to `docs/promotion-manager/`, not only printed in chat.
 
 ## Stage 3: Generate
 
@@ -54,3 +65,6 @@ Create publish packs. Every pack requires human approval before execution. Brows
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.
 
+## Phase 2 And Phase 3 Boundaries
+
+The script may generate roadmap documents for a browser extension and SaaS product, but do not implement either until the user explicitly approves that phase.

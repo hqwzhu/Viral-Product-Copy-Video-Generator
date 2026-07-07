@@ -2,22 +2,29 @@
 
 The script writes JSON and Markdown reports under the selected output directory.
 
-## Files
+## Docs
 
-- `platform-publish-capability-map.json`
-- `platform-publish-capability-map.md`
-- `content-plan.json`
-- `content-plan.md`
-- `platform-content.json`
-- `platform-content.md`
-- `content-review.json`
-- `content-review.md`
-- `publish-pack.json`
-- `publish-pack.md`
-- `publish-result-input.json`
-- `publish-result-input.md`
-- `retrospective.json`
-- `retrospective.md`
+- `docs/promotion-manager/01-platform-publishing-feasibility.md`
+- `docs/promotion-manager/02-github-reference-projects.md`
+- `docs/promotion-manager/03-platform-risk-matrix.md`
+- `docs/promotion-manager/04-self-learning-notes.md`
+- `docs/promotion-manager/05-browser-extension-roadmap.md`
+- `docs/promotion-manager/06-saas-product-roadmap.md`
+
+## Reports
+
+- `reports/promotion-manager/research/platform-publishing-feasibility.{json,md}`
+- `reports/promotion-manager/research/github-reference-projects.{json,md}`
+- `reports/promotion-manager/research/platform-risk-matrix.{json,md}`
+- `reports/promotion-manager/research/self-learning-notes.{json,md}`
+- `reports/promotion-manager/competitors/<product>-deconstruction.{json,md}`
+- `reports/promotion-manager/content-plans/<product>-content-plan.{json,md}`
+- `reports/promotion-manager/generated-content/<product>-platform-content.{json,md}`
+- `reports/promotion-manager/generated-content/<product>-content-review.{json,md}`
+- `reports/promotion-manager/publish-packs/<product>-publish-pack.{json,md}`
+- `reports/promotion-manager/publish-packs/platform-publish-capability-map.{json,md}`
+- `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
+- `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 
 ## Publish Modes
 
@@ -29,4 +36,3 @@ The script writes JSON and Markdown reports under the selected output directory.
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
-
