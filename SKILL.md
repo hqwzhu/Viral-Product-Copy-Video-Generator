@@ -74,6 +74,14 @@ To extract a product profile directly from a public page or saved HTML:
 python scripts/product_intake.py --url "https://example.com/product" --out-dir "./promotion-output/intake"
 ```
 
+To have Codex read one or more product URLs into structured snapshots and product profiles:
+
+```bash
+python scripts/product_url_reader.py \
+  --url "https://example.com/product" \
+  --out-dir "./promotion-output"
+```
+
 To parse a rendered page snapshot captured by Codex/browser tooling:
 
 ```bash
@@ -359,6 +367,7 @@ The command writes:
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
+- `reports/promotion-manager/intake/product-url-reader.{json,md}` and `product-url-reader/<id>/structured-product-page.json` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots and product profiles.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, and optional follow-up queues as one standalone discovery pass.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
@@ -385,6 +394,7 @@ The command writes:
 - If a page cannot be read, ask for pasted product info.
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
+- Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
 - Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values.
 - Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
 
@@ -492,6 +502,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
+- `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.

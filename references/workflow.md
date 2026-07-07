@@ -63,6 +63,16 @@ python scripts/browser_snapshot.py \
   --out-file "./rendered-product-page.json"
 ```
 
+To run Codex-first product URL reading as a standalone intake pass:
+
+```bash
+python scripts/product_url_reader.py \
+  --url "https://example.com/product" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/intake/product-url-reader.{json,md}`, a per-URL structured page snapshot, and a per-URL product profile. When browser rendering succeeds, each record includes a `nextWorkflowCommand` that uses `--structured-json`; if only static fallback succeeds, it uses `--product-url` and marks the record as `partial_ready`.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

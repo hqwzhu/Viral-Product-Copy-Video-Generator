@@ -22,6 +22,7 @@ SAFE_INSTALLS = {"playwright_chromium"}
 
 SCRIPT_REQUIREMENTS = {
     "browser_snapshot": "browser_snapshot.py",
+    "product_url_reader": "product_url_reader.py",
     "product_intake": "product_intake.py",
     "run_workflow": "run_promotion_workflow.py",
     "platform_search_browser": "platform_search_browser.py",
@@ -304,7 +305,7 @@ def requirement_status(
     credentials: dict[str, dict[str, Any]],
     platforms: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    browser_intake_ready = scripts_ready(scripts, ["browser_snapshot", "product_intake", "run_workflow"])
+    browser_intake_ready = scripts_ready(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"])
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
     )
@@ -337,8 +338,8 @@ def requirement_status(
             "id": "product_url_structured_intake",
             "label": "Automatically parse product URLs through Codex/browser structured snapshots",
             "status": "ready" if browser_intake_ready and browser_runtime_ready else "partial_ready",
-            "evidence": scripts_present(scripts, ["browser_snapshot", "product_intake", "run_workflow"]),
-            "missing": missing_for_scripts(scripts, ["browser_snapshot", "product_intake", "run_workflow"])
+            "evidence": scripts_present(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"]),
+            "missing": missing_for_scripts(scripts, ["browser_snapshot", "product_url_reader", "product_intake", "run_workflow"])
             + ([] if browser_runtime_ready else ["Playwright Chromium runtime not verified"]),
         },
         {

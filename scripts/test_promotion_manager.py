@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
+PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
@@ -321,6 +322,60 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(profile["sourceType"], "browser_rendered_snapshot")
         self.assertEqual(profile["productName"], "AI Prompt Kit")
         self.assertEqual(profile["pricing"], "19")
+
+    def test_product_url_reader_creates_structured_snapshot_then_profile(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "product.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <link rel="canonical" href="https://example.com/ai-prompt-kit">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content. Start for $19.</p>
+  <button>Start free</button>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        command = [
+            sys.executable,
+            str(PRODUCT_URL_READER),
+            "--url",
+            html_path.as_uri(),
+            "--out-dir",
+            str(out_dir / "output"),
+        ]
+        expect_browser_structured = playwright_chromium_available()
+        if not expect_browser_structured:
+            command.append("--skip-browser")
+        subprocess.run(command, check=True, cwd=ROOT)
+        report_path = out_dir / "output/reports/promotion-manager/intake/product-url-reader.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["requestedUrls"], 1)
+        record = report["records"][0]
+        self.assertTrue(Path(record["intake"]["profile"]).exists())
+        self.assertEqual(record["product"]["productName"], "AI Prompt Kit")
+        if expect_browser_structured:
+            self.assertEqual(report["status"], "ready")
+            self.assertEqual(report["summary"]["browserStructuredProfiles"], 1)
+            self.assertEqual(record["sourceMode"], "browser_structured_snapshot")
+            self.assertTrue(Path(record["browser"]["snapshot"]).exists())
+            self.assertEqual(record["product"]["sourceType"], "browser_rendered_snapshot")
+            self.assertIn("--structured-json", record["nextWorkflowCommand"])
+        else:
+            self.assertEqual(report["status"], "partial_ready")
+            self.assertEqual(report["summary"]["staticFallbackProfiles"], 1)
+            self.assertEqual(record["sourceMode"], "static_url_fallback")
+            self.assertEqual(record["product"]["sourceType"], "html")
+            self.assertIn("--product-url", record["nextWorkflowCommand"])
+        self.assertTrue((out_dir / "output/reports/promotion-manager/intake/product-url-reader.md").exists())
 
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))

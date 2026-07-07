@@ -15,6 +15,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` captures browser-visible product page evidence
+- `reports/promotion-manager/intake/product-url-reader.{json,md}` when `scripts/product_url_reader.py` reads one or more product URLs into structured page snapshots and product profiles
+- `product-url-reader/<id>/structured-product-page.json` and `product-url-reader/<id>/intake/product-profile.{json,md}` per product URL read by `scripts/product_url_reader.py`
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
 - `promotion-output/automation/scheduler/automation-run.{json,md}` when `scripts/automation_scheduler.py run` executes due jobs
@@ -58,6 +60,23 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
+
+## Product URL Reader
+
+`product-url-reader.json` includes:
+
+- `status`: `ready`, `partial_ready`, or `blocked`
+- `records[]`: one record per product URL
+- `records[].browser`: browser-rendered snapshot status and `structured-product-page.json` path when available
+- `records[].intake`: product profile status and product profile paths
+- `records[].sourceMode`: `browser_structured_snapshot`, `static_url_fallback`, or `unavailable`
+- `records[].product`: product name, canonical URL, source type, value proposition, pricing, confidence, audience assumptions, and pain point assumptions
+- `records[].nextWorkflowCommand`: the correct next `run_promotion_workflow.py` command using `--structured-json` when possible and `--product-url` only when static fallback was used
+- `summary`: requested URLs, ready records, partial records, blocked records, browser structured profiles, and static fallback profiles
+- `steps[]`: sanitized browser snapshot and product intake command ledger
+- `guardrails`: no cookies, passwords, hidden tokens, private endpoints, captcha bypass, or fabricated product claims
+
+`product-url-reader/<id>/structured-product-page.json` is the browser-visible page evidence passed into `product_intake.py`. `product-url-reader/<id>/intake/product-profile.json` is the normalized product profile used by later promotion workflow stages.
 
 ## Workflow Manifest
 
