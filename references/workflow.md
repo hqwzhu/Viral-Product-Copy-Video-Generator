@@ -476,6 +476,16 @@ python scripts/comment_evidence_capture.py \
 
 This writes `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json`. It captures visible comments, visible likes/replies per comment, and recurring demand signals such as questions, pricing concerns, integrations, feature requests, pain points, objections, and CTA intent. If comments are behind login, captcha, risk checks, or private analytics, it writes a manual evidence request instead of bypassing the platform.
 
+When the business export contains UTM/source/referrer/order rows instead of direct published URLs, attribute it before recovery:
+
+```bash
+python scripts/business_attribution.py \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/business-attribution/business-attribution.{json,md}` and `business-attribution-export.json`. It matches rows to proven published items by exact URL, referrer URL, landing page URL, UTM content/content ID, or title/campaign evidence. Platform-only rows remain unmatched so orders and revenue are not overclaimed.
+
 Run one full local operating cycle when you want workflow generation, guarded publishing, published URL registration, and metrics recovery in one command:
 
 ```bash
@@ -531,6 +541,14 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
+When `scripts/business_attribution.py` has produced a matched order/revenue export, merge that attribution output:
+
+```bash
+python scripts/metrics_recovery.py \
+  --business-json "./promotion-output/reports/promotion-manager/business-attribution/business-attribution-export.json" \
+  --out-dir "./promotion-output"
+```
+
 When `scripts/post_publish_metrics_capture.py` has already captured public page metrics, merge its export:
 
 ```bash
@@ -580,6 +598,7 @@ To enable queue generation after a scheduled workflow, set `jobs[].publish.enabl
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Set `jobs[].commentEvidenceCapture.enabled` to `true` to run `scripts/comment_evidence_capture.py` after the workflow. Use `publishedItemsJson`, `publishedUrls`, `structuredJson`, `htmlFile`, `textFile`, `captureBrowserAssisted`, and `allowLocalhost` for explicit public/browser-visible comment evidence sources. The scheduler records `lastCommentEvidenceCapture` in state.
+Set `jobs[].businessAttribution.enabled` to `true` to run `scripts/business_attribution.py` before metrics recovery. Use `businessCsv`, `businessJson`, `publishedItemsJson`, and `publishedUrls` to pass order/revenue exports and content evidence. The scheduler records `lastBusinessAttribution` in state and passes the attribution export to metrics recovery when `metricsRecovery.enabled` is true.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`.

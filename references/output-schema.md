@@ -58,6 +58,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs
 - `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json` when `scripts/comment_evidence_capture.py` captures public/browser-visible comments and demand signals
+- `reports/promotion-manager/business-attribution/business-attribution.{json,md}` and `business-attribution-export.json` when `scripts/business_attribution.py` attributes order/revenue exports to proven published content
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
@@ -346,6 +347,21 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `retrospective`: `ready` only when real metric evidence exists, otherwise `waiting_real_data`
 - `guardrails`: no fabricated metrics, no secret values, no cookies, and no browser tokens
 
+## Business Attribution
+
+`business-attribution.json` includes:
+
+- `status`: `ready`, `partial_ready`, `waiting_business_data`, `waiting_published_items`, or `waiting_content_level_attribution`
+- `summary`: published item count, order row count, matched/unmatched row counts, total orders/revenue, attributed orders/revenue, and platforms
+- `sources[]`: business CSV/JSON files loaded, with row counts
+- `publishedItems[]`: proven published content records used as attribution targets
+- `attributions[]`: matched platform/content records with orders, revenue, optional clicks/leads, evidence paths, match rules, confidence, and matched order rows
+- `unmatchedRows[]`: rows that lacked enough content-level evidence to attribute safely
+- `export.records[]`: normalized records compatible with `metrics_recovery.py --business-json`
+- `guardrails`: no revenue inference from social engagement, no platform-only attribution, and no secret storage
+
+`business-attribution-export.json` is the preferred input for `metrics_recovery.py --business-json` after attribution.
+
 ## Metrics Recovery
 
 `metrics-recovery.json` includes:
@@ -448,6 +464,9 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].metricsRecovery.githubRepos`: optional GitHub repo or list of repos for public REST metrics
 - `jobs[].metricsRecovery.youtubeVideoIds`: optional YouTube video id or list of ids; requires `YOUTUBE_API_KEY` for live statistics
 - `jobs[].metricsRecovery.businessCsv`, `businessJson`, and `businessText`: optional export paths for orders, revenue, clicks, leads, or platform metrics
+- `jobs[].businessAttribution.enabled`: optional boolean; when true, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes the attribution export into recovery
+- `jobs[].businessAttribution.businessCsv` and `businessJson`: optional order/revenue export paths with URL, UTM content, referrer, content ID, title, or campaign fields
+- `jobs[].businessAttribution.publishedItemsJson` and `publishedUrls`: optional proven published content evidence used as attribution targets
 - `jobs[].publish.enabled`: defaults to false; when true, the scheduler runs `scripts/publish_queue.py` after a successful workflow
 - `jobs[].publish.platforms`: optional platform filter for queue generation
 - `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`

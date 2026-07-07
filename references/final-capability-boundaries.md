@@ -28,6 +28,7 @@ Use this reference when the user asks for full automation.
 - Import real post-publish metrics from CSV, JSON, text exports, Codex/browser structured snapshots, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
 - Capture public/browser-visible post-publish metrics from registered published URLs with `scripts/post_publish_metrics_capture.py`, write a metrics export for recovery, and generate manual evidence requests when metrics are hidden behind login, captcha, private analytics, or business systems.
 - Capture public/browser-visible comments and demand signals from registered published URLs, saved HTML, copied text, or structured snapshots with `scripts/comment_evidence_capture.py`, then use those questions, objections, integration requests, pain points, and CTA-intent signals for the next content round.
+- Attribute user-provided order/revenue exports to proven published content with `scripts/business_attribution.py` when rows contain exact URLs, referrer URLs, landing pages, UTM content, content IDs, or title/campaign evidence.
 - Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, structured metric snapshots, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
@@ -51,6 +52,7 @@ Use this reference when the user asks for full automation.
 - Orders and revenue require business-system exports or user-provided analytics evidence; public social platforms generally cannot prove those values.
 - Public post pages may expose views, likes, comments, saves, shares, or similar counters, but hidden analytics, order attribution, and revenue still require official exports, screenshots, or business-system evidence.
 - Public comment pages may expose user questions, objections, and feature requests, but hidden comments, private DMs, account analytics, order attribution, and revenue still require official exports, screenshots, or business-system evidence.
+- Business attribution requires content-level evidence such as URL, UTM content, referrer, landing page, content ID, title, or campaign fields; a platform/source name alone is not enough to claim revenue for a specific post.
 
 ## What Must Stay Browser-Assisted Or Manual
 
@@ -70,6 +72,7 @@ Use this reference when the user asks for full automation.
 - Do not claim revenue, orders, leads, views, likes, comments, or click data without evidence.
 - Do not treat `post_publish_metrics_capture.py` manual evidence requests as recovered data; only captured metric records, official APIs, exports, screenshots, or user-provided evidence count.
 - Do not treat `comment_evidence_capture.py` manual evidence requests as recovered comments or demand signals; only captured public/browser-visible comments, official exports, screenshots, or user-provided evidence count.
+- Do not treat `business_attribution.py` unmatched rows as recovered content performance; only matched rows in the attribution export can be merged into metrics recovery.
 - Do not call unofficial endpoints "official APIs."
 
 ## Self-Evolution Rule

@@ -46,6 +46,7 @@ SCRIPT_REQUIREMENTS = {
     "publish_url_capture": "publish_url_capture.py",
     "post_publish_metrics_capture": "post_publish_metrics_capture.py",
     "comment_evidence_capture": "comment_evidence_capture.py",
+    "business_attribution": "business_attribution.py",
     "metrics_intake": "metrics_intake.py",
     "metrics_recovery": "metrics_recovery.py",
     "automation_scheduler": "automation_scheduler.py",
@@ -342,7 +343,15 @@ def requirement_status(
     )
     metrics_ready = scripts_ready(
         scripts,
-        ["published_items", "publish_url_capture", "post_publish_metrics_capture", "comment_evidence_capture", "metrics_intake", "metrics_recovery"],
+        [
+            "published_items",
+            "publish_url_capture",
+            "post_publish_metrics_capture",
+            "comment_evidence_capture",
+            "business_attribution",
+            "metrics_intake",
+            "metrics_recovery",
+        ],
     )
     cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler"])
     full_platform_publish_ready = all(
@@ -419,7 +428,15 @@ def requirement_status(
             "status": "partial_ready" if metrics_ready else "not_ready",
             "evidence": scripts_present(
                 scripts,
-                ["published_items", "publish_url_capture", "post_publish_metrics_capture", "comment_evidence_capture", "metrics_intake", "metrics_recovery"],
+                [
+                    "published_items",
+                    "publish_url_capture",
+                    "post_publish_metrics_capture",
+                    "comment_evidence_capture",
+                    "business_attribution",
+                    "metrics_intake",
+                    "metrics_recovery",
+                ],
             ),
             "missing": [] if real_metrics_ready else ["published URLs, official metrics credentials, structured metric snapshots, or business exports"],
             "limits": [
@@ -630,6 +647,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "capture_public_comment_evidence",
             "command": f"python scripts/comment_evidence_capture.py --out-dir \"{out_dir}\"",
+        },
+        {
+            "purpose": "attribute_business_results",
+            "command": (
+                f"python scripts/business_attribution.py --business-csv \"./orders-and-revenue.csv\" "
+                f"--out-dir \"{out_dir}\""
+            ),
         },
         {
             "purpose": "install_browser_runtime_when_explicitly_allowed",

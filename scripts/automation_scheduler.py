@@ -18,6 +18,7 @@ PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
+BUSINESS_ATTRIBUTION = SCRIPTS / "business_attribution.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
@@ -102,6 +103,7 @@ def init_config(args: argparse.Namespace) -> None:
         "metrics": {},
         "postPublishMetricsCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
         "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
+        "businessAttribution": {"enabled": False, "businessCsv": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
         "metricsRecovery": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
@@ -211,8 +213,20 @@ def evaluate_job(
     if result.returncode == 0 and manifest_path.exists() and comment_evidence_capture_enabled(job):
         comment_evidence_result = run_comment_evidence_capture(job, out_dir, base_dir)
         record["commentEvidenceCapture"] = comment_evidence_result
+    business_attribution_result: dict[str, Any] = {}
+    if result.returncode == 0 and manifest_path.exists() and business_attribution_enabled(job):
+        business_attribution_result = run_business_attribution(job, out_dir, base_dir)
+        record["businessAttribution"] = business_attribution_result
     if result.returncode == 0 and manifest_path.exists() and metrics_recovery_enabled(job):
-        recovery_result = run_metrics_recovery(job, out_dir, base_dir, manifest_path, publish_result.get("report", ""), post_publish_capture_result)
+        recovery_result = run_metrics_recovery(
+            job,
+            out_dir,
+            base_dir,
+            manifest_path,
+            publish_result.get("report", ""),
+            post_publish_capture_result,
+            business_attribution_result,
+        )
         record["metricsRecovery"] = recovery_result
     job_state["lastRunAt"] = now.isoformat()
     job_state["lastStatus"] = record["status"]
@@ -228,6 +242,8 @@ def evaluate_job(
         job_state["lastPostPublishMetricsCapture"] = record["postPublishMetricsCapture"]["report"]
     if record.get("commentEvidenceCapture", {}).get("report"):
         job_state["lastCommentEvidenceCapture"] = record["commentEvidenceCapture"]["report"]
+    if record.get("businessAttribution", {}).get("report"):
+        job_state["lastBusinessAttribution"] = record["businessAttribution"]["report"]
     if record.get("metricsRecovery", {}).get("report"):
         job_state["lastMetricsRecovery"] = record["metricsRecovery"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
@@ -252,6 +268,10 @@ def post_publish_metrics_capture_enabled(job: dict[str, Any]) -> bool:
 
 def comment_evidence_capture_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("commentEvidenceCapture") or {}).get("enabled"))
+
+
+def business_attribution_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("businessAttribution") or {}).get("enabled"))
 
 
 def multi_query_viral_discovery_enabled(job: dict[str, Any]) -> bool:
@@ -376,6 +396,32 @@ def run_comment_evidence_capture(job: dict[str, Any], out_dir: Path, base_dir: P
     }
 
 
+def run_business_attribution(job: dict[str, Any], out_dir: Path, base_dir: Path) -> dict[str, Any]:
+    command = build_business_attribution_command(job, out_dir, base_dir)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/business-attribution/business-attribution.json"
+    export_path = out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json"
+    summary: dict[str, Any] = {}
+    status = "error"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            summary = report.get("summary", {})
+            status = report.get("status", "ready")
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": status if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "businessAttributionExport": str(export_path) if export_path.exists() else "",
+        "summary": summary,
+    }
+
+
 def run_metrics_recovery(
     job: dict[str, Any],
     out_dir: Path,
@@ -383,8 +429,17 @@ def run_metrics_recovery(
     manifest_path: Path,
     publish_queue_path: str,
     post_publish_capture_result: dict[str, Any] | None = None,
+    business_attribution_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    command = build_metrics_recovery_command(job, out_dir, base_dir, manifest_path, publish_queue_path, post_publish_capture_result or {})
+    command = build_metrics_recovery_command(
+        job,
+        out_dir,
+        base_dir,
+        manifest_path,
+        publish_queue_path,
+        post_publish_capture_result or {},
+        business_attribution_result or {},
+    )
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
     report_path = out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json"
     summary: dict[str, Any] = {}
@@ -417,6 +472,7 @@ def build_metrics_recovery_command(
     manifest_path: Path,
     publish_queue_path: str,
     post_publish_capture_result: dict[str, Any] | None = None,
+    business_attribution_result: dict[str, Any] | None = None,
 ) -> list[str]:
     recovery = job.get("metricsRecovery") or {}
     command = [
@@ -439,6 +495,9 @@ def build_metrics_recovery_command(
     metric_export = (post_publish_capture_result or {}).get("metricExport")
     if metric_export:
         command.extend(["--metrics-json", metric_export])
+    attribution_export = (business_attribution_result or {}).get("businessAttributionExport")
+    if attribution_export:
+        command.extend(["--business-json", attribution_export])
     return command
 
 
@@ -486,6 +545,21 @@ def build_comment_evidence_capture_command(job: dict[str, Any], out_dir: Path, b
         command.append("--install-browser-if-missing")
     if capture.get("allowLocalhost"):
         command.append("--allow-localhost")
+    return command
+
+
+def build_business_attribution_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -> list[str]:
+    attribution = job.get("businessAttribution") or {}
+    command = [
+        sys.executable,
+        str(BUSINESS_ATTRIBUTION),
+        "--out-dir",
+        str(out_dir),
+    ]
+    append_many(command, "--business-csv", attribution.get("businessCsv"), base_dir)
+    append_many(command, "--business-json", attribution.get("businessJson"), base_dir)
+    append_many(command, "--published-items-json", attribution.get("publishedItemsJson"), base_dir)
+    append_many(command, "--published-url", attribution.get("publishedUrls"))
     return command
 
 
@@ -754,6 +828,8 @@ def render_run_report(report: dict[str, Any]) -> str:
             lines.append(f"- Post-publish metrics capture: {record['postPublishMetricsCapture'].get('report', '')}")
         if record.get("commentEvidenceCapture"):
             lines.append(f"- Comment evidence capture: {record['commentEvidenceCapture'].get('report', '')}")
+        if record.get("businessAttribution"):
+            lines.append(f"- Business attribution: {record['businessAttribution'].get('report', '')}")
         if record.get("metricsRecovery"):
             lines.append(f"- Metrics recovery: {record['metricsRecovery'].get('report', '')}")
     lines.extend(["", "## Guardrails"])
