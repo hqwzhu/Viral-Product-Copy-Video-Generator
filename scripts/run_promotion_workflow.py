@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follow-up-capture-limit", type=int, default=20)
     parser.add_argument("--follow-up-dry-run", action="store_true", help="Plan follow-up captures without fetching public URLs.")
     parser.add_argument("--allow-localhost-follow-up", action="store_true", help="Allow localhost follow-up URLs for local fixtures/tests only.")
+    parser.add_argument(
+        "--capture-browser-assisted-follow-ups",
+        action="store_true",
+        help="Attempt browser-visible snapshots for queued Zhihu/Xiaohongshu/Douyin/TikTok follow-up capture tasks.",
+    )
     parser.add_argument("--use-competitor-informed-content", action="store_true", help="Explicitly use viral/deep competitor libraries to rewrite generated content before video and publish packs. This is enabled automatically when a library exists.")
     parser.add_argument("--skip-competitor-informed-content", action="store_true", help="Skip rewriting generated content with competitor-informed patterns.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
@@ -476,6 +481,10 @@ def run_follow_up_captures(
         command.append("--dry-run")
     if args.allow_localhost_follow_up:
         command.append("--allow-localhost")
+    if args.capture_browser_assisted_follow_ups:
+        command.append("--capture-browser-assisted")
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
     step = run_command("follow_up_capture_runner", command, check=False)
     steps.append(step)
     results_path = out_dir / "reports/promotion-manager/competitors/follow-up-capture-results.json"

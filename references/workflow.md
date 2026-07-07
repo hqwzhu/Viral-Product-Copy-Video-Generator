@@ -200,10 +200,11 @@ Execute safe public follow-up capture tasks when you want deeper competitor evid
 ```bash
 python scripts/follow_up_capture_runner.py \
   --tasks-json "./promotion-output/reports/promotion-manager/competitors/follow-up-capture-tasks.json" \
+  --capture-browser-assisted \
   --out-dir "./promotion-output"
 ```
 
-The runner fetches only `public_url_capture_candidate` tasks. For Zhihu, Xiaohongshu, Douyin, TikTok, missing URLs, or unverified platforms, it writes evidence request files under `follow-up-captures/manual-evidence/` and waits for browser-visible text, screenshots, transcripts, official APIs, or exports.
+By default the runner fetches only `public_url_capture_candidate` tasks. With `--capture-browser-assisted`, it also attempts public Playwright snapshots for queued browser-assisted tasks, writes `follow-up-captures/<task>/browser-visible-snapshot.json`, imports visible page evidence into `deep-competitor-library.json`, and falls back to evidence request files when login, captcha, verification, draft, preview, or access-denied content is detected.
 
 Use the competitor-informed enhancer when ranked search materials or deep competitor records should shape the final drafts:
 
@@ -233,6 +234,8 @@ Or let the workflow create those search snapshots first:
 python scripts/run_promotion_workflow.py \
   --browser-url "https://example.com/product" \
   --auto-search-competitors \
+  --run-follow-up-captures \
+  --capture-browser-assisted-follow-ups \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
@@ -241,7 +244,7 @@ Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platfor
 The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
 The workflow runner builds the creator leaderboard automatically after the viral material library succeeds. Use `--skip-creator-leaderboard` only when you want to skip account-level aggregation.
 The workflow runner runs creator/account follow-up only when `--run-creator-follow-up` is supplied. Use `--creator-follow-up-dry-run` to plan the stage without fetching public APIs.
-The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--follow-up-dry-run` to plan the stage without fetching public URLs.
+The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--capture-browser-assisted-follow-ups` to attempt safe browser-visible snapshots for queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks; use `--follow-up-dry-run` to plan the stage without fetching public URLs.
 The workflow runner rewrites generated content with available viral/deep competitor libraries before rendering videos and building final publish queues. Use `--skip-competitor-informed-content` to disable that rewrite.
 
 Start with:
@@ -500,6 +503,7 @@ To enable queue generation after a scheduled workflow, set `jobs[].publish.enabl
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
+Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted platform follow-up tasks.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after viral material ranking.
 Scheduled jobs can set `creatorFollowUp.enabled: true` to run safe creator/account follow-up after the creator leaderboard is built. Use `creatorFollowUp.dryRun: true` for planning-only runs.
 Scheduled jobs can set `competitorInformedContent.enabled: true` to pass the explicit workflow flag or `false` to add `--skip-competitor-informed-content`.

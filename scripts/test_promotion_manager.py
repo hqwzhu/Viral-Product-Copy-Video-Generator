@@ -841,6 +841,97 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(deep["records"][0]["sourceFollowUpTask"]["materialId"], "viral-material-001")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/follow-up-captures/manual-evidence/follow-up-002.md").exists())
 
+    def test_follow_up_capture_runner_imports_browser_visible_platform_page(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="follow-up-browser-capture-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>Launch note teardown</title>
+  <meta name="description" content="A browser-visible launch note with creator and engagement evidence.">
+</head>
+<body>
+  <article>
+    <h1>Launch note teardown</h1>
+    <p>Creator: Red Launch Lab</p>
+    <p>Hook: turn one product URL into a week of short-form posts.</p>
+    <p>Structure: pain point, demo, proof, save-worthy checklist.</p>
+    <p>CTA: comment launch to get the checklist.</p>
+    <p>likes 9000 comments 830 favorites 12000</p>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+
+        tasks_path = out_dir / "follow-up-capture-tasks.json"
+        tasks_path.write_text(
+            json.dumps(
+                {
+                    "tasks": [
+                        {
+                            "id": "follow-up-001",
+                            "materialId": "viral-material-001",
+                            "priority": 1,
+                            "platform": "xiaohongshu",
+                            "title": "Launch note teardown",
+                            "url": url,
+                            "mode": "browser_assisted_capture_required",
+                            "status": "queued",
+                            "requiredEvidence": ["browser-visible page text"],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(FOLLOW_UP_CAPTURE_RUNNER),
+                "--tasks-json",
+                str(tasks_path),
+                "--capture-browser-assisted",
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        results = json.loads((out_dir / "output/reports/promotion-manager/competitors/follow-up-capture-results.json").read_text(encoding="utf-8"))
+        self.assertEqual(results["summary"]["statuses"]["ready"], 1)
+        self.assertEqual(results["summary"]["modes"]["browser_visible_capture"], 1)
+        result = results["results"][0]
+        self.assertTrue(Path(result["browserSnapshot"]).exists())
+        self.assertTrue(Path(result["importedCompetitors"]).exists())
+        deep = json.loads((out_dir / "output/reports/promotion-manager/competitors/deep-competitor-library.json").read_text(encoding="utf-8"))
+        self.assertEqual(deep["recordCount"], 1)
+        self.assertEqual(deep["records"][0]["platform"], "xiaohongshu")
+        self.assertIn("Launch note teardown", deep["records"][0]["title"])
+
     def test_competitor_content_enhancer_writes_back_content_and_publish_pack(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-content-enhancer-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -51,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--install-browser-if-missing", action="store_true")
     init.add_argument("--auto-search-competitors", action="store_true")
     init.add_argument("--search-html-snapshot-dir", default="")
+    init.add_argument("--capture-browser-assisted-follow-ups", action="store_true")
     init.add_argument("--skip-creator-leaderboard", action="store_true")
     init.add_argument("--run-creator-follow-up", action="store_true")
     init.add_argument("--creator-follow-up-dry-run", action="store_true")
@@ -87,7 +88,7 @@ def init_config(args: argparse.Namespace) -> None:
         "collectorPlatforms": ["youtube", "github"],
         "autoSearchCompetitors": args.auto_search_competitors,
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
-        "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False},
+        "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False, "captureBrowserAssisted": args.capture_browser_assisted_follow_ups},
         "skipCreatorLeaderboard": args.skip_creator_leaderboard,
         "creatorFollowUp": {"enabled": args.run_creator_follow_up, "limit": 20, "topN": 5, "dryRun": args.creator_follow_up_dry_run},
         "competitorInformedContent": {"enabled": not args.skip_competitor_informed_content},
@@ -357,6 +358,8 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
             command.append("--follow-up-dry-run")
         if follow_up.get("allowLocalhost"):
             command.append("--allow-localhost-follow-up")
+        if follow_up.get("captureBrowserAssisted"):
+            command.append("--capture-browser-assisted-follow-ups")
     if job.get("skipCreatorLeaderboard"):
         command.append("--skip-creator-leaderboard")
     creator_follow_up = job.get("creatorFollowUp") or {}

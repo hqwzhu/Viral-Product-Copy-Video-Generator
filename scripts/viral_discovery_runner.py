@@ -72,6 +72,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follow-up-capture-limit", type=int, default=20)
     parser.add_argument("--follow-up-dry-run", action="store_true")
     parser.add_argument("--allow-localhost-follow-up", action="store_true")
+    parser.add_argument(
+        "--capture-browser-assisted-follow-ups",
+        action="store_true",
+        help="Attempt browser-visible snapshots for queued Zhihu/Xiaohongshu/Douyin/TikTok follow-up capture tasks.",
+    )
     return parser.parse_args()
 
 
@@ -366,6 +371,10 @@ def run_follow_up_captures(
         command.append("--dry-run")
     if args.allow_localhost_follow_up:
         command.append("--allow-localhost")
+    if args.capture_browser_assisted_follow_ups:
+        command.append("--capture-browser-assisted")
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
     step = run_command("follow_up_capture_runner", command, check=False)
     steps.append(step)
     results_path = out_dir / "reports/promotion-manager/competitors/follow-up-capture-results.json"

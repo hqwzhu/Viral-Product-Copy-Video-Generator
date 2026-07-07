@@ -37,6 +37,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--dry-run", action="store_true", help="Plan public captures without fetching URLs.")
     parser.add_argument("--allow-localhost", action="store_true", help="Allow localhost URLs for local fixtures/tests only.")
+    parser.add_argument(
+        "--capture-browser-assisted",
+        action="store_true",
+        help="Attempt safe browser-visible snapshots for queued browser-assisted tasks with public URLs.",
+    )
+    parser.add_argument(
+        "--install-browser-if-missing",
+        action="store_true",
+        help="Allow browser_snapshot.py to run the official Playwright Chromium install when browser-assisted capture is requested.",
+    )
     return parser.parse_args()
 
 
@@ -57,6 +67,8 @@ def run_tasks(args: argparse.Namespace, out_dir: Path, tasks: list[dict[str, Any
     for task in tasks:
         if task.get("mode") == "public_url_capture_candidate":
             result, records = run_public_capture(args, out_dir, task)
+        elif args.capture_browser_assisted and task.get("mode") == "browser_assisted_capture_required":
+            result, records = run_browser_visible_capture(args, out_dir, task)
         else:
             result, records = create_evidence_request(out_dir, task), []
         results.append(result)
@@ -102,6 +114,90 @@ def run_public_capture(args: argparse.Namespace, out_dir: Path, task: dict[str, 
     records = records_from_import(imported_path, task)
     base["recordCount"] = len(records)
     return base, records
+
+
+def run_browser_visible_capture(args: argparse.Namespace, out_dir: Path, task: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    url = str(task.get("url") or "")
+    platform = str(task.get("platform") or "auto")
+    task_id = safe_slug(str(task.get("id") or task.get("materialId") or "follow-up"))
+    task_out_dir = report_dir(out_dir) / "follow-up-captures" / task_id
+    task_out_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = task_out_dir / "browser-visible-snapshot.json"
+    validation_issue = validate_public_capture_url(url, args.allow_localhost)
+    snapshot_command = [
+        sys.executable,
+        str(SCRIPTS / "browser_snapshot.py"),
+        "--url",
+        url,
+        "--out-file",
+        str(snapshot_path),
+        "--out-dir",
+        str(task_out_dir),
+    ]
+    if args.install_browser_if_missing:
+        snapshot_command.append("--install-browser-if-missing")
+    import_command = [
+        sys.executable,
+        str(SCRIPTS / "competitor_intake.py"),
+        "--json-file",
+        str(snapshot_path),
+        "--platform",
+        platform,
+        "--out-dir",
+        str(task_out_dir),
+    ]
+    base = base_result(task, "browser_visible_capture", snapshot_command)
+    base["importCommand"] = display_command(import_command)
+    if validation_issue:
+        return blocked_browser_capture(out_dir, task, base, validation_issue, str(snapshot_path)), []
+    if args.dry_run:
+        base.update({"status": "dry_run", "reason": "Browser-visible capture planned but not executed because --dry-run was supplied.", "browserSnapshot": str(snapshot_path), "recordCount": 0})
+        return base, []
+
+    snapshot_result = subprocess.run(snapshot_command, cwd=ROOT, capture_output=True, text=True, check=False)
+    base.update(
+        {
+            "snapshotExitCode": snapshot_result.returncode,
+            "snapshotStdoutTail": tail(snapshot_result.stdout),
+            "snapshotStderrTail": tail(snapshot_result.stderr),
+            "browserSnapshot": str(snapshot_path) if snapshot_path.exists() else "",
+        }
+    )
+    if snapshot_result.returncode != 0 or not snapshot_path.exists():
+        base.update({"status": "error", "reason": "Browser-visible snapshot failed before import.", "recordCount": 0})
+        return base, []
+    unsafe_issue = unsafe_snapshot_issue(snapshot_path)
+    if unsafe_issue:
+        return blocked_browser_capture(out_dir, task, base, unsafe_issue, str(snapshot_path)), []
+
+    import_result = subprocess.run(import_command, cwd=ROOT, capture_output=True, text=True, check=False)
+    imported_path = task_out_dir / COMPETITOR_DIR / "imported-competitors.json"
+    base.update(
+        {
+            "status": "ready" if import_result.returncode == 0 and imported_path.exists() else "error",
+            "importExitCode": import_result.returncode,
+            "importStdoutTail": tail(import_result.stdout),
+            "importStderrTail": tail(import_result.stderr),
+            "importedCompetitors": str(imported_path) if imported_path.exists() else "",
+        }
+    )
+    records = records_from_import(imported_path, task)
+    base["recordCount"] = len(records)
+    return base, records
+
+
+def blocked_browser_capture(out_dir: Path, task: dict[str, Any], base: dict[str, Any], reason: str, snapshot_path: str) -> dict[str, Any]:
+    request = create_evidence_request(out_dir, task)
+    base.update(
+        {
+            "status": "queued_manual_evidence",
+            "reason": reason,
+            "browserSnapshot": snapshot_path,
+            "evidenceRequest": request.get("evidenceRequest", ""),
+            "recordCount": 0,
+        }
+    )
+    return base
 
 
 def create_evidence_request(out_dir: Path, task: dict[str, Any]) -> dict[str, Any]:
@@ -194,6 +290,31 @@ def validate_public_capture_url(url: str, allow_localhost: bool) -> str:
     lowered = url.lower()
     if any(marker in lowered for marker in ["/login", "/signin", "/captcha", "/challenge", "/editor", "/draft", "/preview"]):
         return "URL looks like login, captcha, editor, draft, or preview flow."
+    return ""
+
+
+def unsafe_snapshot_issue(path: Path) -> str:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return "Browser snapshot could not be parsed safely."
+    text = " ".join(str(data.get(key) or "") for key in ["url", "title", "description", "text"]).lower()
+    blocked_patterns = [
+        "captcha",
+        "challenge",
+        "verify you are human",
+        "please sign in to continue",
+        "login required",
+        "access denied",
+        "请先登录",
+        "登录后查看",
+        "验证码",
+        "安全验证",
+        "访问受限",
+        "请完成验证",
+    ]
+    if any(pattern in text for pattern in blocked_patterns):
+        return "Browser snapshot appears to be login, captcha, verification, or access-denied content."
     return ""
 
 
