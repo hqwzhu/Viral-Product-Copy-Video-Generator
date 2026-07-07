@@ -27,6 +27,7 @@ SCRIPT_REQUIREMENTS = {
     "run_workflow": "run_promotion_workflow.py",
     "platform_search_browser": "platform_search_browser.py",
     "platform_search_capture": "platform_search_capture.py",
+    "competitor_collector": "competitor_collector.py",
     "viral_discovery_runner": "viral_discovery_runner.py",
     "viral_content_library": "viral_content_library.py",
     "creator_leaderboard": "creator_leaderboard.py",
@@ -35,6 +36,7 @@ SCRIPT_REQUIREMENTS = {
     "competitor_content_enhancer": "competitor_content_enhancer.py",
     "render_video": "render_video.py",
     "publish_queue": "publish_queue.py",
+    "publish_readiness": "publish_readiness_runner.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
     "published_items": "published_items.py",
@@ -323,7 +325,7 @@ def requirement_status(
             "follow_up_capture_runner",
         ],
     )
-    publish_ready = scripts_ready(scripts, ["publish_queue", "publish_executor", "youtube_oauth_publish"])
+    publish_ready = scripts_ready(scripts, ["publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"])
     metrics_ready = scripts_ready(scripts, ["published_items", "publish_url_capture", "metrics_intake", "metrics_recovery"])
     cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler"])
     full_platform_publish_ready = all(
@@ -375,7 +377,7 @@ def requirement_status(
             "id": "all_platform_auto_publish",
             "label": "Automatically publish to YouTube, Zhihu, Xiaohongshu, Douyin, and GitHub",
             "status": "ready" if publish_ready and full_platform_publish_ready else "blocked_by_authorization_or_platform_limits",
-            "evidence": scripts_present(scripts, ["publish_queue", "publish_executor", "youtube_oauth_publish"]),
+            "evidence": scripts_present(scripts, ["publish_queue", "publish_readiness", "publish_executor", "youtube_oauth_publish"]),
             "missing": missing_publish_credentials(credentials),
             "limits": [
                 "GitHub and YouTube writes require official credentials plus explicit publish approval.",
@@ -474,6 +476,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "audit_publish_readiness",
+            "command": (
+                f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
+                f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" --out-dir \"{out_dir}\""
             ),
         },
         {

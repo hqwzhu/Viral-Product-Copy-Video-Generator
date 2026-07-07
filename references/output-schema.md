@@ -49,6 +49,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` when `scripts/publish_queue.py` turns publish packs into official dry-run tasks and manual/browser-assisted tasks
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
+- `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
@@ -193,6 +194,24 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube tasks
 - `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
 - `guardrails`: publishing safety rules used for the queue run
+
+## Publish Readiness
+
+`publish-readiness.json` includes:
+
+- `status`: `ready_to_execute`, `partial_ready`, or `blocked`
+- `mode`: `dry_run_or_planning` or `execute_requested`
+- `approval`: required approval phrase, whether execution was requested, and whether approval was supplied
+- `inputs`: workflow manifest, publish queue, GitHub repo, and YouTube video file path references
+- `records[]`: one readiness record per platform
+- `records[].readiness`: `ready_to_execute`, `dry_run_ready`, `missing_credentials`, `missing_target`, `missing_approval`, `manual_publish_required`, `browser_assisted_or_official_app_required`, `official_app_integration_required`, `already_published`, or `unsupported`
+- `records[].credentialStatus`: required environment variable names, present environment variable names, missing names, and `valuesStored: false`
+- `records[].targetStatus`: whether required target information is present, such as `--github-repo` or `--youtube-video-file`
+- `records[].approvalStatus`: whether final execution was requested and the approval phrase matched
+- `records[].nextAction`: copy-ready next action for the platform
+- `summary`: counts by readiness state
+- `steps[]`: sanitized publish-queue build command ledger when `--build-queue` is used
+- `guardrails`: no secret values, no auto-login, no captcha bypass, no private endpoints, and no claimed publishing without real evidence
 
 ## Published Items
 

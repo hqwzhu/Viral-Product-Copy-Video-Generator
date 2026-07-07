@@ -28,6 +28,7 @@ Use this reference when the user asks for full automation.
 - Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
+- Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.
 - Register proven published URLs from official execution reports, publish queues, or manual/browser-assisted evidence into a standard published-items report for later metrics recovery.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
 - Run a one-command local operating cycle that chains workflow generation, guarded publish queue, published URL registration, and metrics recovery while preserving approval gates and evidence requirements.

@@ -29,6 +29,7 @@ METRICS_RECOVERY = ROOT / "scripts" / "metrics_recovery.py"
 PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
+PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
@@ -2377,6 +2378,89 @@ Prompt templates for product copy, SEO content, and video scripts.
         serialized = json.dumps(queue)
         self.assertNotIn("GITHUB_TOKEN", serialized)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
+
+    def test_publish_readiness_runner_audits_queue_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        workflow_out = out_dir / "output"
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--skip-video",
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        video_path = out_dir / "youtube-draft.mp4"
+        video_path.write_bytes(b"dry-run video placeholder")
+        env = os.environ.copy()
+        secret_value = "fake-gh-token-for-readiness-test"
+        for name in [
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "DOUYIN_CLIENT_KEY",
+            "DOUYIN_CLIENT_SECRET",
+            "DOUYIN_ACCESS_TOKEN",
+            "DOUYIN_OPEN_ID",
+        ]:
+            env.pop(name, None)
+        env["GITHUB_TOKEN"] = secret_value
+        manifest_path = workflow_out / "reports/promotion-manager/agent-run/workflow-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_READINESS),
+                "--workflow-manifest",
+                str(manifest_path),
+                "--build-queue",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--youtube-video-file",
+                str(video_path),
+                "--out-dir",
+                str(workflow_out),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "partial_ready")
+        by_platform = {item["platform"]: item for item in report["records"]}
+        self.assertEqual(by_platform["github"]["readiness"], "dry_run_ready")
+        self.assertEqual(by_platform["github"]["credentialStatus"]["presentEnv"], ["GITHUB_TOKEN"])
+        self.assertEqual(by_platform["youtube"]["readiness"], "missing_credentials")
+        self.assertEqual(by_platform["zhihu"]["readiness"], "manual_publish_required")
+        self.assertEqual(by_platform["xiaohongshu"]["readiness"], "manual_publish_required")
+        self.assertEqual(by_platform["douyin"]["readiness"], "browser_assisted_or_official_app_required")
+        self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
+        self.assertTrue((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.md").exists())
 
     def test_youtube_oauth_publish_dry_run_generates_auth_url_without_tokens(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-test-"))

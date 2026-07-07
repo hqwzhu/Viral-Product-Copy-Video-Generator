@@ -333,6 +333,19 @@ python scripts/publish_queue.py \
 The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, and keeps Zhihu, Xiaohongshu, Douyin, and similar platforms as manual/browser-assisted queue items.
 It also writes `reports/promotion-manager/published-items/published-items.{json,md}`. Official dry-runs, queued manual tasks, blocked writes, and browser-assisted tasks remain pending until a real published URL exists.
 
+Before execution, audit publish readiness:
+
+```bash
+python scripts/publish_readiness_runner.py \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --build-queue \
+  --github-repo owner/repo \
+  --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}`. The report checks queue state, target information, credential presence by environment variable name, approval status, and next actions. It does not write credential values and does not execute final platform writes unless the publish queue is explicitly run with execution and the required approval phrase.
+
 Run official publishing actions through a dry run first:
 
 ```bash

@@ -31,6 +31,8 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 - Zhihu, Xiaohongshu, Douyin, and unverified platforms are written as manual or browser-assisted tasks with copy-ready drafts.
 - Real official writes still require `--execute --approval I_APPROVE_PUBLISH` and the relevant environment credential.
 
+`scripts/publish_readiness_runner.py` audits an existing queue or builds one first with `--build-queue`. It reports per-platform readiness, missing target fields, credential presence by environment variable name, approval status, and next actions. It does not store secret values and does not bypass the explicit approval gate.
+
 `scripts/publish_executor.py` supports:
 
 - GitHub file create/update through the repository contents REST API.
