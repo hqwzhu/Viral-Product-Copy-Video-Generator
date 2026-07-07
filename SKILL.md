@@ -253,6 +253,14 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+To import real metrics from a Codex/browser structured snapshot of a published page or analytics page:
+
+```bash
+python scripts/metrics_intake.py \
+  --structured-json "./published-metrics-snapshot.json" \
+  --out-dir "./promotion-output"
+```
+
 To recover metrics across a completed workflow, publish queue, published URLs, and business exports:
 
 ```bash
@@ -260,6 +268,14 @@ python scripts/metrics_recovery.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
   --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+To merge structured metric snapshots with published URL evidence during recovery:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-structured-json "./published-metrics-snapshot.json" \
   --out-dir "./promotion-output"
 ```
 
@@ -495,8 +511,8 @@ Use only real data supplied by the user or exported from platforms:
 - evidence URLs/screenshots/exports
 
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
-Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
-Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, or business export. It merges official GitHub/YouTube metrics with user-provided orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
+Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
+Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
 
 ### 7. Periodic Automation
 

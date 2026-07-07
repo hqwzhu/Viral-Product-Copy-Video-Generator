@@ -241,7 +241,7 @@ def credential_status() -> dict[str, dict[str, Any]]:
             "valuesStored": False,
         }
     status["business_exports"] = {
-        "requiredEvidence": ["business CSV/JSON/text export with orders, revenue, clicks, or leads"],
+        "requiredEvidence": ["business CSV/JSON/text export or structured browser snapshot with orders, revenue, clicks, leads, or platform metrics"],
         "ready": False,
         "valuesStored": False,
     }
@@ -273,13 +273,13 @@ def platform_status(
         "zhihu": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
             "directPublish": "manual_or_browser_assisted_only",
-            "metricsRecovery": "manual_export_required",
+            "metricsRecovery": "manual_export_or_structured_snapshot_required",
             "ordersRevenue": "business_export_required",
         },
         "xiaohongshu": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
             "directPublish": "manual_or_browser_assisted_only",
-            "metricsRecovery": "manual_export_required",
+            "metricsRecovery": "manual_export_or_structured_snapshot_required",
             "ordersRevenue": "business_export_required",
         },
         "douyin": {
@@ -287,7 +287,7 @@ def platform_status(
             "directPublish": "official_app_authorization_required"
             if credentials["douyin_publish"]["ready"]
             else "browser_assisted_until_official_access_verified",
-            "metricsRecovery": "manual_or_official_export_required",
+            "metricsRecovery": "manual_structured_snapshot_or_official_export_required",
             "ordersRevenue": "business_export_required",
         },
         "tiktok": {
@@ -295,7 +295,7 @@ def platform_status(
             "directPublish": "official_app_authorization_required"
             if credentials["tiktok_direct_post"]["ready"]
             else "developer_app_scope_and_creator_auth_required",
-            "metricsRecovery": "manual_or_official_export_required",
+            "metricsRecovery": "manual_structured_snapshot_or_official_export_required",
             "ordersRevenue": "business_export_required",
         },
     }
@@ -390,9 +390,9 @@ def requirement_status(
             "label": "Recover real views, likes, comments, orders, revenue, and business outcomes",
             "status": "partial_ready" if metrics_ready else "not_ready",
             "evidence": scripts_present(scripts, ["published_items", "publish_url_capture", "metrics_intake", "metrics_recovery"]),
-            "missing": [] if real_metrics_ready else ["published URLs, official metrics credentials, or business exports"],
+            "missing": [] if real_metrics_ready else ["published URLs, official metrics credentials, structured metric snapshots, or business exports"],
             "limits": [
-                "Social metrics require official APIs, public pages, screenshots, or exports.",
+                "Social metrics require official APIs, public pages, browser-visible structured snapshots, screenshots, or exports.",
                 "Orders and revenue require business-system exports; public platform pages cannot prove revenue.",
             ],
         },
@@ -483,6 +483,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
                 f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "recover_metrics_from_structured_snapshot",
+            "command": (
+                f"python scripts/metrics_recovery.py --metrics-structured-json \"{out_dir}/published-metrics-snapshot.json\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {

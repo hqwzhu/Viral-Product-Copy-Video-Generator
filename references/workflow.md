@@ -423,7 +423,15 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
-Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--published-url`, `--github-repo`, and `--youtube-video-id`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
+For a browser-visible published page or analytics page that Codex has already read into structured JSON:
+
+```bash
+python scripts/metrics_intake.py \
+  --structured-json "./published-metrics-snapshot.json" \
+  --out-dir "./promotion-output"
+```
+
+Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--structured-json`, `--published-url`, `--github-repo`, and `--youtube-video-id`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
 
 The workflow runner can call metrics intake in the same run with `--metrics-csv`, `--metrics-json`, `--metrics-text`, `--published-url`, `--github-repo`, or `--youtube-video-id`. If no real evidence is supplied, its manifest must report `waiting_real_data`.
 
@@ -437,7 +445,15 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
-The coordinator reads proven published URLs from the default `published-items` report, direct `--published-url` inputs, `--github-repo`, `--youtube-video-id`, and optional `--published-items-json` files. It automatically attempts only safe official/public connectors for GitHub and YouTube. It merges those records with CSV, JSON, or text exports that contain clicks, leads, orders, revenue, or platform metrics. Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, or official access are provided.
+The coordinator reads proven published URLs from the default `published-items` report, direct `--published-url` inputs, `--github-repo`, `--youtube-video-id`, and optional `--published-items-json` files. It automatically attempts only safe official/public connectors for GitHub and YouTube. It merges those records with CSV, JSON, text, or structured browser snapshots that contain clicks, leads, orders, revenue, or platform metrics:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-structured-json "./published-metrics-snapshot.json" \
+  --out-dir "./promotion-output"
+```
+
+Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, browser-visible structured snapshots, or official access are provided.
 
 ## Stage 7: Periodic Automation
 

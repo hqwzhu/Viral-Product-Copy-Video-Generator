@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     source.add_argument("--csv-file", help="CSV export with platform/url/metric columns.")
     source.add_argument("--json-file", help="JSON export with metric records.")
     source.add_argument("--text-file", help="Copied metric text, notes, or transcript.")
+    source.add_argument("--structured-json", help="Codex/browser structured snapshot containing a published page or analytics text.")
     source.add_argument("--published-url", help="Published URL to resolve through a supported official connector.")
     source.add_argument("--github-repo", help="GitHub repository in owner/name form.")
     source.add_argument("--youtube-video-id", help="YouTube video ID. Requires YOUTUBE_API_KEY.")
@@ -56,6 +57,9 @@ def load_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.text_file:
         path = Path(args.text_file)
         return {"inputMode": "text_file", "source": str(path), "records": [record_from_text(path.read_text(encoding="utf-8"), str(path), args.platform)], "connectorStatus": []}
+    if args.structured_json:
+        path = Path(args.structured_json)
+        return {"inputMode": "structured_json", "source": str(path), "records": records_from_structured_json(path, args.platform), "connectorStatus": []}
     if args.github_repo:
         record, status = record_from_github_repo(args.github_repo)
         return {"inputMode": "github_repo", "source": args.github_repo, "records": [record] if record else [], "connectorStatus": [status]}
@@ -107,6 +111,78 @@ def records_from_json(path: Path) -> list[dict[str, Any]]:
     if isinstance(data, list):
         return [normalize_mapping(item, str(path)) if isinstance(item, dict) else record_from_text(str(item), str(path), "auto") for item in data]
     return [record_from_text(str(data), str(path), "auto")]
+
+
+def records_from_structured_json(path: Path, platform: str = "auto") -> list[dict[str, Any]]:
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    if isinstance(data, dict):
+        for key in ("records", "items", "metrics", "results", "publishedItems"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [
+                    record_from_structured_mapping(item, str(path), platform) if isinstance(item, dict) else record_from_text(str(item), str(path), platform)
+                    for item in value
+                ]
+        return [record_from_structured_mapping(data, str(path), platform)]
+    if isinstance(data, list):
+        return [
+            record_from_structured_mapping(item, str(path), platform) if isinstance(item, dict) else record_from_text(str(item), str(path), platform)
+            for item in data
+        ]
+    return [record_from_text(str(data), str(path), platform)]
+
+
+def record_from_structured_mapping(item: dict[str, Any], source: str, platform: str) -> dict[str, Any]:
+    url = get_alias(item, "publishedUrl", "url", "canonicalUrl", "link", "sourceUrl")
+    detected = choose_platform(first_non_empty(get_alias(item, "platform"), platform), url or source)
+    text = structured_text(item)
+    metrics = extract_metrics(text)
+    for key in ("metrics", "visibleMetrics", "analytics", "stats", "statistics"):
+        value = item.get(key)
+        if isinstance(value, dict):
+            metrics.update(metrics_from_mapping(value))
+    evidence = split_evidence(get_alias(item, "evidence", "evidenceUrl", "screenshot", "screenshotPath", "export"))
+    if source and source not in evidence:
+        evidence.append(source)
+    return {
+        "platform": detected,
+        "publishedUrl": url,
+        "contentId": get_alias(item, "contentId", "videoId", "repo", "id", "noteId"),
+        "title": get_alias(item, "title", "name", "headline") or first_content_line(text),
+        "publishedAt": get_alias(item, "publishedAt", "date", "createdAt", "capturedAt"),
+        "metrics": metrics,
+        "evidence": evidence,
+        "source": {"type": "structured_snapshot", "value": source, "capturedAt": get_alias(item, "capturedAt") or TODAY},
+        "notes": [get_alias(item, "notes", "note")],
+    }
+
+
+def structured_text(item: dict[str, Any]) -> str:
+    parts = []
+    for key in ("title", "description", "text", "renderedText", "visibleText", "bodyText", "content", "markdown"):
+        value = item.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, list):
+            parts.extend(str(entry) for entry in value)
+    for key in ("headings", "captions", "comments", "sections"):
+        value = item.get(key)
+        if isinstance(value, list):
+            parts.extend(json.dumps(entry, ensure_ascii=False) if isinstance(entry, (dict, list)) else str(entry) for entry in value)
+    return "\n".join(part for part in parts if part)
+
+
+def metrics_from_mapping(item: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    metrics = {}
+    for field in METRIC_FIELDS:
+        if field not in item and snake_case(field) not in item:
+            continue
+        value = item.get(field, item.get(snake_case(field)))
+        if isinstance(value, dict):
+            value = first_non_empty(value.get("raw"), value.get("value"), value.get("normalized"))
+        if value not in (None, ""):
+            metrics[field] = metric_value(value)
+    return metrics
 
 
 def normalize_mapping(item: dict[str, Any], source: str) -> dict[str, Any]:
@@ -413,6 +489,67 @@ def metric_number(metrics: dict[str, dict[str, Any]], field: str) -> float | Non
 
 def parse_metric_number(value: str) -> float | None:
     text = str(value).strip().replace(",", "").replace("$", "").replace("¥", "")
+    if not text:
+        return None
+    multiplier = 1.0
+    lower = text.lower()
+    if lower.endswith("k"):
+        multiplier = 1_000.0
+        text = text[:-1]
+    elif lower.endswith("m"):
+        multiplier = 1_000_000.0
+        text = text[:-1]
+    elif text.endswith("万"):
+        multiplier = 10_000.0
+        text = text[:-1]
+    elif text.endswith("千"):
+        multiplier = 1_000.0
+        text = text[:-1]
+    try:
+        return float(text.strip()) * multiplier
+    except ValueError:
+        return None
+
+
+# Browser snapshots and analytics screenshots often contain current English or Chinese
+# labels. Keep these definitions after the legacy parser so they override it.
+def extract_metrics(text: str) -> dict[str, dict[str, Any]]:
+    metrics = {}
+    aliases = {
+        "views": r"(?:views?|plays?|impressions?|播放量|播放|浏览量|浏览|观看量|观看|曝光)",
+        "likes": r"(?:likes?|点赞|赞)",
+        "favorites": r"(?:favorites?|saves?|收藏|保存)",
+        "comments": r"(?:comments?|评论)",
+        "shares": r"(?:shares?|转发|分享)",
+        "clicks": r"(?:clicks?|点击|访问)",
+        "messages": r"(?:messages?|私信|咨询|会话)",
+        "leads": r"(?:leads?|线索|留资)",
+        "orders": r"(?:orders?|订单)",
+        "revenue": r"(?:revenue|gmv|sales|收入|销售额|成交额)",
+        "stars": r"(?:stars?|星标)",
+        "forks": r"(?:forks?)",
+        "watchers": r"(?:watchers?|subscribers?)",
+    }
+    number = r"([$¥￥]?\s*[\d,.]+(?:\.\d+)?\s*(?:k|m|万|千)?)"
+    for field, label in aliases.items():
+        pattern_after = rf"{label}\s*[:：]?\s*{number}"
+        pattern_before = rf"{number}\s*{label}"
+        match = re.search(pattern_after, text, flags=re.IGNORECASE) or re.search(pattern_before, text, flags=re.IGNORECASE)
+        if match:
+            metrics[field] = metric_value(match.group(1))
+    return metrics
+
+
+def parse_metric_number(value: str) -> float | None:
+    text = (
+        str(value)
+        .strip()
+        .replace(",", "")
+        .replace("$", "")
+        .replace("¥", "")
+        .replace("￥", "")
+        .replace("元", "")
+    )
     if not text:
         return None
     multiplier = 1.0

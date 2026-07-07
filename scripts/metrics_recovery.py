@@ -43,7 +43,9 @@ def main() -> None:
     published_items.extend(items_from_direct_args(args))
 
     records, connector_status = collect_official_records(published_items)
+    metric_records, metric_sources = collect_metric_records(args)
     business_records, business_sources = collect_business_records(args)
+    records.extend(metric_records)
     records.extend(business_records)
 
     merged_records = merge_records(records)
@@ -55,6 +57,7 @@ def main() -> None:
         records=merged_records,
         connector_status=connector_status,
         source_status=source_status,
+        metric_sources=metric_sources,
         business_sources=business_sources,
         manual_required=manual_required,
     )
@@ -70,6 +73,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--published-url", action="append", default=[], help="Published URL to inspect through supported official connectors.")
     parser.add_argument("--github-repo", action="append", default=[], help="GitHub owner/repo to inspect through the public REST API.")
     parser.add_argument("--youtube-video-id", action="append", default=[], help="YouTube video ID to inspect through the YouTube Data API when YOUTUBE_API_KEY is set.")
+    parser.add_argument("--metrics-csv", action="append", default=[], help="CSV export containing platform metrics.")
+    parser.add_argument("--metrics-json", action="append", default=[], help="JSON export containing platform metrics.")
+    parser.add_argument("--metrics-text", action="append", default=[], help="Text evidence containing platform metrics.")
+    parser.add_argument("--metrics-structured-json", action="append", default=[], help="Codex/browser structured snapshot containing published-page or analytics metrics.")
     parser.add_argument("--business-csv", action="append", default=[], help="CSV export containing orders, revenue, clicks, or platform metrics.")
     parser.add_argument("--business-json", action="append", default=[], help="JSON export containing orders, revenue, clicks, or platform metrics.")
     parser.add_argument("--business-text", action="append", default=[], help="Text evidence containing real metrics.")
@@ -307,6 +314,32 @@ def collect_business_records(args: argparse.Namespace) -> tuple[list[dict[str, A
     return records, sources
 
 
+def collect_metric_records(args: argparse.Namespace) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    records: list[dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
+    for value in args.metrics_csv:
+        path = Path(value)
+        loaded = metrics_intake.records_from_csv(path)
+        records.extend(loaded)
+        sources.append({"type": "metrics_csv", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
+    for value in args.metrics_json:
+        path = Path(value)
+        loaded = metrics_intake.records_from_json(path)
+        records.extend(loaded)
+        sources.append({"type": "metrics_json", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
+    for value in args.metrics_text:
+        path = Path(value)
+        record = metrics_intake.record_from_text(path.read_text(encoding="utf-8"), str(path), "auto")
+        records.append(record)
+        sources.append({"type": "metrics_text", "source": str(path), "status": "loaded", "recordCount": 1})
+    for value in args.metrics_structured_json:
+        path = Path(value)
+        loaded = metrics_intake.records_from_structured_json(path)
+        records.extend(loaded)
+        sources.append({"type": "metrics_structured_json", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
+    return records, sources
+
+
 def merge_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -377,6 +410,7 @@ def build_recovery_report(
     records: list[dict[str, Any]],
     connector_status: list[dict[str, Any]],
     source_status: list[dict[str, Any]],
+    metric_sources: list[dict[str, Any]],
     business_sources: list[dict[str, Any]],
     manual_required: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -394,6 +428,7 @@ def build_recovery_report(
             "publishQueue": str(queue_path) if queue_path else "",
             "publishedItems": published_items,
             "sourceStatus": source_status,
+            "metricSources": metric_sources,
             "businessSources": business_sources,
             "manualExportRequired": manual_required,
             "coverage": coverage_summary(published_items, report, manual_required),
@@ -423,8 +458,7 @@ def coverage_summary(published_items: list[dict[str, Any]], report: dict[str, An
 
 def recovery_status(report: dict[str, Any], manual_required: list[dict[str, Any]], connector_status: list[dict[str, Any]]) -> str:
     has_metrics = report.get("aggregates", {}).get("recordsWithMetrics", 0) > 0
-    has_pending = bool(manual_required) or any(status.get("status") not in {"ready", "no_token_public_resource"} for status in connector_status)
-    if has_metrics and has_pending:
+    if has_metrics and manual_required:
         return "partial_ready"
     if has_metrics:
         return "ready"
@@ -455,6 +489,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     if report["businessSources"]:
         lines.extend(["", "## Business Sources"])
         for item in report["businessSources"]:
+            lines.append(f"- {item['type']}: `{item['status']}` records={item['recordCount']} source={item['source']}")
+    if report.get("metricSources"):
+        lines.extend(["", "## Metric Sources"])
+        for item in report["metricSources"]:
             lines.append(f"- {item['type']}: `{item['status']}` records={item['recordCount']} source={item['source']}")
     if report["connectorStatus"]:
         lines.extend(["", "## Connector Status"])

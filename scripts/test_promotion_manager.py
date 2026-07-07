@@ -1727,6 +1727,47 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["retrospective"]["status"], "ready")
         self.assertTrue((out_dir / "reports/promotion-manager/metrics/imported-metrics.md").exists())
 
+    def test_metrics_intake_imports_structured_browser_snapshot_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-structured-intake-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "published-metrics-snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://www.xiaohongshu.com/explore/note123",
+                    "title": "AI Prompt Kit launch note analytics",
+                    "text": "浏览量: 3,000 点赞: 380 评论: 42 收藏: 55 订单: 2 收入: $88.00",
+                    "screenshot": "xhs-analytics.png",
+                    "capturedAt": "2026-07-08T09:00:00+08:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/metrics/imported-metrics.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(report["inputMode"], "structured_json")
+        self.assertEqual(record["platform"], "xiaohongshu")
+        self.assertEqual(record["publishedUrl"], "https://www.xiaohongshu.com/explore/note123")
+        self.assertEqual(record["metrics"]["views"]["normalized"], 3000.0)
+        self.assertEqual(record["metrics"]["likes"]["normalized"], 380.0)
+        self.assertEqual(record["metrics"]["comments"]["normalized"], 42.0)
+        self.assertEqual(record["metrics"]["orders"]["normalized"], 2.0)
+        self.assertEqual(record["metrics"]["revenue"]["normalized"], 88.0)
+        self.assertIn("xhs-analytics.png", record["evidence"])
+
     def test_metrics_recovery_merges_published_items_and_business_exports(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1775,7 +1816,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         report_path = out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json"
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertEqual(report["recoveryStatus"], "partial_ready")
+        self.assertEqual(report["recoveryStatus"], "ready")
         self.assertEqual(report["aggregates"]["totals"]["orders"], 8.0)
         self.assertEqual(report["aggregates"]["totals"]["revenue"], 508.5)
         self.assertEqual(report["coverage"]["recordsWithMetrics"], 2)
@@ -1786,6 +1827,57 @@ Prompt templates for product copy, SEO content, and video scripts.
         serialized = json.dumps(report)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
         self.assertNotIn("GITHUB_TOKEN", serialized)
+
+    def test_metrics_recovery_imports_structured_metrics_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-structured-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "title": "AI Prompt Kit launch note analytics",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        snapshot_path = out_dir / "published-metrics-snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://www.xiaohongshu.com/explore/note123",
+                    "title": "AI Prompt Kit launch note analytics",
+                    "text": "views: 3,000 likes: 380 comments: 42 orders: 2 revenue: $88.00",
+                    "screenshot": "xhs-analytics.png",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--metrics-structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "ready")
+        self.assertEqual(report["coverage"]["publishedItemsDiscovered"], 1)
+        self.assertEqual(report["coverage"]["recordsWithMetrics"], 1)
+        self.assertEqual(report["coverage"]["manualOrPendingRequirements"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 88.0)
 
     def test_metrics_recovery_marks_publish_queue_items_pending(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-pending-test-"))
@@ -2238,7 +2330,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
         self.assertEqual(report["coverage"]["publishedItemsDiscovered"], 1)
         self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
-        self.assertEqual(report["recoveryStatus"], "partial_ready")
+        self.assertEqual(report["recoveryStatus"], "ready")
 
     def test_publish_executor_github_dry_run_requires_explicit_execution(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-test-"))

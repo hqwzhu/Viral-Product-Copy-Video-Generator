@@ -24,8 +24,8 @@ Use this reference when the user asks for full automation.
 - Execute safe public follow-up capture tasks into a deep competitor library, while writing manual/browser evidence requests for platforms that require visible user evidence or official access.
 - Rewrite generated platform content, video scripts, storyboards, and publish-pack content with observed viral/deep competitor structures before video rendering, while keeping competitor titles, hooks, and metrics as evidence metadata rather than product claims.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
-- Import real post-publish metrics from CSV, JSON, text exports, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
-- Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
+- Import real post-publish metrics from CSV, JSON, text exports, Codex/browser structured snapshots, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
+- Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, structured metric snapshots, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.

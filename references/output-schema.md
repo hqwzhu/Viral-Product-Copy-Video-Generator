@@ -55,8 +55,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
-- `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run
-- `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, official connectors, and business exports
+- `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run from CSV, JSON, text, structured browser snapshot, published URL, GitHub, or YouTube input
+- `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, and metrics recovery as one operating cycle
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -238,6 +238,18 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
 
+## Imported Metrics
+
+`imported-metrics.json` includes:
+
+- `inputMode`: `csv_file`, `json_file`, `text_file`, `structured_json`, `published_url`, `github_repo`, or `youtube_video_id`
+- `records[]`: normalized real metric records with platform, published URL, content id, title, metrics, evidence, source, confidence, and derived rates
+- `records[].source.type`: `user_export`, `user_text`, `structured_snapshot`, or `official_api`
+- `aggregates`: totals, records with metrics, records with evidence, best by views, best by revenue, and platforms
+- `connectorStatus[]`: official connector status for GitHub/YouTube or unsupported platform reasons
+- `retrospective`: `ready` only when real metric evidence exists, otherwise `waiting_real_data`
+- `guardrails`: no fabricated metrics, no secret values, no cookies, and no browser tokens
+
 ## Metrics Recovery
 
 `metrics-recovery.json` includes:
@@ -247,6 +259,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `publishedItems`: planned, queued, dry-run, or proven published items discovered from manifests, publish queues, the default published-items report, or user-provided JSON
 - `records[]`: normalized metric records compatible with `metrics_intake.py`
 - `connectorStatus[]`: official connector results for YouTube/GitHub and unsupported/manual statuses for other platforms
+- `metricSources[]`: CSV, JSON, text, or structured browser snapshot evidence loaded for platform metrics
 - `businessSources[]`: CSV, JSON, or text evidence loaded for orders, revenue, clicks, leads, or platform metrics
 - `manualExportRequired[]`: platforms or queue items that need real export/screenshot/API evidence before optimization
 - `coverage`: counts for discovered published items, queued items, metric records, records with metrics, pending manual requirements, and platforms
