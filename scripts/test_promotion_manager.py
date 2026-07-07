@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
+BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
@@ -27,6 +28,27 @@ YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
+
+
+def playwright_chromium_available() -> bool:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from playwright.sync_api import sync_playwright\n"
+                "p=sync_playwright().start()\n"
+                "b=p.chromium.launch(headless=True)\n"
+                "b.close()\n"
+                "p.stop()\n"
+            ),
+        ],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -227,6 +249,65 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(profile["pricing"], "$19")
         self.assertIn("AI operators", profile["targetAudienceAssumptions"])
 
+    def test_browser_snapshot_normalizes_html_for_product_intake(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-snapshot-html-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "product.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <link rel="canonical" href="https://example.com/ai-prompt-kit">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content. Start for $19.</p>
+  <a href="/start">Start free</a>
+  <img src="https://example.com/cover.png" alt="AI Prompt Kit cover">
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        snapshot_path = out_dir / "snapshot.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BROWSER_SNAPSHOT),
+                "--html-file",
+                str(html_path),
+                "--base-url",
+                "https://example.com/ai-prompt-kit",
+                "--out-file",
+                str(snapshot_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["snapshotType"], "browser_rendered")
+        self.assertEqual(snapshot["productName"], "AI Prompt Kit")
+        self.assertIn("Start free", snapshot["ctaCandidates"])
+        self.assertIn("$19", snapshot["priceCandidates"])
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_INTAKE),
+                "--structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir / "intake"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        profile = json.loads((out_dir / "intake/product-profile.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["sourceType"], "browser_rendered_snapshot")
+        self.assertEqual(profile["productName"], "AI Prompt Kit")
+        self.assertEqual(profile["pricing"], "19")
+
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -276,6 +357,50 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertFalse(manifest["selfEvolution"]["canInstallWithoutReview"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json").exists())
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/competitor-discovery.json").exists())
+
+    def test_agent_workflow_runs_from_browser_url_when_browser_exists(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-browser-workflow-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "product.html"
+        html_path.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content. Start for $19.</p>
+  <button>Start free</button>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--browser-url",
+                html_path.as_uri(),
+                "--platforms",
+                "github",
+                "--skip-video",
+                "--skip-competitor-discovery",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        manifest_path = out_dir / "output/reports/promotion-manager/agent-run/workflow-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["product"]["name"], "AI Prompt Kit")
+        self.assertEqual(manifest["input"]["sourceType"], "browser_rendered_snapshot")
+        self.assertTrue(Path(manifest["artifacts"]["browserSnapshot"]).exists())
 
     def test_platform_search_capture_imports_structured_results(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-search-capture-test-"))

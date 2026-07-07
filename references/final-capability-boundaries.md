@@ -5,6 +5,7 @@ Use this reference when the user asks for full automation.
 ## What The Skill Can Automate Locally
 
 - Parse public product URLs, saved HTML, rendered page text, or Codex/browser structured snapshots into product profiles.
+- Capture public product URLs with Playwright Chromium into structured browser-visible snapshots for product intake.
 - Run an end-to-end local workflow from one product source through `scripts/run_promotion_workflow.py`, producing intake, competitor discovery, generated content, video status, publish automation status, metrics recovery status, and a workflow manifest.
 - Run due promotion jobs from a local JSON schedule through `scripts/automation_scheduler.py`, including state tracking and Windows Task Scheduler script generation.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.

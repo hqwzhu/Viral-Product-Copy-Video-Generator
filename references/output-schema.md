@@ -14,6 +14,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 ## Reports
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
+- `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` captures browser-visible product page evidence
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
 - `promotion-output/automation/scheduler/automation-run.{json,md}` when `scripts/automation_scheduler.py run` executes due jobs
@@ -48,7 +49,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 - `product`: normalized product fields used by generation scripts
 - `input`: source type, confidence, and whether rendered snapshots are supported
-- `artifacts`: important output paths
+- `artifacts`: important output paths, including `browserSnapshot` when `--browser-url` is used
 - `competitorDiscovery`: search task status and official collection summaries
 - `videoGeneration`: MP4 status and paths per video platform
 - `publishAutomation`: platform publish mode, approval requirement, and automation status
@@ -91,9 +92,10 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].id`: stable job id
 - `jobs[].enabled`: boolean
 - `jobs[].schedule.intervalDays`: minimum days between runs
-- `jobs[].input`: one of `productUrl`, `htmlFile`, `textFile`, or `structuredJson`
+- `jobs[].input`: one of `browserUrl`, `productUrl`, `htmlFile`, `textFile`, or `structuredJson`
 - `jobs[].platforms`: target platform list
 - `jobs[].searchSnapshotDir`: optional directory of platform search snapshots for the workflow runner
+- `jobs[].installBrowserIfMissing`: optional boolean that lets the workflow run the official Playwright Chromium install when `browserUrl` is used and Chromium is missing
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
 - `jobs[].publish.enabled`: defaults to false; when true, the scheduler runs `scripts/publish_queue.py` after a successful workflow
 - `jobs[].publish.platforms`: optional platform filter for queue generation

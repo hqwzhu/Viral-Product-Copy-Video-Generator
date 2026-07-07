@@ -27,12 +27,27 @@ Default one-command workflow:
 
 ```bash
 python scripts/run_promotion_workflow.py \
+  --browser-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+For static pages or environments without Playwright Chromium, use static HTML intake:
+
+```bash
+python scripts/run_promotion_workflow.py \
   --product-url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
 
-For dynamic pages, Codex should inspect the rendered page first and pass a structured snapshot:
+For dynamic pages, Codex can capture the rendered page first and pass a structured snapshot:
+
+```bash
+python scripts/browser_snapshot.py \
+  --url "https://example.com/product" \
+  --out-file "./rendered-product-page.json"
+```
 
 ```bash
 python scripts/run_promotion_workflow.py \
@@ -65,6 +80,21 @@ To parse a rendered page snapshot captured by Codex/browser tooling:
 python scripts/product_intake.py \
   --structured-json "./rendered-product-page.json" \
   --out-dir "./promotion-output/intake"
+```
+
+If Chromium is missing, install the official Playwright browser runtime:
+
+```bash
+python -m playwright install chromium
+```
+
+Or allow the workflow to attempt the official install when `--browser-url` is used:
+
+```bash
+python scripts/run_promotion_workflow.py \
+  --browser-url "https://example.com/product" \
+  --install-browser-if-missing \
+  --out-dir "./promotion-output"
 ```
 
 To render a real MP4 draft video after content generation:
@@ -146,7 +176,7 @@ To configure periodic local automation:
 python scripts/automation_scheduler.py init \
   --config "./promotion-automation.json" \
   --job-id "product-weekly" \
-  --product-url "https://example.com/product" \
+  --browser-url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --interval-days 7
 ```
@@ -198,6 +228,7 @@ The command writes:
 - `docs/promotion-manager/06-saas-product-roadmap.md`
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
+- `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
@@ -211,6 +242,7 @@ The command writes:
 - Mark uncertain details as assumptions; do not invent pricing, testimonials, sales, or usage numbers.
 - If a page cannot be read, ask for pasted product info.
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
+- Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
 - Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
 
 ### 2. Competitor And Trend Research
@@ -299,6 +331,7 @@ If a scheduled job has `publish.enabled: true`, the scheduler runs `scripts/publ
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
+- `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.

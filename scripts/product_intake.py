@@ -160,6 +160,7 @@ def extract_profile_from_html(html: str, source: str) -> dict[str, Any]:
 
 def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> dict[str, Any]:
     flattened = flatten_snapshot(data)
+    source_type = "browser_rendered_snapshot" if data.get("snapshotType") == "browser_rendered" else "structured_json"
     title = first_non_empty(
         flattened.get("productName"),
         flattened.get("name"),
@@ -189,7 +190,7 @@ def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> d
     text = " ".join([title, description, flattened.get("text", "")])
     return {
         "source": source,
-        "sourceType": "structured_json",
+        "sourceType": source_type,
         "canonicalUrl": url,
         "productName": first_non_empty(flattened.get("productName"), flattened.get("name"), title, "Unknown product"),
         "title": title,

@@ -22,12 +22,31 @@ For a full Codex-local agent run, prefer the orchestration entrypoint:
 
 ```bash
 python scripts/run_promotion_workflow.py \
+  --browser-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+This opens the page with Playwright Chromium, captures browser-visible title, metadata, headings, CTA candidates, price candidates, images, links, JSON-LD, and rendered text, then feeds that snapshot into product intake.
+
+For environments without Chromium, static HTML intake remains available:
+
+```bash
+python scripts/run_promotion_workflow.py \
   --product-url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
 
-For dynamic pages, Codex should inspect the rendered page first and pass a structured snapshot into the same workflow:
+To capture and inspect a rendered snapshot separately:
+
+```bash
+python scripts/browser_snapshot.py \
+  --url "https://example.com/product" \
+  --out-file "./rendered-product-page.json"
+```
+
+Then pass the structured snapshot into the same workflow:
 
 ```bash
 python scripts/run_promotion_workflow.py \
@@ -53,6 +72,9 @@ python scripts/product_intake.py \
 ```
 
 Supported intake sources are `--url`, `--html-file`, `--text-file`, and `--structured-json`. The structured snapshot can include fields such as `url`, `title`, `description`, `pricing`, `images`, `targetAudience`, `painPoints`, and rendered `text`.
+The workflow runner also supports `--browser-url`, which calls `scripts/browser_snapshot.py` first and writes `browser-snapshot/product-page-snapshot.json`.
+If Chromium is missing, install the official Playwright browser runtime with `python -m playwright install chromium`.
+For unattended setup on a trusted machine, add `--install-browser-if-missing` to let the workflow attempt that official install before retrying the snapshot.
 
 ## Stage 2: Research
 
@@ -243,7 +265,7 @@ Create a local automation config:
 python scripts/automation_scheduler.py init \
   --config "./promotion-automation.json" \
   --job-id "product-weekly" \
-  --product-url "https://example.com/product" \
+  --browser-url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --interval-days 7
 ```
@@ -269,6 +291,7 @@ The scheduler writes `promotion-automation-state.json` next to the config unless
 Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
+Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 
 ## Phase 2 And Phase 3 Boundaries
 

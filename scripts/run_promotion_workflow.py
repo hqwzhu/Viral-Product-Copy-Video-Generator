@@ -43,6 +43,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run product intake, competitor discovery, content generation, video rendering, and review outputs.")
     source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--browser-url", help="Public product URL to render with Playwright before intake.")
     source.add_argument("--product-url", help="Public product URL to fetch with static HTML metadata.")
     source.add_argument("--html-file", help="Saved product HTML file.")
     source.add_argument("--text-file", help="Rendered page text captured by Codex/browser tooling.")
@@ -62,6 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collector-platforms", default="youtube,github", help="Comma-separated platforms for official/public competitor collectors.")
     parser.add_argument("--search-snapshot-dir", default="", help="Directory of rendered search snapshots named <platform>.json/.txt/.html to capture.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
+    parser.add_argument("--install-browser-if-missing", action="store_true", help="Allow browser_snapshot.py to run python -m playwright install chromium when Chromium is missing.")
 
     parser.add_argument("--skip-video", action="store_true", help="Skip MP4 rendering.")
     parser.add_argument("--video-platforms", default="auto", help="Comma-separated platforms to render, or auto.")
@@ -83,7 +85,10 @@ def parse_args() -> argparse.Namespace:
 def run_product_intake(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
     intake_dir = out_dir / "intake"
     command = [sys.executable, str(SCRIPTS / "product_intake.py"), "--out-dir", str(intake_dir)]
-    if args.product_url:
+    if args.browser_url:
+        snapshot_path = run_browser_snapshot(args, out_dir, steps)
+        command.extend(["--structured-json", str(snapshot_path)])
+    elif args.product_url:
         command.extend(["--url", args.product_url])
     elif args.html_file:
         command.extend(["--html-file", args.html_file])
@@ -98,9 +103,29 @@ def run_product_intake(args: argparse.Namespace, out_dir: Path, steps: list[dict
     return json.loads(profile_path.read_text(encoding="utf-8"))
 
 
+def run_browser_snapshot(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> Path:
+    snapshot_path = out_dir / "browser-snapshot/product-page-snapshot.json"
+    command = [
+        sys.executable,
+        str(SCRIPTS / "browser_snapshot.py"),
+        "--url",
+        args.browser_url,
+        "--out-file",
+        str(snapshot_path),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    steps.append(run_command("browser_snapshot", command))
+    if not snapshot_path.exists():
+        raise SystemExit(f"Browser snapshot did not create {snapshot_path}")
+    return snapshot_path
+
+
 def product_from_profile(args: argparse.Namespace, profile: dict[str, Any]) -> dict[str, Any]:
     name = first_non_empty(args.product_name, profile.get("productName"), profile.get("title"), "Unknown product")
-    url = first_non_empty(args.product_url, profile.get("canonicalUrl"), profile.get("source"))
+    url = first_non_empty(args.browser_url, args.product_url, profile.get("canonicalUrl"), profile.get("source"))
     audience = split_csv(args.audience) or clean_list(profile.get("targetAudienceAssumptions")) or ["target audience needs manual verification"]
     pain_points = split_csv(args.pain_points) or clean_list(profile.get("painPointAssumptions")) or ["pain points need manual verification"]
     value = first_non_empty(args.value_proposition, profile.get("valueProposition"), profile.get("description"), f"{name} value proposition needs manual verification.")
@@ -332,6 +357,7 @@ def build_manifest(
         },
         "artifacts": {
             "intakeProfile": str(out_dir / "intake/product-profile.json"),
+            "browserSnapshot": str(out_dir / "browser-snapshot/product-page-snapshot.json") if args.browser_url else "",
             "contentJson": str(out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"),
             "publishPack": str(publish_packs),
             "competitorDiscovery": str(out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"),

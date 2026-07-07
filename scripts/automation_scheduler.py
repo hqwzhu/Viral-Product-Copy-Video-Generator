@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--config", required=True)
     init.add_argument("--job-id", default="product-weekly")
     source = init.add_mutually_exclusive_group(required=True)
+    source.add_argument("--browser-url")
     source.add_argument("--product-url")
     source.add_argument("--html-file")
     source.add_argument("--text-file")
@@ -46,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--interval-days", type=int, default=7)
     init.add_argument("--output-root", default="./promotion-output/automation")
     init.add_argument("--skip-video", action="store_true")
+    init.add_argument("--install-browser-if-missing", action="store_true")
 
     run = subparsers.add_parser("run", help="Run jobs that are due.")
     run.add_argument("--config", required=True)
@@ -77,6 +79,7 @@ def init_config(args: argparse.Namespace) -> None:
         "liveOfficialCompetitors": False,
         "collectorPlatforms": ["youtube", "github"],
         "skipVideo": args.skip_video,
+        "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
     }
@@ -241,7 +244,9 @@ def build_publish_queue_command(job: dict[str, Any], out_dir: Path, base_dir: Pa
 def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -> list[str]:
     command = [sys.executable, str(SCRIPTS / "run_promotion_workflow.py")]
     source = job.get("input") or {}
-    if source.get("productUrl"):
+    if source.get("browserUrl"):
+        command.extend(["--browser-url", str(source["browserUrl"])])
+    elif source.get("productUrl"):
         command.extend(["--product-url", str(source["productUrl"])])
     elif source.get("htmlFile"):
         command.extend(["--html-file", str(resolve_path(base_dir, source["htmlFile"]))])
@@ -269,6 +274,8 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
         command.extend(["--search-snapshot-dir", str(resolve_path(base_dir, job["searchSnapshotDir"]))])
     if job.get("skipCompetitorDiscovery"):
         command.append("--skip-competitor-discovery")
+    if job.get("installBrowserIfMissing"):
+        command.append("--install-browser-if-missing")
     if job.get("skipVideo"):
         command.append("--skip-video")
     append_if_present(command, "--video-platforms", comma_value(job.get("videoPlatforms")))
@@ -338,6 +345,8 @@ def load_state(path: Path) -> dict[str, Any]:
 
 
 def input_from_args(args: argparse.Namespace) -> dict[str, str]:
+    if args.browser_url:
+        return {"browserUrl": args.browser_url}
     if args.product_url:
         return {"productUrl": args.product_url}
     if args.html_file:
