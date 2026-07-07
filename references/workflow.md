@@ -131,6 +131,17 @@ python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
 
 Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, and YouTube `videos.insert` upload. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Zhihu, Xiaohongshu, and Douyin remain manual/browser-assisted unless official app permissions are configured and verified.
 
+For a YouTube upload when no access token exists yet, use the OAuth helper:
+
+```bash
+python scripts/youtube_oauth_publish.py \
+  --video-file "./promotion-output/videos/product-youtube.mp4" \
+  --title "Product launch draft" \
+  --out-dir "./promotion-output"
+```
+
+Dry-run writes the Google authorization URL. Execution requires `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `--execute --approval I_APPROVE_PUBLISH`. The helper exchanges the authorization code for an access token and uploads in the same process without saving the token.
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.

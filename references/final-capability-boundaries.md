@@ -13,6 +13,7 @@ Use this reference when the user asks for full automation.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
 - Import real post-publish metrics from CSV, JSON, text exports, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
 - Execute approved official publishing actions for GitHub and YouTube when the correct environment token and explicit approval phrase are supplied.
+- Run a YouTube OAuth consent flow and upload in the same process without saving OAuth tokens.
 
 ## What Requires Official Authorization
 

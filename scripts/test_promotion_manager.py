@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,7 @@ COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
+YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -461,6 +463,74 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(report["officialApi"], "YouTube Data API videos.insert")
         self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
+
+    def test_youtube_oauth_publish_dry_run_generates_auth_url_without_tokens(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"dry-run only")
+        env = os.environ.copy()
+        env["GOOGLE_OAUTH_CLIENT_ID"] = "client-id.apps.googleusercontent.com"
+        env.pop("GOOGLE_OAUTH_CLIENT_SECRET", None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(YOUTUBE_OAUTH_PUBLISH),
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--description",
+                "Promotion video draft.",
+                "--state",
+                "test-state",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/youtube-oauth-publish.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertIn("accounts.google.com/o/oauth2/v2/auth", report["authUrl"])
+        self.assertIn("youtube.upload", report["authUrl"])
+        self.assertFalse(report["credentialStatus"]["tokensSaved"])
+        self.assertNotIn("access_token", json.dumps(report))
+        self.assertNotIn("GOOGLE_OAUTH_CLIENT_SECRET", json.dumps(report))
+
+    def test_youtube_oauth_publish_execute_requires_client_secret(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-blocked-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"dry-run only")
+        env = os.environ.copy()
+        env["GOOGLE_OAUTH_CLIENT_ID"] = "client-id.apps.googleusercontent.com"
+        env.pop("GOOGLE_OAUTH_CLIENT_SECRET", None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(YOUTUBE_OAUTH_PUBLISH),
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/youtube-oauth-publish.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("GOOGLE_OAUTH_CLIENT_SECRET", report["reason"])
+        self.assertNotIn("accessToken", json.dumps(report))
 
     def test_video_renderer_creates_mp4_when_ffmpeg_exists(self) -> None:
         if shutil.which("ffmpeg") is None:

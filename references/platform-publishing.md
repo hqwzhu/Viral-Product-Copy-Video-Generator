@@ -31,11 +31,14 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 - GitHub issue creation through the issues REST API.
 - GitHub release creation through the releases REST API.
 - YouTube video upload through `videos.insert` when an OAuth access token is available.
+- YouTube OAuth consent and same-process upload through `scripts/youtube_oauth_publish.py`.
 
 The executor defaults to dry-run. Real writes require `--execute --approval I_APPROVE_PUBLISH` plus the relevant environment credential. It must not write credentials to reports.
+The YouTube OAuth helper also defaults to dry-run. Execution requires a Google OAuth client ID and client secret from environment variables, opens or prints a Google authorization URL, exchanges the authorization code for a temporary access token, uploads, and does not save the token.
 
 ## Reference URLs
 
+- Google OAuth 2.0 for installed apps: https://developers.google.com/identity/protocols/oauth2/native-app
 - YouTube videos.insert: https://developers.google.com/youtube/v3/docs/videos/insert
 - GitHub Contents API: https://docs.github.com/en/rest/repos/contents
 - GitHub Releases API: https://docs.github.com/en/rest/releases/releases
