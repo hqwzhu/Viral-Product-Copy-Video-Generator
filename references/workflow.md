@@ -346,6 +346,19 @@ python scripts/publish_url_capture.py \
 
 The capture script extracts the real platform URL, title, content id, and evidence, then updates `reports/promotion-manager/published-items/published-items.{json,md}`. It must block draft, editor, preview, localhost, and unknown-platform URLs instead of registering them as published content.
 
+Run one full local operating cycle when you want workflow generation, guarded publishing, published URL registration, and metrics recovery in one command:
+
+```bash
+python scripts/promotion_cycle_runner.py \
+  --browser-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --github-repo owner/repo \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube execution through `--execute-publish --approval I_APPROVE_PUBLISH`, but queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
+
 ## Stage 6: Retrospective
 
 Generate a retrospective only from real data and evidence. If data is missing, return `waiting_real_data`.

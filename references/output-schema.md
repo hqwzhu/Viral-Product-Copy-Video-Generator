@@ -53,6 +53,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, official connectors, and business exports
+- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, and metrics recovery as one operating cycle
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
 - `videos/<product>-<platform>.mp4` and matching `.json` metadata when `scripts/render_video.py` is run; metadata includes `audioMode` as `silent`, `file`, or `windows_sapi`
 
@@ -196,6 +197,18 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `manualExportRequired[]`: platforms or queue items that need real export/screenshot/API evidence before optimization
 - `coverage`: counts for discovered published items, queued items, metric records, records with metrics, pending manual requirements, and platforms
 - `retrospective`: data-backed next-round recommendations, or `waiting_real_data` when evidence is missing
+
+## Promotion Cycle
+
+`promotion-cycle.json` includes:
+
+- `workflow`: status, workflow manifest path, output directory, and whether the workflow was generated or loaded from an existing manifest
+- `publishQueue`: guarded publish queue status, queue path, and queue summary
+- `publishedItems`: published URL registration status, report path, optional manual input path, and published/pending summary
+- `metricsRecovery`: metrics recovery report status, path, recovery status, retrospective status, real metric record count, and pending/manual requirements
+- `automationStatus`: `ready_with_real_metrics`, `partial_ready_with_real_metrics`, `ready_waiting_real_data`, or a failure status
+- `approval`: whether publish execution was requested and whether the approval phrase matched
+- `steps[]`: subprocess commands, exit codes, and output tails for auditability
 
 ## Automation Scheduler Config
 

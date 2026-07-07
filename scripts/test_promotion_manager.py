@@ -31,6 +31,7 @@ PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
+PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
@@ -1840,6 +1841,70 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("xhs-screenshot.png", by_platform["xiaohongshu"]["evidence"])
         self.assertEqual(report["pendingQueueItems"][0]["platform"], "douyin")
         self.assertTrue((out_dir / "reports/promotion-manager/published-items/published-items.md").exists())
+
+    def test_promotion_cycle_runner_connects_publish_queue_and_metrics_recovery(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-cycle-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        business_csv = out_dir / "business.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,orders,revenue,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,3000,380,2,$88.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PROMOTION_CYCLE_RUNNER),
+                "--structured-json",
+                str(snapshot_path),
+                "--platforms",
+                "github,xiaohongshu",
+                "--skip-video",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--github-path",
+                "PROMOTION.md",
+                "--published-url",
+                "xiaohongshu=https://www.xiaohongshu.com/explore/note123",
+                "--business-csv",
+                str(business_csv),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        cycle_path = out_dir / "output/reports/promotion-manager/cycle/promotion-cycle.json"
+        cycle = json.loads(cycle_path.read_text(encoding="utf-8"))
+        self.assertEqual(cycle["workflow"]["status"], "ready")
+        self.assertEqual(cycle["publishQueue"]["status"], "ready")
+        self.assertEqual(cycle["publishedItems"]["status"], "ready")
+        self.assertEqual(cycle["metricsRecovery"]["status"], "ready")
+        self.assertEqual(cycle["automationStatus"], "partial_ready_with_real_metrics")
+        self.assertTrue(Path(cycle["publishQueue"]["queue"]).exists())
+        self.assertTrue(Path(cycle["publishedItems"]["publishedItems"]).exists())
+        recovery = json.loads(Path(cycle["metricsRecovery"]["metricsRecovery"]).read_text(encoding="utf-8"))
+        self.assertEqual(recovery["coverage"]["recordsWithMetrics"], 1)
+        self.assertEqual(recovery["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 88.0)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/cycle/promotion-cycle.md").exists())
 
     def test_publish_url_capture_registers_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-url-capture-test-"))

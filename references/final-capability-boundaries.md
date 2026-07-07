@@ -28,6 +28,7 @@ Use this reference when the user asks for full automation.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls and routes Zhihu, Xiaohongshu, Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Register proven published URLs from official execution reports, publish queues, or manual/browser-assisted evidence into a standard published-items report for later metrics recovery.
 - Capture browser-visible post-publish snapshots, saved HTML, copied text, or public published URLs and register them only when they resolve to a real platform URL rather than a draft, editor, preview, localhost, or unknown-platform page.
+- Run a one-command local operating cycle that chains workflow generation, guarded publish queue, published URL registration, and metrics recovery while preserving approval gates and evidence requirements.
 - Run a YouTube OAuth consent flow and upload in the same process without saving OAuth tokens.
 
 ## What Requires Official Authorization
@@ -51,6 +52,7 @@ Use this reference when the user asks for full automation.
 - Do not claim competitor metrics unless they were observed from public pages, official APIs, exports, or user-provided evidence.
 - Do not infer hidden follower counts, private analytics, creator income, orders, or conversion performance from public creator ranking.
 - Do not treat creator follow-up dry-runs, queued evidence requests, or search plans as captured creator performance data.
+- Do not treat a promotion cycle as fully published unless the publish queue or published-items report contains proven published URLs.
 - Do not copy competitor wording into final product copy; reuse only structure, sequence, and safe pattern labels.
 - Do not claim revenue, orders, leads, views, likes, comments, or click data without evidence.
 - Do not call unofficial endpoints "official APIs."
