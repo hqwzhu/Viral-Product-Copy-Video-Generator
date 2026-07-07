@@ -36,6 +36,7 @@ PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
 VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
 FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
+COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -638,6 +639,197 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(deep["records"][0]["sourceFollowUpTask"]["materialId"], "viral-material-001")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/follow-up-captures/manual-evidence/follow-up-002.md").exists())
 
+    def test_competitor_content_enhancer_writes_back_content_and_publish_pack(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="competitor-content-enhancer-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        content_path = out_dir / "ai-prompt-kit-platform-content.json"
+        content_path.write_text(
+            json.dumps(
+                {
+                    "youtube": {
+                        "platform": "youtube",
+                        "title": "AI Prompt Kit launch",
+                        "description": "Base YouTube description.",
+                        "shortVideoScript": "Base script.",
+                        "voiceover": "Base voiceover.",
+                        "storyboard": [],
+                        "formats": {"videoScripts": ["Base script."]},
+                        "sourceProduct": {"name": "AI Prompt Kit", "url": "https://example.com/ai-prompt-kit"},
+                        "cta": "Try AI Prompt Kit",
+                    },
+                    "github": {
+                        "platform": "github",
+                        "title": "AI Prompt Kit repo launch",
+                        "description": "Base GitHub description.",
+                        "formats": {},
+                        "sourceProduct": {"name": "AI Prompt Kit", "url": "https://example.com/ai-prompt-kit"},
+                    },
+                    "xiaohongshu": {
+                        "platform": "xiaohongshu",
+                        "title": "AI Prompt Kit note",
+                        "description": "Base note.",
+                        "formats": {},
+                        "sourceProduct": {"name": "AI Prompt Kit", "url": "https://example.com/ai-prompt-kit"},
+                    },
+                    "douyin": {
+                        "platform": "douyin",
+                        "title": "AI Prompt Kit short video",
+                        "description": "Base short video.",
+                        "shortVideoScript": "Base short script.",
+                        "voiceover": "Base voiceover.",
+                        "storyboard": [],
+                        "formats": {},
+                        "sourceProduct": {"name": "AI Prompt Kit", "url": "https://example.com/ai-prompt-kit"},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        viral_path = out_dir / "viral-content-library.json"
+        viral_path.write_text(
+            json.dumps(
+                {
+                    "materials": [
+                        {
+                            "platform": "youtube",
+                            "title": "One product URL into 30 launch videos",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "creatorName": "Launch Lab",
+                            "hook": "Your product page is already a content plan.",
+                            "reusablePatterns": ["numbered_title_or_claim", "visible_social_proof"],
+                            "viralSignals": {"score": 160000.0},
+                            "visibleMetrics": {"views": {"raw": "120k", "normalized": 120000.0}},
+                        },
+                        {
+                            "platform": "github",
+                            "title": "Launch workflow repo",
+                            "url": "https://github.com/example/launch-workflow",
+                            "hook": "Stop writing launch copy from scratch.",
+                            "reusablePatterns": ["explicit_call_to_action"],
+                            "viralSignals": {"score": 4200.0},
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "title": "7 prompts that turn one product page into launch notes",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-1",
+                            "hook": "Stop rewriting the same product intro.",
+                            "reusablePatterns": ["numbered_title_or_claim"],
+                            "viralSignals": {"score": 5800.0},
+                        },
+                        {
+                            "platform": "douyin",
+                            "title": "One URL into 10 short videos",
+                            "url": "https://www.douyin.com/video/123",
+                            "hook": "Your product page is already a script.",
+                            "reusablePatterns": ["visible_social_proof"],
+                            "viralSignals": {"score": 9600.0},
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        publish_pack_path = out_dir / "ai-prompt-kit-publish-pack.json"
+        publish_pack_path.write_text(
+            json.dumps(
+                [
+                    {"platform": "youtube", "content": {"title": "Old title"}},
+                    {"platform": "github", "content": {"title": "Old repo title"}},
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPETITOR_CONTENT_ENHANCER),
+                "--content-json",
+                str(content_path),
+                "--viral-library",
+                str(viral_path),
+                "--publish-pack",
+                str(publish_pack_path),
+                "--write-back",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        enhanced = json.loads(content_path.read_text(encoding="utf-8"))
+        self.assertEqual(enhanced["youtube"]["competitorInformed"]["status"], "ready")
+        self.assertIn("Your product page is already a content plan", enhanced["youtube"]["shortVideoScript"])
+        self.assertIn("Observed viral pattern", enhanced["xiaohongshu"]["description"])
+        self.assertIn("Observed viral pattern", enhanced["douyin"]["voiceover"])
+        self.assertTrue((out_dir / "ai-prompt-kit-platform-content.base.json").exists())
+        self.assertTrue((out_dir / "output/reports/promotion-manager/generated-content/ai-prompt-kit-competitor-informed-content.json").exists())
+        publish_pack = json.loads(publish_pack_path.read_text(encoding="utf-8"))
+        self.assertEqual(publish_pack[0]["content"]["competitorInformed"]["status"], "ready")
+        self.assertIn("AI Prompt Kit", publish_pack[1]["content"]["formats"]["readmePromotion"])
+
+    def test_agent_workflow_uses_competitor_informed_content_before_video_and_publish(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-competitor-informed-workflow-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_path = out_dir / "product.json"
+        product_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        snapshot_dir = out_dir / "search"
+        snapshot_dir.mkdir()
+        (snapshot_dir / "youtube.json").write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "title": "One product URL into 30 launch videos",
+                            "url": "https://www.youtube.com/watch?v=abc123",
+                            "creatorName": "Launch Lab",
+                            "hook": "Your product page is already a content plan.",
+                            "content": "views 120k likes 9k comments 500",
+                            "views": "120k",
+                            "likes": "9k",
+                            "comments": "500",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(RUN_WORKFLOW),
+                "--structured-json",
+                str(product_path),
+                "--platforms",
+                "youtube",
+                "--search-snapshot-dir",
+                str(snapshot_dir),
+                "--use-competitor-informed-content",
+                "--skip-video",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        manifest = json.loads((out_dir / "output/reports/promotion-manager/agent-run/workflow-manifest.json").read_text(encoding="utf-8"))
+        enhancer_run = manifest["competitorDiscovery"]["competitorInformedContent"]
+        self.assertEqual(enhancer_run["status"], "ready")
+        self.assertTrue(Path(manifest["artifacts"]["competitorInformedContent"]).exists())
+        content = json.loads(Path(manifest["artifacts"]["contentJson"]).read_text(encoding="utf-8"))
+        self.assertEqual(content["youtube"]["competitorInformed"]["status"], "ready")
+        self.assertIn("Your product page is already a content plan", content["youtube"]["shortVideoScript"])
+
     def test_platform_search_browser_generates_snapshots_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-search-browser-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -974,6 +1166,69 @@ Prompt templates for product copy, SEO content, and video scripts.
         recovery = run_report["records"][0]["metricsRecovery"]
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
+
+    def test_automation_scheduler_passes_competitor_informed_content_flags(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-enhancer-flags-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "enhancer-enabled",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["youtube"],
+                            "competitorInformedContent": {"enabled": True},
+                            "skipVideo": True,
+                        },
+                        {
+                            "id": "enhancer-disabled",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["youtube"],
+                            "competitorInformedContent": {"enabled": False},
+                            "skipVideo": True,
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+                "--dry-run",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        commands = {record["jobId"]: record["command"] for record in run_report["records"]}
+        self.assertIn("--use-competitor-informed-content", commands["enhancer-enabled"])
+        self.assertIn("--skip-competitor-informed-content", commands["enhancer-disabled"])
 
     def test_automation_scheduler_writes_windows_task_script(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))

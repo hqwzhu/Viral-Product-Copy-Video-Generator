@@ -35,10 +35,11 @@ def main() -> None:
     search_captures = run_search_captures(args, product, out_dir, steps, browser_search)
     viral_library = run_viral_content_library(args, out_dir, steps, search_captures)
     follow_up_captures = run_follow_up_captures(args, out_dir, steps, viral_library)
+    competitor_informed = run_competitor_content_enhancer(args, product, out_dir, steps, viral_library, follow_up_captures)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, follow_up_captures, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, follow_up_captures, competitor_informed, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -72,6 +73,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follow-up-capture-limit", type=int, default=20)
     parser.add_argument("--follow-up-dry-run", action="store_true", help="Plan follow-up captures without fetching public URLs.")
     parser.add_argument("--allow-localhost-follow-up", action="store_true", help="Allow localhost follow-up URLs for local fixtures/tests only.")
+    parser.add_argument("--use-competitor-informed-content", action="store_true", help="Explicitly use viral/deep competitor libraries to rewrite generated content before video and publish packs. This is enabled automatically when a library exists.")
+    parser.add_argument("--skip-competitor-informed-content", action="store_true", help="Skip rewriting generated content with competitor-informed patterns.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true", help="Allow browser_snapshot.py to run python -m playwright install chromium when Chromium is missing.")
 
@@ -399,6 +402,76 @@ def run_follow_up_captures(
     return summary
 
 
+def run_competitor_content_enhancer(
+    args: argparse.Namespace,
+    product: dict[str, Any],
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    viral_library: dict[str, Any],
+    follow_up_captures: dict[str, Any],
+) -> dict[str, Any]:
+    if args.skip_competitor_informed_content:
+        return {"status": "skipped", "reason": "--skip-competitor-informed-content was supplied."}
+
+    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    if not content_json.exists():
+        return {"status": "blocked", "reason": f"Generated content JSON not found: {content_json}"}
+
+    viral_path = existing_path(viral_library.get("library", ""))
+    deep_path = existing_path(follow_up_captures.get("deepCompetitorLibrary", ""))
+    if not viral_path and not deep_path:
+        return {"status": "skipped", "reason": "No viral or deep competitor library was available."}
+
+    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    command = [
+        sys.executable,
+        str(SCRIPTS / "competitor_content_enhancer.py"),
+        "--content-json",
+        str(content_json),
+        "--out-dir",
+        str(out_dir),
+        "--write-back",
+    ]
+    if viral_path:
+        command.extend(["--viral-library", str(viral_path)])
+    if deep_path:
+        command.extend(["--deep-library", str(deep_path)])
+    if publish_pack.exists():
+        command.extend(["--publish-pack", str(publish_pack)])
+
+    step = run_command("competitor_content_enhancer", command, check=False)
+    steps.append(step)
+    slug = content_json.stem.replace("-platform-content", "") or "product"
+    content_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.json"
+    markdown_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.md"
+    strategy_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-strategy.json"
+    backup_path = content_json.with_suffix(".base.json")
+    status = "ready" if step["exitCode"] == 0 and content_report.exists() and strategy_report.exists() else "error"
+    summary: dict[str, Any] = {
+        "status": status,
+        "content": str(content_report),
+        "markdown": str(markdown_report) if markdown_report.exists() else "",
+        "strategy": str(strategy_report),
+        "writeBack": str(content_json),
+        "backup": str(backup_path) if backup_path.exists() else "",
+        "updatedPublishPack": str(publish_pack) if publish_pack.exists() else "",
+        "sourceLibraries": {
+            "viralContentLibrary": str(viral_path) if viral_path else "",
+            "deepCompetitorLibrary": str(deep_path) if deep_path else "",
+        },
+        "exitCode": step["exitCode"],
+    }
+    if strategy_report.exists():
+        strategy = json.loads(strategy_report.read_text(encoding="utf-8"))
+        summary["sourceCounts"] = strategy.get("sourceCounts", {})
+        summary["platforms"] = {
+            platform: info.get("recordCount", 0)
+            for platform, info in strategy.get("platforms", {}).items()
+            if isinstance(info, dict)
+        }
+    return summary
+
+
 def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path | str] | None:
     for suffix, flag in [(".json", "--structured-json"), (".txt", "--text-file"), (".html", "--html-file"), (".htm", "--html-file")]:
         path = snapshot_dir / f"{platform}{suffix}"
@@ -470,6 +543,7 @@ def build_manifest(
     search_captures: list[dict[str, Any]],
     viral_library: dict[str, Any],
     follow_up_captures: dict[str, Any],
+    competitor_informed: dict[str, Any],
     videos: list[dict[str, Any]],
     metrics: dict[str, Any] | None,
     steps: list[dict[str, Any]],
@@ -507,6 +581,8 @@ def build_manifest(
             "followUpCaptureTasks": viral_library.get("followUpTasks", ""),
             "followUpCaptureResults": follow_up_captures.get("results", ""),
             "deepCompetitorLibrary": follow_up_captures.get("deepCompetitorLibrary", ""),
+            "competitorInformedContent": competitor_informed.get("content", ""),
+            "competitorInformedStrategy": competitor_informed.get("strategy", ""),
             "metricsReport": str(out_dir / "reports/promotion-manager/metrics/imported-metrics.json"),
         },
         "competitorDiscovery": {
@@ -518,6 +594,7 @@ def build_manifest(
             "searchCaptures": search_captures,
             "viralContentLibrary": viral_library,
             "followUpCaptureRun": follow_up_captures,
+            "competitorInformedContent": competitor_informed,
         },
         "videoGeneration": videos,
         "publishAutomation": publish_queue,
@@ -580,6 +657,7 @@ def render_manifest(manifest: dict[str, Any]) -> str:
         f"- Query: {manifest['competitorDiscovery']['query']}",
         f"- Viral content library: `{manifest['competitorDiscovery']['viralContentLibrary'].get('status', 'skipped')}`",
         f"- Follow-up captures: `{manifest['competitorDiscovery']['followUpCaptureRun'].get('status', 'skipped')}`",
+        f"- Competitor-informed content: `{manifest['competitorDiscovery']['competitorInformedContent'].get('status', 'skipped')}`",
         "",
         "## Video Generation",
     ]
@@ -673,6 +751,14 @@ def first_non_empty(*values: Any) -> str:
         if text:
             return text
     return ""
+
+
+def existing_path(value: Any) -> Path | None:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None
+    path = Path(text)
+    return path if path.exists() else None
 
 
 def slugify(value: str) -> str:

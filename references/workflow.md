@@ -144,6 +144,19 @@ python scripts/follow_up_capture_runner.py \
 
 The runner fetches only `public_url_capture_candidate` tasks. For Zhihu, Xiaohongshu, Douyin, TikTok, missing URLs, or unverified platforms, it writes evidence request files under `follow-up-captures/manual-evidence/` and waits for browser-visible text, screenshots, transcripts, official APIs, or exports.
 
+Use the competitor-informed enhancer when ranked search materials or deep competitor records should shape the final drafts:
+
+```bash
+python scripts/competitor_content_enhancer.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/product-platform-content.json" \
+  --viral-library "./promotion-output/reports/promotion-manager/competitors/viral-content-library.json" \
+  --deep-library "./promotion-output/reports/promotion-manager/competitors/deep-competitor-library.json" \
+  --write-back \
+  --out-dir "./promotion-output"
+```
+
+The full workflow runs this step automatically after viral/deep libraries are available and before video rendering. It writes `<product>-competitor-informed-content.{json,md}`, `<product>-competitor-informed-strategy.json`, backs up the base content as `<product>-platform-content.base.json`, and updates the publish pack when present. Use `--skip-competitor-informed-content` only when you need untouched baseline drafts.
+
 For a full workflow, put platform files in a directory and pass it to the runner:
 
 ```bash
@@ -166,6 +179,7 @@ python scripts/run_promotion_workflow.py \
 Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platform>.html`, or `<platform>.htm`. Use this for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms when official API collection is unavailable. The script must not extract cookies, hidden tokens, or private endpoints; it only processes browser-visible evidence.
 The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
 The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--follow-up-dry-run` to plan the stage without fetching public URLs.
+The workflow runner rewrites generated content with available viral/deep competitor libraries before rendering videos and building final publish queues. Use `--skip-competitor-informed-content` to disable that rewrite.
 
 Start with:
 
@@ -208,6 +222,7 @@ Generated self-learning docs must be written to `docs/promotion-manager/`, not o
 ## Stage 3: Generate
 
 Generate one platform-native content pack per target platform. Content must include a CTA and compliance note.
+When a viral material library exists, use competitor-informed content as the default final draft source. The enhancer may adapt titles, descriptions, video scripts, voiceover, storyboard, and platform-specific formats, but it must keep competitor metrics as evidence metadata only and must not copy competitor wording into product claims.
 
 To create a reviewable MP4 after content generation:
 
@@ -372,6 +387,7 @@ To enable queue generation after a scheduled workflow, set `jobs[].publish.enabl
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
+Scheduled jobs can set `competitorInformedContent.enabled: true` to pass the explicit workflow flag or `false` to add `--skip-competitor-informed-content`.
 Scheduled jobs can set `metricsRecovery.enabled: true` to run `scripts/metrics_recovery.py` after the workflow and optional publish queue. Use `metricsRecovery.businessCsv`, `businessJson`, `businessText`, `publishedItemsJson`, `publishedUrls`, `githubRepos`, or `youtubeVideoIds` to pass evidence for automatic recovery.
 
 ## Phase 2 And Phase 3 Boundaries
