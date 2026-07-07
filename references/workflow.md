@@ -134,6 +134,16 @@ python scripts/viral_content_library.py \
 
 This writes `viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}`. The library ranks captured records by observed viral score and preserves title, creator, hook, CTA, visible metrics, reusable patterns, and source report paths. The follow-up queue marks YouTube/GitHub public URLs as capture candidates and keeps Zhihu, Xiaohongshu, Douyin, TikTok, and unknown platforms as browser-assisted/manual evidence tasks unless official access is verified.
 
+Execute safe public follow-up capture tasks when you want deeper competitor evidence:
+
+```bash
+python scripts/follow_up_capture_runner.py \
+  --tasks-json "./promotion-output/reports/promotion-manager/competitors/follow-up-capture-tasks.json" \
+  --out-dir "./promotion-output"
+```
+
+The runner fetches only `public_url_capture_candidate` tasks. For Zhihu, Xiaohongshu, Douyin, TikTok, missing URLs, or unverified platforms, it writes evidence request files under `follow-up-captures/manual-evidence/` and waits for browser-visible text, screenshots, transcripts, official APIs, or exports.
+
 For a full workflow, put platform files in a directory and pass it to the runner:
 
 ```bash
@@ -155,6 +165,7 @@ python scripts/run_promotion_workflow.py \
 
 Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platform>.html`, or `<platform>.htm`. Use this for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms when official API collection is unavailable. The script must not extract cookies, hidden tokens, or private endpoints; it only processes browser-visible evidence.
 The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
+The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--follow-up-dry-run` to plan the stage without fetching public URLs.
 
 Start with:
 
@@ -360,6 +371,7 @@ Scheduled runs can generate new content, videos, publish packs, and metrics impo
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
+Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
 Scheduled jobs can set `metricsRecovery.enabled: true` to run `scripts/metrics_recovery.py` after the workflow and optional publish queue. Use `metricsRecovery.businessCsv`, `businessJson`, `businessText`, `publishedItemsJson`, `publishedUrls`, `githubRepos`, or `youtubeVideoIds` to pass evidence for automatic recovery.
 
 ## Phase 2 And Phase 3 Boundaries

@@ -34,10 +34,11 @@ def main() -> None:
     browser_search = run_browser_search_snapshots(args, product, out_dir, steps)
     search_captures = run_search_captures(args, product, out_dir, steps, browser_search)
     viral_library = run_viral_content_library(args, out_dir, steps, search_captures)
+    follow_up_captures = run_follow_up_captures(args, out_dir, steps, viral_library)
     videos = render_video_artifacts(args, product, out_dir, steps)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, follow_up_captures, videos, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -67,6 +68,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--search-snapshot-dir", default="", help="Directory of rendered search snapshots named <platform>.json/.txt/.html to capture.")
     parser.add_argument("--search-html-snapshot-dir", default="", help="Optional directory of saved <platform>.html search pages for auto search snapshots.")
     parser.add_argument("--skip-viral-library", action="store_true", help="Skip ranked viral material library generation after search captures.")
+    parser.add_argument("--run-follow-up-captures", action="store_true", help="Run safe public follow-up captures after the viral material library is built.")
+    parser.add_argument("--follow-up-capture-limit", type=int, default=20)
+    parser.add_argument("--follow-up-dry-run", action="store_true", help="Plan follow-up captures without fetching public URLs.")
+    parser.add_argument("--allow-localhost-follow-up", action="store_true", help="Allow localhost follow-up URLs for local fixtures/tests only.")
     parser.add_argument("--skip-competitor-discovery", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true", help="Allow browser_snapshot.py to run python -m playwright install chromium when Chromium is missing.")
 
@@ -350,6 +355,50 @@ def run_viral_content_library(
     return summary
 
 
+def run_follow_up_captures(
+    args: argparse.Namespace,
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    viral_library: dict[str, Any],
+) -> dict[str, Any]:
+    if not args.run_follow_up_captures:
+        return {"status": "skipped", "reason": "--run-follow-up-captures was not supplied."}
+    tasks_path = viral_library.get("followUpTasks", "")
+    if not tasks_path or not Path(tasks_path).exists():
+        return {"status": "skipped", "reason": "No follow-up capture tasks were available."}
+    command = [
+        sys.executable,
+        str(SCRIPTS / "follow_up_capture_runner.py"),
+        "--tasks-json",
+        tasks_path,
+        "--limit",
+        str(args.follow_up_capture_limit),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if args.follow_up_dry_run:
+        command.append("--dry-run")
+    if args.allow_localhost_follow_up:
+        command.append("--allow-localhost")
+    step = run_command("follow_up_capture_runner", command, check=False)
+    steps.append(step)
+    results_path = out_dir / "reports/promotion-manager/competitors/follow-up-capture-results.json"
+    deep_path = out_dir / "reports/promotion-manager/competitors/deep-competitor-library.json"
+    summary = {
+        "status": "ready" if results_path.exists() and step["exitCode"] == 0 else "error",
+        "results": str(results_path),
+        "deepCompetitorLibrary": str(deep_path),
+        "exitCode": step["exitCode"],
+    }
+    if results_path.exists():
+        report = json.loads(results_path.read_text(encoding="utf-8"))
+        summary["resultSummary"] = report.get("summary", {})
+    if deep_path.exists():
+        deep = json.loads(deep_path.read_text(encoding="utf-8"))
+        summary["deepRecordCount"] = deep.get("recordCount", 0)
+    return summary
+
+
 def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path | str] | None:
     for suffix, flag in [(".json", "--structured-json"), (".txt", "--text-file"), (".html", "--html-file"), (".htm", "--html-file")]:
         path = snapshot_dir / f"{platform}{suffix}"
@@ -420,6 +469,7 @@ def build_manifest(
     browser_search: dict[str, Any] | None,
     search_captures: list[dict[str, Any]],
     viral_library: dict[str, Any],
+    follow_up_captures: dict[str, Any],
     videos: list[dict[str, Any]],
     metrics: dict[str, Any] | None,
     steps: list[dict[str, Any]],
@@ -455,6 +505,8 @@ def build_manifest(
             "competitorDiscovery": str(out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"),
             "viralContentLibrary": viral_library.get("library", ""),
             "followUpCaptureTasks": viral_library.get("followUpTasks", ""),
+            "followUpCaptureResults": follow_up_captures.get("results", ""),
+            "deepCompetitorLibrary": follow_up_captures.get("deepCompetitorLibrary", ""),
             "metricsReport": str(out_dir / "reports/promotion-manager/metrics/imported-metrics.json"),
         },
         "competitorDiscovery": {
@@ -465,6 +517,7 @@ def build_manifest(
             "browserSearchSnapshots": browser_search or {},
             "searchCaptures": search_captures,
             "viralContentLibrary": viral_library,
+            "followUpCaptureRun": follow_up_captures,
         },
         "videoGeneration": videos,
         "publishAutomation": publish_queue,
@@ -526,6 +579,7 @@ def render_manifest(manifest: dict[str, Any]) -> str:
         f"- Status: `{manifest['competitorDiscovery']['status']}`",
         f"- Query: {manifest['competitorDiscovery']['query']}",
         f"- Viral content library: `{manifest['competitorDiscovery']['viralContentLibrary'].get('status', 'skipped')}`",
+        f"- Follow-up captures: `{manifest['competitorDiscovery']['followUpCaptureRun'].get('status', 'skipped')}`",
         "",
         "## Video Generation",
     ]

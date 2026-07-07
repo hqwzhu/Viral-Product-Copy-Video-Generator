@@ -83,6 +83,7 @@ def init_config(args: argparse.Namespace) -> None:
         "collectorPlatforms": ["youtube", "github"],
         "autoSearchCompetitors": args.auto_search_competitors,
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
+        "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False},
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
@@ -341,6 +342,14 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
         command.extend(["--search-html-snapshot-dir", str(resolve_path(base_dir, job["searchHtmlSnapshotDir"]))])
     if job.get("searchSnapshotDir"):
         command.extend(["--search-snapshot-dir", str(resolve_path(base_dir, job["searchSnapshotDir"]))])
+    follow_up = job.get("followUpCapture") or {}
+    if follow_up.get("enabled"):
+        command.append("--run-follow-up-captures")
+        command.extend(["--follow-up-capture-limit", str(follow_up.get("limit") or 20)])
+        if follow_up.get("dryRun"):
+            command.append("--follow-up-dry-run")
+        if follow_up.get("allowLocalhost"):
+            command.append("--allow-localhost-follow-up")
     if job.get("skipCompetitorDiscovery"):
         command.append("--skip-competitor-discovery")
     if job.get("installBrowserIfMissing"):

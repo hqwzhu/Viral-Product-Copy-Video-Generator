@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import http.server
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -33,6 +35,7 @@ AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
 VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
+FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
 
 
 def playwright_chromium_available() -> bool:
@@ -544,6 +547,97 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(tasks["summary"]["modes"]["browser_assisted_capture_required"], 1)
         self.assertIn(str(out_dir / "output"), tasks["tasks"][0]["command"])
 
+    def test_follow_up_capture_runner_executes_public_and_queues_manual_tasks(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="follow-up-capture-runner-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "competitor.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>Launch workflow repo</title>
+  <meta name="description" content="Turn one product URL into a repeatable launch content workflow.">
+</head>
+<body>
+  <h1>Launch workflow repo</h1>
+  <p>Hook: your product page is already a campaign brief.</p>
+  <p>Use it to generate titles, scripts, and GitHub launch copy. stars 42 forks 7</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/competitor.html"
+
+        tasks_path = out_dir / "follow-up-capture-tasks.json"
+        tasks_path.write_text(
+            json.dumps(
+                {
+                    "tasks": [
+                        {
+                            "id": "follow-up-001",
+                            "materialId": "viral-material-001",
+                            "priority": 1,
+                            "platform": "github",
+                            "title": "Launch workflow repo",
+                            "url": url,
+                            "mode": "public_url_capture_candidate",
+                            "status": "ready",
+                            "requiredEvidence": ["public URL content"],
+                        },
+                        {
+                            "id": "follow-up-002",
+                            "materialId": "viral-material-002",
+                            "priority": 2,
+                            "platform": "xiaohongshu",
+                            "title": "Launch note teardown",
+                            "url": "https://www.xiaohongshu.com/explore/test-note-1",
+                            "mode": "browser_assisted_capture_required",
+                            "status": "queued",
+                            "requiredEvidence": ["browser-visible page text"],
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(FOLLOW_UP_CAPTURE_RUNNER),
+                "--tasks-json",
+                str(tasks_path),
+                "--out-dir",
+                str(out_dir / "output"),
+                "--allow-localhost",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        results = json.loads((out_dir / "output/reports/promotion-manager/competitors/follow-up-capture-results.json").read_text(encoding="utf-8"))
+        self.assertEqual(results["summary"]["statuses"]["ready"], 1)
+        self.assertEqual(results["summary"]["statuses"]["queued_manual_evidence"], 1)
+        deep = json.loads((out_dir / "output/reports/promotion-manager/competitors/deep-competitor-library.json").read_text(encoding="utf-8"))
+        self.assertEqual(deep["recordCount"], 1)
+        self.assertEqual(deep["records"][0]["platform"], "github")
+        self.assertEqual(deep["records"][0]["sourceFollowUpTask"]["materialId"], "viral-material-001")
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/follow-up-captures/manual-evidence/follow-up-002.md").exists())
+
     def test_platform_search_browser_generates_snapshots_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-search-browser-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -694,6 +788,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "douyin",
                 "--search-snapshot-dir",
                 str(snapshot_dir),
+                "--run-follow-up-captures",
                 "--skip-video",
                 "--out-dir",
                 str(out_dir / "output"),
@@ -715,6 +810,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         library = json.loads(Path(viral_library["library"]).read_text(encoding="utf-8"))
         self.assertEqual(library["materials"][0]["platform"], "douyin")
         self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "browser_assisted_capture_required")
+        follow_up = manifest["competitorDiscovery"]["followUpCaptureRun"]
+        self.assertEqual(follow_up["status"], "ready")
+        self.assertEqual(follow_up["deepRecordCount"], 0)
+        self.assertEqual(follow_up["resultSummary"]["statuses"]["queued_manual_evidence"], 1)
+        self.assertTrue(Path(follow_up["results"]).exists())
 
     def test_automation_scheduler_runs_due_workflow_job(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-test-"))

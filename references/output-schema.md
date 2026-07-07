@@ -25,6 +25,9 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` imports rendered search snapshots, saved HTML, copied text, or public static URLs
 - `reports/promotion-manager/competitors/viral-content-library.{json,md}` when `scripts/viral_content_library.py` ranks captured search records across platforms
 - `reports/promotion-manager/competitors/follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` creates next-step public/browser-assisted capture tasks
+- `reports/promotion-manager/competitors/follow-up-capture-results.{json,md}` when `scripts/follow_up_capture_runner.py` executes or queues follow-up capture tasks
+- `reports/promotion-manager/competitors/deep-competitor-library.{json,md}` when safe public follow-up captures produce deeper competitor records
+- `reports/promotion-manager/competitors/follow-up-captures/manual-evidence/<task>.md` browser/manual evidence requests for platforms that cannot be safely fetched automatically
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
 - `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run
 - `reports/promotion-manager/research/platform-publishing-feasibility.{json,md}`
@@ -57,7 +60,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `product`: normalized product fields used by generation scripts
 - `input`: source type, confidence, and whether rendered snapshots are supported
 - `artifacts`: important output paths, including `browserSnapshot` when `--browser-url` is used
-- `competitorDiscovery`: search task status, official collection summaries, browser search snapshot summaries, normalized search capture summaries, and viral material library status
+- `competitorDiscovery`: search task status, official collection summaries, browser search snapshot summaries, normalized search capture summaries, viral material library status, and optional follow-up capture run status
 - `videoGeneration`: MP4 status and paths per video platform
 - `publishAutomation`: platform publish mode, approval requirement, and automation status
 - `metricsRecovery`: real-data recovery status and imported record count
@@ -82,6 +85,21 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `tasks[].command`: copy-ready command for safe public/user-evidence import when available
 - `tasks[].requiredEvidence`: required proof before the material can be used as deeper competitor evidence
 - `summary`: counts by mode and status
+
+`follow-up-capture-results.json` includes:
+
+- `results[]`: one execution result per follow-up task
+- `results[].status`: `ready`, `dry_run`, `queued_manual_evidence`, `blocked`, or `error`
+- `results[].importedCompetitors`: nested import report path when a public capture succeeds
+- `results[].evidenceRequest`: manual/browser evidence request path when automatic capture is not safe
+- `summary`: counts by mode/status and number of imported deep records
+
+`deep-competitor-library.json` includes:
+
+- `records[]`: deeper competitor records imported from successful public follow-up captures
+- `records[].sourceFollowUpTask`: original task/material reference used to trace the evidence
+- `aggregatePatterns`: platforms, titles, records with observed metrics, and reusable pattern counts
+- `guardrails`: public-only automatic fetch, no hidden tokens, no captcha bypass, no fabricated metrics
 
 ## Publish Modes
 
@@ -157,6 +175,9 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].searchSnapshotDir`: optional directory of platform search snapshots for the workflow runner
 - `jobs[].autoSearchCompetitors`: optional boolean that opens public platform search pages and creates structured snapshots before capture
 - `jobs[].searchHtmlSnapshotDir`: optional directory of saved `<platform>.html` search pages for environments without Playwright Chromium
+- `jobs[].followUpCapture.enabled`: optional boolean that runs `scripts/follow_up_capture_runner.py` after the viral material library is built
+- `jobs[].followUpCapture.limit`: optional max follow-up tasks to process
+- `jobs[].followUpCapture.dryRun`: optional boolean that plans follow-up captures without fetching public URLs
 - `jobs[].installBrowserIfMissing`: optional boolean that lets the workflow run the official Playwright Chromium install when `browserUrl` is used and Chromium is missing
 - `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
 - `jobs[].metricsRecovery.enabled`: defaults to false; when true, the scheduler runs `scripts/metrics_recovery.py` after a successful workflow and optional publish queue
