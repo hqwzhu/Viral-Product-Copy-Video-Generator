@@ -121,6 +121,23 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+To configure periodic local automation:
+
+```bash
+python scripts/automation_scheduler.py init \
+  --config "./promotion-automation.json" \
+  --job-id "product-weekly" \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --interval-days 7
+```
+
+Then run due jobs manually or from an OS scheduler:
+
+```bash
+python scripts/automation_scheduler.py run --config "./promotion-automation.json"
+```
+
 To run an official publish action, start with a dry run:
 
 ```bash
@@ -152,6 +169,7 @@ The command writes:
 - `docs/promotion-manager/06-saas-product-roadmap.md`
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
+- `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 
 ## Workflows
@@ -236,10 +254,17 @@ Use only real data supplied by the user or exported from platforms:
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 
+### 7. Periodic Automation
+
+Use `scripts/automation_scheduler.py` to run one or more product promotion jobs on a local schedule. The scheduler reads a JSON config, decides which jobs are due, calls `scripts/run_promotion_workflow.py`, writes a state file, and writes an automation run report. It can also generate a PowerShell script for Windows Task Scheduler.
+
+The scheduler may generate content, videos, publish packs, official dry-run publish plans, and metrics import attempts. It must not bypass the publish approval gate. Official writes still require the publish executor, environment credentials, and `--approval I_APPROVE_PUBLISH`.
+
 ## Bundled Resources
 
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
+- `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.

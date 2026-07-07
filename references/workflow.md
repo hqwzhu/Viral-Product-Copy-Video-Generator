@@ -202,6 +202,39 @@ Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--published-u
 
 The workflow runner can call metrics intake in the same run with `--metrics-csv`, `--metrics-json`, `--metrics-text`, `--published-url`, `--github-repo`, or `--youtube-video-id`. If no real evidence is supplied, its manifest must report `waiting_real_data`.
 
+## Stage 7: Periodic Automation
+
+Create a local automation config:
+
+```bash
+python scripts/automation_scheduler.py init \
+  --config "./promotion-automation.json" \
+  --job-id "product-weekly" \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --interval-days 7
+```
+
+Run due jobs:
+
+```bash
+python scripts/automation_scheduler.py run --config "./promotion-automation.json"
+```
+
+Generate a Windows Task Scheduler registration script:
+
+```bash
+python scripts/automation_scheduler.py windows-task \
+  --config "./promotion-automation.json" \
+  --out-file "./register-promotion-task.ps1" \
+  --task-name "ENHE Promotion Manager" \
+  --time "09:00"
+```
+
+The scheduler writes `promotion-automation-state.json` next to the config unless `--state-file` is provided. It also writes `automation-run.{json,md}` under the configured output root. Treat that report as the scheduler ledger.
+
+Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
+
 ## Phase 2 And Phase 3 Boundaries
 
 The script may generate roadmap documents for a browser extension and SaaS product, but do not implement either until the user explicitly approves that phase.

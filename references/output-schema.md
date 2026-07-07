@@ -16,6 +16,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
+- `promotion-output/automation/scheduler/automation-run.{json,md}` when `scripts/automation_scheduler.py run` executes due jobs
+- `promotion-automation-state.json` or the configured `--state-file` with last run status, output directory, manifest path, and next due time per job
 - `reports/promotion-manager/competitors/competitor-discovery.{json,md}` when `scripts/competitor_discovery.py` is run
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
 - `reports/promotion-manager/competitors/imported-competitors.{json,md}` when `scripts/competitor_intake.py` is run
@@ -61,3 +63,18 @@ The script writes JSON and Markdown reports under the selected output directory.
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
+
+## Automation Scheduler Config
+
+`scripts/automation_scheduler.py` accepts a JSON config:
+
+- `version`: schema version, currently `1`
+- `defaultOutputRoot`: root directory for scheduled run outputs
+- `jobs[]`: product jobs
+- `jobs[].id`: stable job id
+- `jobs[].enabled`: boolean
+- `jobs[].schedule.intervalDays`: minimum days between runs
+- `jobs[].input`: one of `productUrl`, `htmlFile`, `textFile`, or `structuredJson`
+- `jobs[].platforms`: target platform list
+- `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
+- `jobs[].publish.enabled`: defaults to false; final writes still require the official publish executor and approval

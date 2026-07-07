@@ -24,6 +24,7 @@ METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
+AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
@@ -273,6 +274,102 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertFalse(manifest["selfEvolution"]["canInstallWithoutReview"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json").exists())
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/competitor-discovery.json").exists())
+
+    def test_automation_scheduler_runs_due_workflow_job(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "pricing": "$19",
+                    "targetAudience": ["AI operators", "content marketers"],
+                    "painPoints": ["Blank page copywriting", "Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["youtube", "douyin", "github"],
+                            "topN": 2,
+                            "skipVideo": True,
+                            "publish": {"enabled": False, "mode": "approval_required"},
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-weekly"]
+        self.assertEqual(job_state["lastStatus"], "ready")
+        manifest_path = Path(job_state["lastManifest"])
+        self.assertTrue(manifest_path.exists())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["product"]["name"], "AI Prompt Kit")
+        self.assertEqual(manifest["videoGeneration"][0]["status"], "skipped")
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_report["records"][0]["status"], "ready")
+        self.assertFalse(run_report["records"][0]["publish"]["enabled"])
+
+    def test_automation_scheduler_writes_windows_task_script(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        config_path = out_dir / "automation.json"
+        config_path.write_text(json.dumps({"version": 1, "jobs": []}), encoding="utf-8")
+        script_path = out_dir / "register-task.ps1"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "windows-task",
+                "--config",
+                str(config_path),
+                "--out-file",
+                str(script_path),
+                "--task-name",
+                "ENHE Promotion Manager Test",
+                "--time",
+                "09:30",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        script = script_path.read_text(encoding="utf-8")
+        self.assertIn("Register-ScheduledTask", script)
+        self.assertIn("automation_scheduler.py", script)
+        self.assertIn("ENHE Promotion Manager Test", script)
 
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))

@@ -6,6 +6,7 @@ Use this reference when the user asks for full automation.
 
 - Parse public product URLs, saved HTML, rendered page text, or Codex/browser structured snapshots into product profiles.
 - Run an end-to-end local workflow from one product source through `scripts/run_promotion_workflow.py`, producing intake, competitor discovery, generated content, video status, publish automation status, metrics recovery status, and a workflow manifest.
+- Run due promotion jobs from a local JSON schedule through `scripts/automation_scheduler.py`, including state tracking and Windows Task Scheduler script generation.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.
 - Render deterministic MP4 videos from generated platform content with captions, optional voiceover audio files, or Windows SAPI review voiceover when `ffmpeg` is available.
 - Generate platform research docs, risk matrices, reference project notes, and self-learning notes.
