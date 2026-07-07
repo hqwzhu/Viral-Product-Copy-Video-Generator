@@ -45,6 +45,7 @@ SCRIPT_REQUIREMENTS = {
     "published_items": "published_items.py",
     "publish_url_capture": "publish_url_capture.py",
     "post_publish_metrics_capture": "post_publish_metrics_capture.py",
+    "comment_evidence_capture": "comment_evidence_capture.py",
     "metrics_intake": "metrics_intake.py",
     "metrics_recovery": "metrics_recovery.py",
     "automation_scheduler": "automation_scheduler.py",
@@ -339,7 +340,10 @@ def requirement_status(
         scripts,
         ["publish_queue", "publish_readiness", "browser_publish_assistant", "publish_executor", "youtube_oauth_publish"],
     )
-    metrics_ready = scripts_ready(scripts, ["published_items", "publish_url_capture", "post_publish_metrics_capture", "metrics_intake", "metrics_recovery"])
+    metrics_ready = scripts_ready(
+        scripts,
+        ["published_items", "publish_url_capture", "post_publish_metrics_capture", "comment_evidence_capture", "metrics_intake", "metrics_recovery"],
+    )
     cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler"])
     full_platform_publish_ready = all(
         platforms[p]["directPublish"] == "ready" for p in ["youtube", "github", "zhihu", "xiaohongshu", "douyin"]
@@ -413,7 +417,10 @@ def requirement_status(
             "id": "real_metrics_orders_revenue_recovery",
             "label": "Recover real views, likes, comments, orders, revenue, and business outcomes",
             "status": "partial_ready" if metrics_ready else "not_ready",
-            "evidence": scripts_present(scripts, ["published_items", "publish_url_capture", "post_publish_metrics_capture", "metrics_intake", "metrics_recovery"]),
+            "evidence": scripts_present(
+                scripts,
+                ["published_items", "publish_url_capture", "post_publish_metrics_capture", "comment_evidence_capture", "metrics_intake", "metrics_recovery"],
+            ),
             "missing": [] if real_metrics_ready else ["published URLs, official metrics credentials, structured metric snapshots, or business exports"],
             "limits": [
                 "Social metrics require official APIs, public pages, browser-visible structured snapshots, screenshots, or exports.",
@@ -619,6 +626,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/metrics_recovery.py --metrics-json "
                 f"\"{out_dir}/reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json\" --out-dir \"{out_dir}\""
             ),
+        },
+        {
+            "purpose": "capture_public_comment_evidence",
+            "command": f"python scripts/comment_evidence_capture.py --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "install_browser_runtime_when_explicitly_allowed",

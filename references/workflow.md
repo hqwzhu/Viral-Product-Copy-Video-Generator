@@ -467,6 +467,15 @@ python scripts/post_publish_metrics_capture.py \
 
 This writes `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, a structured snapshot, and `post-publish-metrics-export.json`. It captures visible public metrics only. If the page requires login, captcha, account verification, private analytics, or a business system, it writes a manual evidence request instead of bypassing the platform.
 
+After real published URLs or visible comment exports exist, capture public/browser-visible comment evidence and demand signals:
+
+```bash
+python scripts/comment_evidence_capture.py \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json`. It captures visible comments, visible likes/replies per comment, and recurring demand signals such as questions, pricing concerns, integrations, feature requests, pain points, objections, and CTA intent. If comments are behind login, captcha, risk checks, or private analytics, it writes a manual evidence request instead of bypassing the platform.
+
 Run one full local operating cycle when you want workflow generation, guarded publishing, published URL registration, and metrics recovery in one command:
 
 ```bash
@@ -530,6 +539,8 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
+When `scripts/comment_evidence_capture.py` has captured public comments, use `comment-evidence-export.json` as qualitative evidence for the next content round. Do not convert comment counts, likes, replies, objections, or purchase intent into performance claims unless the report includes visible evidence for them.
+
 Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, browser-visible structured snapshots, or official access are provided.
 
 ## Stage 7: Periodic Automation
@@ -568,6 +579,7 @@ Scheduled runs can generate new content, videos, publish packs, and metrics impo
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
+Set `jobs[].commentEvidenceCapture.enabled` to `true` to run `scripts/comment_evidence_capture.py` after the workflow. Use `publishedItemsJson`, `publishedUrls`, `structuredJson`, `htmlFile`, `textFile`, `captureBrowserAssisted`, and `allowLocalhost` for explicit public/browser-visible comment evidence sources. The scheduler records `lastCommentEvidenceCapture` in state.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`.

@@ -57,6 +57,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs
+- `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json` when `scripts/comment_evidence_capture.py` captures public/browser-visible comments and demand signals
 - `reports/promotion-manager/publish-results/<product>-publish-result-input.{json,md}`
 - `reports/promotion-manager/publish-results/publish-execution.{json,md}` when `scripts/publish_executor.py` is run
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
@@ -314,6 +315,21 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 `post-publish-metrics-export.json` is the preferred input for `metrics_recovery.py --metrics-json`. `post-publish-metrics-snapshot.json` preserves richer evidence for review.
 
+## Comment Evidence Capture
+
+`comment-evidence-capture.json` includes:
+
+- `status`: `ready`, `partial_ready`, `waiting_published_urls`, `waiting_comment_evidence`, or `queued_manual_evidence`
+- `input`: published item sources, direct published URLs, structured JSON, saved HTML, text file, browser-assisted mode, and dry-run flag
+- `summary`: items checked, comment count, comments with visible metrics, demand signal count, statuses, platforms, and demand signal counts
+- `items[]`: one capture result per published item with status, platform, URL, title, source evidence, comments, demand signals, and manual evidence request path when needed
+- `comments[]`: flattened public/browser-visible comments with author, text, visible likes, visible replies, published time when present, platform, URL, and source evidence
+- `demandSignals[]`: extracted qualitative signals such as question, pricing, integration, feature request, pain point, objection, or CTA intent
+- `artifacts.commentEvidenceExport`: path to `comment-evidence-export.json`
+- `guardrails`: public/browser-visible capture only, no auto-login, no captcha bypass, no private endpoints, no hidden token storage, and no fabricated comments or demand signals
+
+`comment-evidence-export.json` is a qualitative evidence source for next-round content optimization. It is not a substitute for platform metrics, orders, revenue, or private analytics exports.
+
 ## Result Data Rule
 
 All metrics default to `null`. The user must fill real values and evidence. Retrospectives without real data must stay `waiting_real_data`.
@@ -449,3 +465,11 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].postPublishMetricsCapture.captureBrowserAssisted`: optional boolean; uses browser-visible capture before static public HTML fallback
 - `jobs[].postPublishMetricsCapture.allowLocalhost`: test-only boolean for local fixtures
 - `jobs[].postPublishMetricsCapture.limit`: optional max published URLs to process
+- `jobs[].commentEvidenceCapture.enabled`: optional boolean; when true, the scheduler runs `scripts/comment_evidence_capture.py` after the workflow
+- `jobs[].commentEvidenceCapture.publishedItemsJson`: optional file path or list of paths containing proven published URL evidence
+- `jobs[].commentEvidenceCapture.publishedUrls`: optional URL or list of `platform=url` entries to capture
+- `jobs[].commentEvidenceCapture.structuredJson`, `htmlFile`, or `textFile`: optional public/browser-visible comment evidence source
+- `jobs[].commentEvidenceCapture.platform`: optional platform override for file-based evidence
+- `jobs[].commentEvidenceCapture.captureBrowserAssisted`: optional boolean; uses browser-visible capture before static public HTML fallback
+- `jobs[].commentEvidenceCapture.allowLocalhost`: test-only boolean for local fixtures
+- `jobs[].commentEvidenceCapture.limit`: optional max published URLs or evidence items to process

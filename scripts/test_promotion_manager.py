@@ -33,6 +33,7 @@ PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 POST_PUBLISH_METRICS_CAPTURE = ROOT / "scripts" / "post_publish_metrics_capture.py"
+COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
@@ -1601,6 +1602,82 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
 
+    def test_automation_scheduler_runs_comment_evidence_capture_after_workflow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-comment-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        comments_path = out_dir / "comments.html"
+        comments_path.write_text(
+            """<!doctype html>
+<html><body>
+<p>Comment by Alice: How does pricing work? likes: 9</p>
+<p>Bob: Need Slack integration replies: 1</p>
+</body></html>""",
+            encoding="utf-8",
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-comment-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["xiaohongshu"],
+                            "topN": 1,
+                            "skipVideo": True,
+                            "commentEvidenceCapture": {
+                                "enabled": True,
+                                "htmlFile": "comments.html",
+                                "publishedUrls": ["xiaohongshu=https://www.xiaohongshu.com/explore/note123"],
+                            },
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-comment-weekly"]
+        self.assertTrue(Path(job_state["lastCommentEvidenceCapture"]).exists())
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        capture = run_report["records"][0]["commentEvidenceCapture"]
+        self.assertEqual(capture["status"], "ready")
+        self.assertEqual(capture["summary"]["commentCount"], 2)
+        self.assertIn("comment_evidence_capture.py", " ".join(capture["command"]))
+
     def test_automation_scheduler_passes_competitor_informed_content_flags(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-enhancer-flags-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2299,6 +2376,122 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(capture["results"][0]["reason"], "url_looks_like_login_captcha_editor_draft_or_preview")
         self.assertTrue(Path(capture["results"][0]["evidenceRequest"]).exists())
 
+    def test_comment_evidence_capture_extracts_public_comments_and_demand_signals(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="comment-evidence-capture-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <section class="comments">
+      <p>Comment by Alice: How does pricing work? likes: 12</p>
+      <p>Bob: Need Zapier integration replies: 2</p>
+      <p>Carol: This solved our content workflow</p>
+    </section>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        published_items_path = out_dir / "published-items.json"
+        published_items_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": url,
+                            "title": "AI Prompt Kit launch note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMMENT_EVIDENCE_CAPTURE),
+                "--published-items-json",
+                str(published_items_path),
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-capture.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["commentCount"], 3)
+        self.assertEqual(report["items"][0]["comments"][0]["author"], "Alice")
+        self.assertEqual(report["items"][0]["comments"][0]["likes"], 12)
+        self.assertEqual(report["items"][0]["comments"][1]["replies"], 2)
+        signal_types = {item["type"] for item in report["demandSignals"]}
+        self.assertIn("pricing", signal_types)
+        self.assertIn("integration", signal_types)
+        self.assertIn("question", signal_types)
+        self.assertTrue((out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-export.json").exists())
+        self.assertFalse((out_dir / "reports/promotion-manager/comment-evidence/manual-evidence").exists())
+
+    def test_comment_evidence_capture_queues_unsafe_pages_for_manual_evidence(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="comment-evidence-capture-unsafe-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "unsafe.html"
+        html_path.write_text(
+            """<!doctype html>
+<html><body>Please sign in to continue. Captcha challenge required.</body></html>""",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMMENT_EVIDENCE_CAPTURE),
+                "--html-file",
+                str(html_path),
+                "--platform",
+                "douyin",
+                "--published-url",
+                "https://www.douyin.com/video/123",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-capture.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "queued_manual_evidence")
+        self.assertEqual(report["summary"]["commentCount"], 0)
+        self.assertEqual(report["items"][0]["status"], "queued_manual_evidence")
+        self.assertEqual(report["items"][0]["reason"], "capture_looks_like_login_captcha_verification_or_access_denied")
+        self.assertTrue(Path(report["items"][0]["evidenceRequest"]).exists())
+
     def test_metrics_recovery_marks_publish_queue_items_pending(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-pending-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2575,6 +2768,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
         self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
+        self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
@@ -2583,6 +2777,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())

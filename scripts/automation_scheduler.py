@@ -17,6 +17,7 @@ SCRIPTS = ROOT / "scripts"
 PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
+COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
@@ -100,6 +101,7 @@ def init_config(args: argparse.Namespace) -> None:
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
         "postPublishMetricsCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
+        "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
         "metricsRecovery": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": ""},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
@@ -206,6 +208,9 @@ def evaluate_job(
     if result.returncode == 0 and manifest_path.exists() and post_publish_metrics_capture_enabled(job):
         post_publish_capture_result = run_post_publish_metrics_capture(job, out_dir, base_dir)
         record["postPublishMetricsCapture"] = post_publish_capture_result
+    if result.returncode == 0 and manifest_path.exists() and comment_evidence_capture_enabled(job):
+        comment_evidence_result = run_comment_evidence_capture(job, out_dir, base_dir)
+        record["commentEvidenceCapture"] = comment_evidence_result
     if result.returncode == 0 and manifest_path.exists() and metrics_recovery_enabled(job):
         recovery_result = run_metrics_recovery(job, out_dir, base_dir, manifest_path, publish_result.get("report", ""), post_publish_capture_result)
         record["metricsRecovery"] = recovery_result
@@ -221,6 +226,8 @@ def evaluate_job(
         job_state["lastMultiQueryViralDiscovery"] = record["multiQueryViralDiscovery"]["report"]
     if record.get("postPublishMetricsCapture", {}).get("report"):
         job_state["lastPostPublishMetricsCapture"] = record["postPublishMetricsCapture"]["report"]
+    if record.get("commentEvidenceCapture", {}).get("report"):
+        job_state["lastCommentEvidenceCapture"] = record["commentEvidenceCapture"]["report"]
     if record.get("metricsRecovery", {}).get("report"):
         job_state["lastMetricsRecovery"] = record["metricsRecovery"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
@@ -241,6 +248,10 @@ def browser_publish_assistant_enabled(job: dict[str, Any]) -> bool:
 
 def post_publish_metrics_capture_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("postPublishMetricsCapture") or {}).get("enabled"))
+
+
+def comment_evidence_capture_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("commentEvidenceCapture") or {}).get("enabled"))
 
 
 def multi_query_viral_discovery_enabled(job: dict[str, Any]) -> bool:
@@ -339,6 +350,32 @@ def run_post_publish_metrics_capture(job: dict[str, Any], out_dir: Path, base_di
     }
 
 
+def run_comment_evidence_capture(job: dict[str, Any], out_dir: Path, base_dir: Path) -> dict[str, Any]:
+    command = build_comment_evidence_capture_command(job, out_dir, base_dir)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-capture.json"
+    export_path = out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-export.json"
+    summary: dict[str, Any] = {}
+    status = "error"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            summary = report.get("summary", {})
+            status = report.get("status", "ready")
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": status if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "commentEvidenceExport": str(export_path) if export_path.exists() else "",
+        "summary": summary,
+    }
+
+
 def run_metrics_recovery(
     job: dict[str, Any],
     out_dir: Path,
@@ -416,6 +453,33 @@ def build_post_publish_metrics_capture_command(job: dict[str, Any], out_dir: Pat
     command.extend(["--limit", str(capture.get("limit") or 20)])
     append_many(command, "--published-items-json", capture.get("publishedItemsJson"), base_dir)
     append_many(command, "--published-url", capture.get("publishedUrls"))
+    if capture.get("captureBrowserAssisted"):
+        command.append("--capture-browser-assisted")
+    if capture.get("installBrowserIfMissing"):
+        command.append("--install-browser-if-missing")
+    if capture.get("allowLocalhost"):
+        command.append("--allow-localhost")
+    return command
+
+
+def build_comment_evidence_capture_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -> list[str]:
+    capture = job.get("commentEvidenceCapture") or {}
+    command = [
+        sys.executable,
+        str(COMMENT_EVIDENCE_CAPTURE),
+        "--out-dir",
+        str(out_dir),
+    ]
+    command.extend(["--limit", str(capture.get("limit") or 20)])
+    append_many(command, "--published-items-json", capture.get("publishedItemsJson"), base_dir)
+    append_many(command, "--published-url", capture.get("publishedUrls"))
+    append_if_present(command, "--platform", capture.get("platform"))
+    if capture.get("structuredJson"):
+        command.extend(["--structured-json", str(resolve_path(base_dir, capture["structuredJson"]))])
+    if capture.get("htmlFile"):
+        command.extend(["--html-file", str(resolve_path(base_dir, capture["htmlFile"]))])
+    if capture.get("textFile"):
+        command.extend(["--text-file", str(resolve_path(base_dir, capture["textFile"]))])
     if capture.get("captureBrowserAssisted"):
         command.append("--capture-browser-assisted")
     if capture.get("installBrowserIfMissing"):
@@ -688,6 +752,8 @@ def render_run_report(report: dict[str, Any]) -> str:
             lines.append(f"- Multi-query viral discovery: {record['multiQueryViralDiscovery'].get('report', '')}")
         if record.get("postPublishMetricsCapture"):
             lines.append(f"- Post-publish metrics capture: {record['postPublishMetricsCapture'].get('report', '')}")
+        if record.get("commentEvidenceCapture"):
+            lines.append(f"- Comment evidence capture: {record['commentEvidenceCapture'].get('report', '')}")
         if record.get("metricsRecovery"):
             lines.append(f"- Metrics recovery: {record['metricsRecovery'].get('report', '')}")
     lines.extend(["", "## Guardrails"])
