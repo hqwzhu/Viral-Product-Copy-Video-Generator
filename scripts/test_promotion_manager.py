@@ -1187,6 +1187,19 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--comment-evidence-allow-localhost",
                 "--business-csv",
                 str(business_csv),
+                "--execute-publish",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--github-action",
+                "release",
+                "--github-branch",
+                "launch",
+                "--github-tag-name",
+                "promo-test",
+                "--youtube-privacy-status",
+                "unlisted",
+                "--youtube-category-id",
+                "28",
                 "--skip-platform-access-audit",
                 "--skip-final-capability-audit",
                 "--skip-self-evolution-audit",
@@ -1206,6 +1219,24 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--capture-browser-assisted-follow-ups", batch_command)
         self.assertIn("--multi-query-sample-video-frames", batch_command)
         self.assertIn("--multi-query-video-sample-count", batch_command)
+        readiness_command = next(item["command"] for item in report["steps"] if item["name"].startswith("publish_readiness_"))
+        self.assertIn("--execute-publish", readiness_command)
+        self.assertIn("--approval", readiness_command)
+        self.assertIn("I_APPROVE_PUBLISH", readiness_command)
+        self.assertIn("--github-action", readiness_command)
+        self.assertIn("release", readiness_command)
+        self.assertIn("--github-branch", readiness_command)
+        self.assertIn("launch", readiness_command)
+        self.assertIn("--github-tag-name", readiness_command)
+        self.assertIn("promo-test", readiness_command)
+        self.assertIn("--youtube-privacy-status", readiness_command)
+        self.assertIn("unlisted", readiness_command)
+        self.assertIn("--youtube-category-id", readiness_command)
+        self.assertIn("28", readiness_command)
+        self.assertTrue(report["input"]["publishExecutionRequested"])
+        self.assertTrue(report["summary"]["publishExecutionRequested"])
+        self.assertTrue(report["input"]["publishApprovalProvided"])
+        self.assertTrue(report["summary"]["publishApprovalProvided"])
         self.assertEqual(report["summary"]["promotionRuns"], 1)
         self.assertEqual(report["summary"]["publishReadinessRuns"], 1)
         self.assertEqual(report["summary"]["publishSetupRuns"], 1)
@@ -1278,6 +1309,19 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--multi-query-dry-run",
                 "--multi-query-query-count",
                 "1",
+                "--execute-publish",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--github-action",
+                "issue",
+                "--github-branch",
+                "launch",
+                "--github-tag-name",
+                "skill-entry-test",
+                "--youtube-privacy-status",
+                "unlisted",
+                "--youtube-category-id",
+                "28",
                 "--skip-platform-access-audit",
                 "--skip-final-capability-audit",
                 "--skip-self-evolution-audit",
@@ -1294,6 +1338,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["input"]["linkMode"], "auto")
         self.assertTrue(report["input"]["codexReadFirst"])
         self.assertEqual(report["summary"]["promotionRuns"], 1)
+        self.assertTrue(report["input"]["publishExecutionRequested"])
+        self.assertTrue(report["summary"]["publishExecutionRequested"])
+        self.assertTrue(report["input"]["publishApprovalProvided"])
+        self.assertTrue(report["summary"]["publishApprovalProvided"])
         self.assertEqual(report["summary"]["contentArtifacts"], 1)
         self.assertTrue(Path(report["playbook"]["report"]).exists())
         self.assertTrue(Path(report["finalRun"]["report"]).exists())
@@ -1304,6 +1352,19 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--url", final_command)
         self.assertIn("--discover-from-url", final_command)
         self.assertIn("--capture-browser-assisted-follow-ups", final_command)
+        self.assertIn("--execute-publish", final_command)
+        self.assertIn("--approval", final_command)
+        self.assertIn("I_APPROVE_PUBLISH", final_command)
+        self.assertIn("--github-action", final_command)
+        self.assertIn("issue", final_command)
+        self.assertIn("--github-branch", final_command)
+        self.assertIn("launch", final_command)
+        self.assertIn("--github-tag-name", final_command)
+        self.assertIn("skill-entry-test", final_command)
+        self.assertIn("--youtube-privacy-status", final_command)
+        self.assertIn("unlisted", final_command)
+        self.assertIn("--youtube-category-id", final_command)
+        self.assertIn("28", final_command)
         self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())
 
     def test_real_run_playbook_generates_end_to_end_command_pack_without_secret_values(self) -> None:

@@ -90,7 +90,13 @@ def main() -> None:
             "workflowManifest": args.workflow_manifest,
             "publishQueue": str(queue_path) if queue_path else "",
             "githubRepo": args.github_repo,
+            "githubAction": args.github_action,
+            "githubPath": args.github_path,
+            "githubBranchProvided": bool(args.github_branch),
+            "githubTagNameProvided": bool(args.github_tag_name),
             "youtubeVideoFile": args.youtube_video_file,
+            "youtubePrivacyStatus": args.youtube_privacy_status,
+            "youtubeCategoryId": args.youtube_category_id,
             "douyinVideoFile": args.douyin_video_file,
         },
         "records": records,
@@ -121,6 +127,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-repo", default="")
     parser.add_argument("--github-action", default="file", choices=["file", "issue", "release"])
     parser.add_argument("--github-path", default="PROMOTION.md")
+    parser.add_argument("--github-branch", default="")
+    parser.add_argument("--github-tag-name", default="")
     parser.add_argument("--youtube-video-file", default="")
     parser.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
     parser.add_argument("--youtube-category-id", default="22")
@@ -155,6 +163,8 @@ def resolve_or_build_queue(args: argparse.Namespace, out_dir: Path, steps: list[
     append_if_present(command, "--github-repo", args.github_repo)
     append_if_present(command, "--github-action", args.github_action)
     append_if_present(command, "--github-path", args.github_path)
+    append_if_present(command, "--github-branch", args.github_branch)
+    append_if_present(command, "--github-tag-name", args.github_tag_name)
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
     append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
     append_if_present(command, "--youtube-category-id", args.youtube_category_id)

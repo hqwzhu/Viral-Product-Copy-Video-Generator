@@ -58,6 +58,20 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
+To request official publishing for supported platforms from the high-level runner, add the execution gate. This still writes only when the required platform credentials, target files, account authorization, and exact approval are present:
+
+```bash
+python scripts/final_capability_runner.py \
+  --url "https://example.com/product" \
+  --platforms youtube,douyin,github \
+  --github-repo owner/repo \
+  --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
+  --execute-publish \
+  --approval I_APPROVE_PUBLISH \
+  --out-dir "./promotion-output"
+```
+
 Real run command pack before a live product cycle:
 
 ```bash
@@ -576,6 +590,8 @@ python scripts/publish_readiness_runner.py \
   --out-dir "./promotion-output"
 ```
 
+For a reviewed official execution attempt through the readiness/queue path, add `--execute-publish --approval I_APPROVE_PUBLISH`. GitHub, YouTube, and Douyin still require their credential environment variables and platform authorization; Zhihu and Xiaohongshu remain manual/browser-assisted.
+
 To turn that readiness report into a credential/target/platform setup kit without storing secret values:
 
 ```bash
@@ -822,7 +838,7 @@ Use `scripts/publish_executor.py` for supported official publishing actions. It 
 For Douyin, `scripts/publish_executor.py --platform douyin` uses the official upload/create flow with `--douyin-video-file` and requires `DOUYIN_ACCESS_TOKEN` plus `DOUYIN_OPEN_ID` for execution. App approval, `video.create.bind`-style publishing permission, user authorization, and platform review remain external requirements.
 Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAuth consent flow before upload. It requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for execution and does not save OAuth tokens.
 Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs, Douyin official dry-runs when `--douyin-video-file` is supplied, plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, and other unsupported direct-publish platforms.
-Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes.
+Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes. `scripts/final_capability_runner.py` and `scripts/skill_entry.py` can pass the same gated execution request down to publish readiness.
 Use `scripts/publish_setup_assistant.py` after publish readiness to write a publish setup kit: platform-by-platform credential environment variable names, target gaps, official setup references, approval gates, rerun/execution commands, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}`. It never writes credential values.
 Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare browser-assisted payload files, platform entry URLs, generic form-fill helper scripts, browser form-fill commands, and post-publish URL registration commands for Zhihu, Xiaohongshu, Douyin, TikTok, or similar platforms. It may open publisher entry URLs in the user's default browser with `--open-browser`, but it must not auto-login, solve captcha, or click the final publish button.
 Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when the user wants Codex to fill visible publisher fields. It writes a screenshot and report, does not submit the form, and must stop for login, captcha, risk control, account verification, or final publish.

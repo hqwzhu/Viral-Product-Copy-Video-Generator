@@ -19,6 +19,7 @@ FINAL_CAPABILITY_RUNNER = SCRIPTS / "final_capability_runner.py"
 FINAL_CAPABILITY_READINESS = SCRIPTS / "final_capability_readiness.py"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
+APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 
 
 def main() -> None:
@@ -73,9 +74,16 @@ def parse_args() -> argparse.Namespace:
     publish = parser.add_argument_group("Publishing")
     publish.add_argument("--skip-publish-queue", action="store_true")
     publish.add_argument("--publish-platforms", default="")
+    publish.add_argument("--execute-publish", action="store_true", help="Request approved official publishing through the final runner. Still requires credentials and exact approval.")
+    publish.add_argument("--approval", default="", help=f"Must equal {APPROVAL_PHRASE} when --execute-publish is supplied.")
     publish.add_argument("--github-repo", default="")
+    publish.add_argument("--github-action", default="file", choices=["file", "issue", "release"])
     publish.add_argument("--github-path", default="PROMOTION.md")
+    publish.add_argument("--github-branch", default="")
+    publish.add_argument("--github-tag-name", default="")
     publish.add_argument("--youtube-video-file", default="")
+    publish.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
+    publish.add_argument("--youtube-category-id", default="22")
     publish.add_argument("--douyin-video-file", default="")
     publish.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
     publish.add_argument("--run-browser-form-fill", action="store_true", help="Fill visible publisher fields and stop before final publish.")
@@ -102,7 +110,13 @@ def run_playbook(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, 
     append_link_args(command, args)
     command.extend(["--platforms", args.platforms, "--goal", args.goal, "--language", args.language])
     append_if_present(command, "--github-repo", args.github_repo)
+    append_if_present(command, "--github-action", args.github_action)
+    append_if_present(command, "--github-path", args.github_path)
+    append_if_present(command, "--github-branch", args.github_branch)
+    append_if_present(command, "--github-tag-name", args.github_tag_name)
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
+    append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
+    append_if_present(command, "--youtube-category-id", args.youtube_category_id)
     append_if_present(command, "--douyin-video-file", args.douyin_video_file)
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--published-url", args.published_url)
@@ -182,9 +196,17 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
     if args.skip_publish_queue:
         command.append("--skip-publish-queue")
     append_if_present(command, "--publish-platforms", args.publish_platforms)
+    if args.execute_publish:
+        command.append("--execute-publish")
+        append_if_present(command, "--approval", args.approval)
     append_if_present(command, "--github-repo", args.github_repo)
+    append_if_present(command, "--github-action", args.github_action)
     append_if_present(command, "--github-path", args.github_path)
+    append_if_present(command, "--github-branch", args.github_branch)
+    append_if_present(command, "--github-tag-name", args.github_tag_name)
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
+    append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
+    append_if_present(command, "--youtube-category-id", args.youtube_category_id)
     append_if_present(command, "--douyin-video-file", args.douyin_video_file)
     append_many(command, "--platform-publish-url", args.platform_publish_url)
     if args.run_browser_form_fill:
@@ -264,11 +286,15 @@ def build_report(
             "goal": args.goal,
             "language": args.language,
             "codexReadFirst": True,
+            "publishExecutionRequested": bool(args.execute_publish),
+            "publishApprovalProvided": args.approval == APPROVAL_PHRASE,
         },
         "summary": {
             "playbookStatus": playbook.get("status", ""),
             "finalRunStatus": final_run.get("status", ""),
             "readinessStatus": readiness.get("status", ""),
+            "publishExecutionRequested": bool(args.execute_publish),
+            "publishApprovalProvided": args.approval == APPROVAL_PHRASE,
             "promotionRuns": int_value((final_run.get("summary") or {}).get("promotionRuns")),
             "contentArtifacts": int_value((final_run.get("summary") or {}).get("contentArtifacts")),
             "videoFilesGenerated": int_value((final_run.get("summary") or {}).get("videoFilesGenerated")),

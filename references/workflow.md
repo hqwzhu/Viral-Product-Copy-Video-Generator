@@ -199,6 +199,22 @@ python scripts/final_capability_runner.py \
 
 This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}` and then generates `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, self-evolution audit, and final readiness matrix builder. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits and `finalReadinessMatrix` pointing to the end-state acceptance matrix. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
+When GitHub, YouTube, or Douyin official publishing should be executed from the final runner after a reviewed dry-run, pass the same explicit execution gate used by the lower-level queue:
+
+```bash
+python scripts/final_capability_runner.py \
+  --url "https://example.com/product" \
+  --platforms youtube,douyin,github \
+  --github-repo owner/repo \
+  --youtube-video-file "./promotion-output/videos/product-youtube.mp4" \
+  --douyin-video-file "./promotion-output/videos/product-douyin.mp4" \
+  --execute-publish \
+  --approval I_APPROVE_PUBLISH \
+  --out-dir "./promotion-output"
+```
+
+This request is still blocked unless required environment credentials, target files, account authorization, and platform review requirements are satisfied. Zhihu and Xiaohongshu stay browser-assisted/manual.
+
 Generate a live-run command pack before executing a real product cycle:
 
 ```bash
@@ -544,7 +560,7 @@ python scripts/publish_readiness_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}`. The report checks queue state, target information, credential presence by environment variable name, approval status, and next actions. It does not write credential values and does not execute final platform writes unless the publish queue is explicitly run with execution and the required approval phrase.
+This writes `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}`. The report checks queue state, target information, credential presence by environment variable name, approval status, and next actions. It does not write credential values and does not execute final platform writes unless `--execute-publish --approval I_APPROVE_PUBLISH` is explicitly supplied and the guarded queue has the required credentials and targets.
 
 Turn the readiness report into a publish setup kit:
 
@@ -605,6 +621,8 @@ To execute a supported official write, the user must provide the relevant enviro
 ```bash
 python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
 ```
+
+The same approval gate can also be passed through `scripts/publish_readiness_runner.py`, `scripts/final_capability_runner.py`, or `scripts/skill_entry.py` as `--execute-publish --approval I_APPROVE_PUBLISH`; those commands route into the same guarded queue/executor path.
 
 Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, YouTube `videos.insert` upload, and Douyin Open Platform upload/create. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Douyin requires official app permissions plus user-authorized `DOUYIN_ACCESS_TOKEN` and `DOUYIN_OPEN_ID`. Zhihu and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is configured and verified.
 Douyin official upload/create is available through:

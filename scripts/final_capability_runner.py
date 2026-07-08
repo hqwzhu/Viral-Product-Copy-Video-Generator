@@ -25,6 +25,7 @@ FINAL_CAPABILITY_READINESS = SCRIPTS / "final_capability_readiness.py"
 SELF_EVOLUTION_AUDIT = SCRIPTS / "self_evolution_audit.py"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
+APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 
 
 def main() -> None:
@@ -114,9 +115,16 @@ def parse_args() -> argparse.Namespace:
     publish = parser.add_argument_group("Publishing")
     publish.add_argument("--skip-publish-queue", action="store_true")
     publish.add_argument("--publish-platforms", default="")
+    publish.add_argument("--execute-publish", action="store_true", help="Request approved official publishing through publish readiness/queue. Still requires credentials and exact approval.")
+    publish.add_argument("--approval", default="", help=f"Must equal {APPROVAL_PHRASE} when --execute-publish is supplied.")
     publish.add_argument("--github-repo", default="")
+    publish.add_argument("--github-action", default="file", choices=["file", "issue", "release"])
     publish.add_argument("--github-path", default="PROMOTION.md")
+    publish.add_argument("--github-branch", default="")
+    publish.add_argument("--github-tag-name", default="")
     publish.add_argument("--youtube-video-file", default="")
+    publish.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
+    publish.add_argument("--youtube-category-id", default="22")
     publish.add_argument("--douyin-video-file", default="")
     publish.add_argument("--skip-publish-readiness", action="store_true")
     publish.add_argument("--skip-publish-setup-assistant", action="store_true")
@@ -521,6 +529,8 @@ def build_report(
     summary = {
         "productBatchStatus": batch.get("status", ""),
         "promotionRuns": len(batch.get("promotionRuns", [])),
+        "publishExecutionRequested": bool(args.execute_publish),
+        "publishApprovalProvided": args.approval == APPROVAL_PHRASE,
         "publishReadinessRuns": len(publish_readiness),
         "publishSetupRuns": len(publish_setup),
         "publishSetupEnvVars": sum(int_value((item.get("summary") or {}).get("credentialEnvNames")) for item in publish_setup),
@@ -547,6 +557,8 @@ def build_report(
             "discoverySitemapFile": args.discovery_sitemap_file,
             "platforms": args.platforms,
             "codexReadFirst": True,
+            "publishExecutionRequested": bool(args.execute_publish),
+            "publishApprovalProvided": args.approval == APPROVAL_PHRASE,
         },
         "summary": summary,
         "productBatch": batch,
@@ -824,9 +836,17 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def append_publish_args(command: list[str], args: argparse.Namespace) -> None:
     append_if_present(command, "--platforms", args.publish_platforms or args.platforms)
+    if args.execute_publish:
+        command.append("--execute-publish")
+        append_if_present(command, "--approval", args.approval)
     append_if_present(command, "--github-repo", args.github_repo)
+    append_if_present(command, "--github-action", args.github_action)
     append_if_present(command, "--github-path", args.github_path)
+    append_if_present(command, "--github-branch", args.github_branch)
+    append_if_present(command, "--github-tag-name", args.github_tag_name)
     append_if_present(command, "--youtube-video-file", args.youtube_video_file)
+    append_if_present(command, "--youtube-privacy-status", args.youtube_privacy_status)
+    append_if_present(command, "--youtube-category-id", args.youtube_category_id)
     append_if_present(command, "--douyin-video-file", args.douyin_video_file)
 
 

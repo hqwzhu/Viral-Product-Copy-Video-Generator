@@ -155,8 +155,8 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `final-capability-run.json` includes:
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
-- `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, and `codexReadFirst`
-- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish queue count, publish setup count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
+- `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
+- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish execution request/approval flags, publish queue count, publish setup count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
@@ -174,8 +174,8 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `skill-entry.json` includes:
 
 - `status`: the final readiness status when available, or `blocked` when the playbook/final runner failed
-- `input`: links, optional links file, link mode, platforms, goal, language, and `codexReadFirst`
-- `summary`: playbook, final run, and readiness statuses plus promotion runs, content artifacts, video files, publish queues, public metric records, comments, and matched business rows
+- `input`: links, optional links file, link mode, platforms, goal, language, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
+- `summary`: playbook, final run, and readiness statuses plus publish execution request/approval flags, promotion runs, content artifacts, video files, publish queues, public metric records, comments, and matched business rows
 - `playbook`: real-run playbook report path and generated artifact paths
 - `finalRun`: final capability run report path and summary
 - `readiness`: final readiness report path, requirement matrix, and action queue
@@ -380,7 +380,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `status`: `ready_to_execute`, `partial_ready`, or `blocked`
 - `mode`: `dry_run_or_planning` or `execute_requested`
 - `approval`: required approval phrase, whether execution was requested, and whether approval was supplied
-- `inputs`: workflow manifest, publish queue, GitHub repo, and YouTube video file path references
+- `inputs`: workflow manifest, publish queue, GitHub repo/action/path/branch/tag presence, YouTube video/privacy/category references, and Douyin video path reference
 - `records[]`: one readiness record per platform
 - `records[].readiness`: `ready_to_execute`, `dry_run_ready`, `missing_credentials`, `missing_target`, `missing_approval`, `manual_publish_required`, `browser_assisted_or_official_app_required`, `official_app_integration_required`, `already_published`, or `unsupported`
 - `records[].credentialStatus`: required environment variable names, present environment variable names, missing names, and `valuesStored: false`

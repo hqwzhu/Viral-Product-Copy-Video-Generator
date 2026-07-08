@@ -34,7 +34,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language", default="zh-CN")
     parser.add_argument("--out-dir", default="./promotion-output")
     parser.add_argument("--github-repo", default="owner/repo")
+    parser.add_argument("--github-action", default="file", choices=["file", "issue", "release"])
+    parser.add_argument("--github-path", default="PROMOTION.md")
+    parser.add_argument("--github-branch", default="")
+    parser.add_argument("--github-tag-name", default="")
     parser.add_argument("--youtube-video-file", default="")
+    parser.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
+    parser.add_argument("--youtube-category-id", default="22")
     parser.add_argument("--douyin-video-file", default="")
     parser.add_argument("--business-csv", action="append", default=[], help="Business orders/revenue CSV export. Can repeat.")
     parser.add_argument("--published-url", action="append", default=[], help="Known published URL as platform=url. Can repeat.")
@@ -62,7 +68,13 @@ def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "goal": args.goal,
             "language": args.language,
             "githubRepo": args.github_repo,
+            "githubAction": args.github_action,
+            "githubPath": args.github_path,
+            "githubBranchProvided": bool(args.github_branch),
+            "githubTagNameProvided": bool(args.github_tag_name),
             "youtubeVideoFile": args.youtube_video_file,
+            "youtubePrivacyStatus": args.youtube_privacy_status,
+            "youtubeCategoryId": args.youtube_category_id,
             "douyinVideoFile": args.douyin_video_file,
             "businessCsv": args.business_csv,
             "publishedUrl": args.published_url,
@@ -386,7 +398,13 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     if args.generate_voiceover:
         command.append("--generate-voiceover")
     append_if(command, "--github-repo", args.github_repo)
+    append_if(command, "--github-action", args.github_action)
+    append_if(command, "--github-path", args.github_path)
+    append_if(command, "--github-branch", args.github_branch)
+    append_if(command, "--github-tag-name", args.github_tag_name)
     append_if(command, "--youtube-video-file", args.youtube_video_file)
+    append_if(command, "--youtube-privacy-status", args.youtube_privacy_status)
+    append_if(command, "--youtube-category-id", args.youtube_category_id)
     append_if(command, "--douyin-video-file", args.douyin_video_file)
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--published-url", args.published_url)
@@ -408,7 +426,13 @@ def publish_readiness_command(args: argparse.Namespace, run_root: Path) -> list[
         "--out-dir",
         str(run_root),
     ]
+    append_if(command, "--github-action", args.github_action)
+    append_if(command, "--github-path", args.github_path)
+    append_if(command, "--github-branch", args.github_branch)
+    append_if(command, "--github-tag-name", args.github_tag_name)
     append_if(command, "--youtube-video-file", args.youtube_video_file or str(run_root / "videos/product-youtube.mp4"))
+    append_if(command, "--youtube-privacy-status", args.youtube_privacy_status)
+    append_if(command, "--youtube-category-id", args.youtube_category_id)
     append_if(command, "--douyin-video-file", args.douyin_video_file or str(run_root / "videos/product-douyin.mp4"))
     return command
 
