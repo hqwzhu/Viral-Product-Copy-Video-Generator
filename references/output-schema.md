@@ -544,6 +544,8 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].multiQueryViralDiscovery.htmlSnapshotRoot`: optional saved browser-visible search HTML root for deterministic or offline discovery runs
 - `jobs[].multiQueryViralDiscovery.liveOfficial`: optional boolean that enables supported YouTube/GitHub official/public discovery connectors
 - `jobs[].multiQueryViralDiscovery.runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`: optional booleans for deeper public/browser-visible follow-up stages
+- `jobs[].multiQueryViralDiscovery.sampleVideoFrames`: optional boolean that passes `--sample-video-frames` into product-driven multi-query discovery follow-up captures
+- `jobs[].multiQueryViralDiscovery.videoSampleCount`: optional frame count passed as `--video-sample-count`; defaults to `5`
 - `jobs[].searchHtmlSnapshotDir`: optional directory of saved `<platform>.html` search pages for environments without Playwright Chromium
 - `jobs[].followUpCapture.enabled`: optional boolean that runs `scripts/follow_up_capture_runner.py` after the viral material library is built
 - `jobs[].followUpCapture.limit`: optional max follow-up tasks to process

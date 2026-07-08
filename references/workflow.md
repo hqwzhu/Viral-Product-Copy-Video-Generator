@@ -135,11 +135,13 @@ Use the final capability runner when Codex should execute the highest-automation
 python scripts/final_capability_runner.py \
   --url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --business-csv "./orders-and-revenue.csv" \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
+This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
 When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
 
@@ -215,10 +217,12 @@ python scripts/viral_discovery_runner.py \
   --query "AI product copy generator" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --top-n 20 \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` and chains platform search snapshots, normalized captures, `viral-content-library`, `creator-leaderboard`, and follow-up task generation. Use `--live-official` to also run supported YouTube/GitHub official/public collectors where credentials allow. Use `--html-snapshot-dir` when Codex or the user has saved browser-visible platform search pages.
+This writes `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` and chains platform search snapshots, normalized captures, `viral-content-library`, `creator-leaderboard`, and follow-up task generation. Use `--sample-video-frames` with `--run-follow-up-captures` to sample browser-visible video metadata and frame screenshots during safe follow-up capture. Use `--live-official` to also run supported YouTube/GitHub official/public collectors where credentials allow. Use `--html-snapshot-dir` when Codex or the user has saved browser-visible platform search pages.
 
 Use `--live-official` only for supported official APIs. GitHub public repository search can run without credentials. YouTube live search requires `YOUTUBE_API_KEY` in the environment; do not write the key to files or chat output.
 
@@ -229,10 +233,12 @@ python scripts/multi_query_viral_discovery.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --top-n 20 \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --out-dir "./promotion-output"
 ```
 
-This writes `multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}`. It derives queries from product name, value proposition, keywords, pain points, audience, and optional `--query` values. Use `--dry-run` to inspect planned platform searches before opening public search pages.
+This writes `multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}`. It derives queries from product name, value proposition, keywords, pain points, audience, and optional `--query` values. Use `--sample-video-frames` with `--run-follow-up-captures` to pass video sampling into each discovery pass. Use `--dry-run` to inspect planned platform searches before opening public search pages.
 
 Collect supported official/public competitor evidence:
 
@@ -362,7 +368,7 @@ Supported snapshot file names are `<platform>.json`, `<platform>.txt`, `<platfor
 The workflow runner builds the viral material library automatically after at least one search capture succeeds. Use `--skip-viral-library` only when you want raw capture reports without cross-platform ranking.
 The workflow runner builds the creator leaderboard automatically after the viral material library succeeds. Use `--skip-creator-leaderboard` only when you want to skip account-level aggregation.
 The workflow runner runs creator/account follow-up only when `--run-creator-follow-up` is supplied. Use `--creator-follow-up-dry-run` to plan the stage without fetching public APIs.
-The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--capture-browser-assisted-follow-ups` to attempt safe browser-visible snapshots for queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks; use `--follow-up-dry-run` to plan the stage without fetching public URLs.
+The workflow runner executes follow-up captures only when `--run-follow-up-captures` is supplied. Use `--capture-browser-assisted-follow-ups` to attempt safe browser-visible snapshots for queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks; use `--sample-video-frames` and `--video-sample-count 5` to sample browser-visible video evidence; use `--follow-up-dry-run` to plan the stage without fetching public URLs.
 The workflow runner rewrites generated content with available viral/deep competitor libraries before rendering videos and building final publish queues. Use `--skip-competitor-informed-content` to disable that rewrite.
 
 Start with:
@@ -745,7 +751,7 @@ Set `jobs[].businessAttribution.enabled` to `true` to run `scripts/business_attr
 Set `jobs[].nextRoundOptimization.enabled` to `true` to run `scripts/next_round_optimizer.py` after metrics recovery, comment evidence capture, and business attribution. The scheduler records `lastNextRoundOptimization` in state and includes the optimization report in `automation-run.json`.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
-Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`.
+Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, `captureBrowserAssistedFollowUps`, `sampleVideoFrames`, and `videoSampleCount`.
 Scheduled jobs can set `followUpCapture.enabled: true` to run safe public follow-up captures after the viral material library is built. Use `followUpCapture.dryRun: true` for planning-only runs.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted platform follow-up tasks.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after viral material ranking.

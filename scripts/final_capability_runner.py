@@ -67,6 +67,8 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--creator-follow-up-dry-run", action="store_true")
     workflow.add_argument("--run-follow-up-captures", action="store_true")
     workflow.add_argument("--follow-up-dry-run", action="store_true")
+    workflow.add_argument("--sample-video-frames", action="store_true", help="Sample browser-visible video evidence during product-cycle follow-up captures.")
+    workflow.add_argument("--video-sample-count", type=int, default=5)
     workflow.add_argument("--skip-video", action="store_true")
     workflow.add_argument("--video-platforms", default="auto")
     workflow.add_argument("--generate-voiceover", action="store_true")
@@ -82,6 +84,8 @@ def parse_args() -> argparse.Namespace:
     discovery.add_argument("--multi-query-run-creator-follow-up", action="store_true")
     discovery.add_argument("--multi-query-run-follow-up-captures", action="store_true")
     discovery.add_argument("--multi-query-capture-browser-assisted-follow-ups", action="store_true")
+    discovery.add_argument("--multi-query-sample-video-frames", action="store_true")
+    discovery.add_argument("--multi-query-video-sample-count", type=int, default=5)
 
     publish = parser.add_argument_group("Publishing")
     publish.add_argument("--skip-publish-queue", action="store_true")
@@ -154,6 +158,7 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
         ("--creator-follow-up-dry-run", args.creator_follow_up_dry_run),
         ("--run-follow-up-captures", args.run_follow_up_captures),
         ("--follow-up-dry-run", args.follow_up_dry_run),
+        ("--sample-video-frames", args.sample_video_frames),
         ("--skip-video", args.skip_video),
         ("--generate-voiceover", args.generate_voiceover),
         ("--skip-publish-queue", args.skip_publish_queue),
@@ -164,6 +169,8 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
     command.extend(["--timeout-ms", str(args.timeout_ms), "--wait-until", args.wait_until])
     command.extend(["--platforms", args.platforms, "--goal", args.goal, "--language", args.language, "--top-n", str(args.top_n)])
     append_if_present(command, "--competitor-query", args.competitor_query)
+    if args.sample_video_frames:
+        command.extend(["--video-sample-count", str(args.video_sample_count)])
     append_if_present(command, "--video-platforms", args.video_platforms)
     append_if_present(command, "--publish-platforms", args.publish_platforms)
     append_if_present(command, "--github-repo", args.github_repo)
@@ -185,6 +192,9 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
             command.append("--multi-query-run-follow-up-captures")
         if args.multi_query_capture_browser_assisted_follow_ups:
             command.append("--multi-query-capture-browser-assisted-follow-ups")
+        if args.multi_query_sample_video_frames:
+            command.append("--multi-query-sample-video-frames")
+            command.extend(["--multi-query-video-sample-count", str(args.multi_query_video_sample_count)])
     append_many(command, "--published-url", args.published_url)
     append_many(command, "--metrics-github-repo", args.metrics_github_repo)
     append_many(command, "--metrics-youtube-video-id", args.metrics_youtube_video_id)

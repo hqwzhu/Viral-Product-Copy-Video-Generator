@@ -521,6 +521,11 @@ Prompt templates for product copy, SEO content, and video scripts.
             str(urls_file),
             "--platforms",
             "github,xiaohongshu",
+            "--run-follow-up-captures",
+            "--follow-up-dry-run",
+            "--sample-video-frames",
+            "--video-sample-count",
+            "4",
             "--skip-video",
             "--out-dir",
             str(out_dir / "output"),
@@ -537,6 +542,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["summary"]["readyProductProfiles"], 2)
         self.assertEqual(report["summary"]["readyPromotionRuns"], 2)
         self.assertTrue(Path(report["readerReport"]).exists())
+        first_command = report["promotionRuns"][0]["command"]
+        self.assertIn("--sample-video-frames", first_command)
+        self.assertIn("--video-sample-count", first_command)
+        self.assertIn("4", first_command)
         self.assertTrue((out_dir / "output/reports/promotion-manager/batch/product-batch-runner.md").exists())
 
         product_names = {run["product"]["productName"] for run in report["promotionRuns"]}
@@ -800,8 +809,17 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--platforms",
                 "xiaohongshu",
                 "--skip-video",
+                "--run-follow-up-captures",
+                "--follow-up-dry-run",
+                "--sample-video-frames",
+                "--video-sample-count",
+                "3",
                 "--multi-query-dry-run",
                 "--multi-query-query-count",
+                "2",
+                "--multi-query-run-follow-up-captures",
+                "--multi-query-sample-video-frames",
+                "--multi-query-video-sample-count",
                 "2",
                 "--published-url",
                 f"xiaohongshu={published_url}",
@@ -822,6 +840,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         report_path = out_dir / "output/reports/promotion-manager/final-run/final-capability-run.json"
         report = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "partial_ready")
+        batch_command = report["steps"][0]["command"]
+        self.assertIn("--sample-video-frames", batch_command)
+        self.assertIn("--video-sample-count", batch_command)
+        self.assertIn("--multi-query-sample-video-frames", batch_command)
+        self.assertIn("--multi-query-video-sample-count", batch_command)
         self.assertEqual(report["summary"]["promotionRuns"], 1)
         self.assertEqual(report["summary"]["publishReadinessRuns"], 1)
         self.assertEqual(report["summary"]["browserPublishAssistantRuns"], 1)
@@ -2669,6 +2692,9 @@ Prompt templates for product copy, SEO content, and video scripts.
                                 "queryCount": 4,
                                 "topN": 3,
                                 "queries": ["AI launch examples"],
+                                "runFollowUpCaptures": True,
+                                "sampleVideoFrames": True,
+                                "videoSampleCount": 2,
                             },
                         }
                     ],
@@ -2701,6 +2727,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(discovery["status"], "planned")
         self.assertIn("--workflow-manifest", discovery["command"])
         self.assertIn("--dry-run", discovery["command"])
+        self.assertIn("--run-follow-up-captures", discovery["command"])
+        self.assertIn("--sample-video-frames", discovery["command"])
+        self.assertIn("--video-sample-count", discovery["command"])
+        self.assertIn("2", discovery["command"])
         self.assertTrue(Path(discovery["report"]).exists())
 
     def test_automation_scheduler_writes_windows_task_script(self) -> None:

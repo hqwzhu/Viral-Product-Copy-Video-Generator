@@ -764,6 +764,9 @@ def build_multi_query_viral_discovery_command(job: dict[str, Any], out_dir: Path
         command.append("--follow-up-dry-run")
     if discovery.get("captureBrowserAssistedFollowUps"):
         command.append("--capture-browser-assisted-follow-ups")
+    if discovery.get("sampleVideoFrames"):
+        command.append("--sample-video-frames")
+        command.extend(["--video-sample-count", str(discovery.get("videoSampleCount") or 5)])
     return command
 
 

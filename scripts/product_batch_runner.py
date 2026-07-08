@@ -61,6 +61,8 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--creator-follow-up-dry-run", action="store_true")
     workflow.add_argument("--run-follow-up-captures", action="store_true")
     workflow.add_argument("--follow-up-dry-run", action="store_true")
+    workflow.add_argument("--sample-video-frames", action="store_true", help="Sample browser-visible video evidence during each product cycle follow-up capture.")
+    workflow.add_argument("--video-sample-count", type=int, default=5)
     workflow.add_argument("--skip-video", action="store_true")
     workflow.add_argument("--video-platforms", default="auto")
     workflow.add_argument("--generate-voiceover", action="store_true")
@@ -79,6 +81,8 @@ def parse_args() -> argparse.Namespace:
     discovery.add_argument("--multi-query-run-follow-up-captures", action="store_true")
     discovery.add_argument("--multi-query-follow-up-dry-run", action="store_true")
     discovery.add_argument("--multi-query-capture-browser-assisted-follow-ups", action="store_true")
+    discovery.add_argument("--multi-query-sample-video-frames", action="store_true")
+    discovery.add_argument("--multi-query-video-sample-count", type=int, default=5)
 
     publish = parser.add_argument_group("Publish queue")
     publish.add_argument("--skip-publish-queue", action="store_true")
@@ -209,6 +213,9 @@ def build_cycle_command(args: argparse.Namespace, record: dict[str, Any], source
         command.append("--run-follow-up-captures")
     if args.follow_up_dry_run:
         command.append("--follow-up-dry-run")
+    if args.sample_video_frames:
+        command.append("--sample-video-frames")
+        command.extend(["--video-sample-count", str(args.video_sample_count)])
     if args.skip_video:
         command.append("--skip-video")
     append_if_present(command, "--video-platforms", args.video_platforms)
@@ -404,6 +411,9 @@ def build_multi_query_command(args: argparse.Namespace, manifest_path: Path, run
         command.append("--follow-up-dry-run")
     if args.multi_query_capture_browser_assisted_follow_ups:
         command.append("--capture-browser-assisted-follow-ups")
+    if args.multi_query_sample_video_frames:
+        command.append("--sample-video-frames")
+        command.extend(["--video-sample-count", str(args.multi_query_video_sample_count)])
     return command
 
 

@@ -61,6 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-follow-up-captures", action="store_true")
     parser.add_argument("--follow-up-dry-run", action="store_true")
     parser.add_argument("--capture-browser-assisted-follow-ups", action="store_true")
+    parser.add_argument("--sample-video-frames", action="store_true", help="Pass video sampling to viral_discovery_runner follow-up captures.")
+    parser.add_argument("--video-sample-count", type=int, default=5)
     return parser.parse_args()
 
 
@@ -228,6 +230,9 @@ def build_discovery_command(args: argparse.Namespace, query: dict[str, Any], run
         command.append("--follow-up-dry-run")
     if args.capture_browser_assisted_follow_ups:
         command.append("--capture-browser-assisted-follow-ups")
+    if args.sample_video_frames:
+        command.append("--sample-video-frames")
+        command.extend(["--video-sample-count", str(args.video_sample_count)])
     return command
 
 

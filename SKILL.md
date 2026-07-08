@@ -38,6 +38,8 @@ Highest-automation safe runner:
 python scripts/final_capability_runner.py \
   --url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --business-csv "./orders-and-revenue.csv" \
   --out-dir "./promotion-output"
 ```
@@ -121,6 +123,8 @@ python scripts/product_batch_runner.py \
   --run-multi-query-viral-discovery \
   --multi-query-query-count 5 \
   --multi-query-top-n 20 \
+  --multi-query-run-follow-up-captures \
+  --multi-query-sample-video-frames \
   --out-dir "./promotion-output"
 ```
 
@@ -214,6 +218,8 @@ python scripts/viral_discovery_runner.py \
   --query "AI product copy generator" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --top-n 20 \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --out-dir "./promotion-output"
 ```
 
@@ -224,6 +230,8 @@ python scripts/multi_query_viral_discovery.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --top-n 20 \
+  --run-follow-up-captures \
+  --sample-video-frames \
   --out-dir "./promotion-output"
 ```
 
@@ -647,8 +655,8 @@ The command writes:
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
 - Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
-- Use `scripts/product_batch_runner.py` when the user sends multiple product URLs and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
-- Use `scripts/final_capability_runner.py` when the user says "execute the Skill", "run the full promotion manager", or wants the highest-automation safe path from product URL to publish queue, browser-assisted publish payloads, optional visible-field form fill, metrics/comment/business recovery, next-round optimization, and readiness audits.
+- Use `scripts/product_batch_runner.py` when the user sends multiple product URLs and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--sample-video-frames` for per-cycle follow-up video evidence, or `--multi-query-sample-video-frames` for the post-cycle multi-query discovery pass. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
+- Use `scripts/final_capability_runner.py` when the user says "execute the Skill", "run the full promotion manager", or wants the highest-automation safe path from product URL to publish queue, browser-assisted publish payloads, optional visible-field form fill, metrics/comment/business recovery, next-round optimization, and readiness audits. Use `--sample-video-frames` and `--multi-query-sample-video-frames` when the final run should carry browser-visible video sampling through product cycles and multi-query viral discovery.
 - Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path.
 - Use `scripts/self_evolution_audit.py` when the Skill needs to inspect local tool gaps, repo/installed-Skill drift, safe runtime install candidates, or approved local Skill sync actions.
 - Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
@@ -671,7 +679,7 @@ The command writes:
 - Use `scripts/creator_follow_up_runner.py` after the creator leaderboard exists to run safe YouTube/GitHub creator follow-up through official/public connectors and queue manual/browser evidence requests for Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms. In the full workflow, add `--run-creator-follow-up`; use `--creator-follow-up-dry-run` for planning-only runs.
 - Use `scripts/follow_up_capture_runner.py` to execute only safe public follow-up capture tasks and generate manual evidence request files for browser-assisted platforms. In the full workflow, add `--run-follow-up-captures` when you want this stage to run.
 - Add `--capture-browser-assisted` to `scripts/follow_up_capture_runner.py`, or `--capture-browser-assisted-follow-ups` to the full workflow, when queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks should attempt public browser-visible snapshots before falling back to manual evidence requests.
-- Add `--sample-video-frames` and `--video-sample-count 5` to `scripts/follow_up_capture_runner.py`, or the same flags to `scripts/run_promotion_workflow.py`, when YouTube, Douyin, TikTok, or other video-like follow-up tasks should capture browser-visible video metadata and frame screenshots. This does not download private media streams or store signed media query tokens.
+- Add `--sample-video-frames` and `--video-sample-count 5` to `scripts/follow_up_capture_runner.py`, `scripts/viral_discovery_runner.py`, `scripts/multi_query_viral_discovery.py`, `scripts/run_promotion_workflow.py`, `scripts/promotion_cycle_runner.py`, `scripts/product_batch_runner.py`, or `scripts/final_capability_runner.py` when YouTube, Douyin, TikTok, or other video-like follow-up tasks should capture browser-visible video metadata and frame screenshots. In product batch and final runs, use `--multi-query-sample-video-frames` and `--multi-query-video-sample-count 5` for the separate multi-query discovery stage. This does not download private media streams or store signed media query tokens.
 - Use `scripts/browser_video_sampler.py` directly when the user provides a specific public/browser-visible video URL and wants frame evidence before deconstruction.
 - Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, content deconstruction summaries, and safe structure roles to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction. Imported records include `contentDeconstruction` with ordered beats, copy mechanics, optional video architecture, reuse guidance, and evidence confidence.
@@ -767,7 +775,7 @@ If a scheduled job has `commentEvidenceCapture.enabled: true`, the scheduler run
 If a scheduled job has `businessAttribution.enabled: true`, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes `business-attribution-export.json` into `scripts/metrics_recovery.py` when recovery is enabled.
 If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
 If a scheduled job has `nextRoundOptimization.enabled: true`, the scheduler runs `scripts/next_round_optimizer.py` after metrics/comment/business recovery and records `lastNextRoundOptimization` in state.
-If a scheduled job has `multiQueryViralDiscovery.enabled: true`, the scheduler runs `scripts/multi_query_viral_discovery.py` after the workflow manifest is created and records the merged discovery report path in state. Use `multiQueryViralDiscovery.dryRun: true` for planning-only recurring research.
+If a scheduled job has `multiQueryViralDiscovery.enabled: true`, the scheduler runs `scripts/multi_query_viral_discovery.py` after the workflow manifest is created and records the merged discovery report path in state. Use `multiQueryViralDiscovery.dryRun: true` for planning-only recurring research. Use `multiQueryViralDiscovery.sampleVideoFrames: true` and `multiQueryViralDiscovery.videoSampleCount: 5` to carry browser-visible video sampling into that recurring discovery stage.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted follow-up tasks.
 Scheduled jobs can set `followUpCapture.sampleVideoFrames: true` and `followUpCapture.videoSampleCount: 5` to sample browser-visible video metadata and frame screenshots during follow-up captures.
