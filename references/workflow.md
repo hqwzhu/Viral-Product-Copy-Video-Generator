@@ -266,6 +266,8 @@ python scripts/viral_content_library.py \
 
 This writes `viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}`. The library ranks captured records by observed viral score and preserves title, creator, hook, CTA, visible metrics, reusable patterns, and source report paths. The follow-up queue marks YouTube/GitHub public URLs as capture candidates and keeps Zhihu, Xiaohongshu, Douyin, TikTok, and unknown platforms as browser-assisted/manual evidence tasks unless official access is verified.
 
+Captured search records and deeper imported competitor records include `contentDeconstruction`: ordered hook/context/problem/solution/proof/CTA beats, copy mechanics, optional video time-window architecture, safe reuse guidance, and evidence confidence. Use this field to generate product-specific structures without copying competitor wording or transferring competitor metrics into product claims.
+
 Build a creator/account leaderboard from the ranked viral library:
 
 ```bash

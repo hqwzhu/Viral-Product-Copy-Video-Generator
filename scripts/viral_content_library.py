@@ -143,6 +143,7 @@ def normalize_record(record: dict[str, Any], platform: str, query: str, source_r
             "metricFields": sorted(metrics),
         },
         "contentStructure": record.get("contentStructure") if isinstance(record.get("contentStructure"), list) else [],
+        "contentDeconstruction": record.get("contentDeconstruction") if isinstance(record.get("contentDeconstruction"), dict) else {},
         "reusablePatterns": record.get("reusablePatterns") if isinstance(record.get("reusablePatterns"), list) else [],
         "confidence": normalize_space(record.get("confidence") or "unknown"),
         "followUpCapture": classify_follow_up(record_platform, url),

@@ -644,13 +644,13 @@ The command writes:
 - Use `scripts/viral_discovery_runner.py` when the user specifically asks to automatically find viral creators, posts, videos, or repositories from a keyword before product copy generation. It chains browser-visible platform search, normalized capture, ranked viral library creation, creator leaderboard generation, and optional follow-up queues.
 - Use `scripts/multi_query_viral_discovery.py` when one keyword is too narrow. It derives queries from the product profile, value proposition, keywords, audience, and pain points; runs or plans one discovery pass per query; then dedupes and ranks the merged viral materials and creator leaderboard.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
-- Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified.
+- Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified. Preserve `contentDeconstruction` as the primary hook/beat/video-architecture evidence for later copy and script generation.
 - Use `scripts/creator_leaderboard.py` after the viral library exists to identify high-signal creators/accounts, aggregate their observed public metrics, and create creator follow-up tasks. The full workflow does this automatically unless `--skip-creator-leaderboard` is supplied.
 - Use `scripts/creator_follow_up_runner.py` after the creator leaderboard exists to run safe YouTube/GitHub creator follow-up through official/public connectors and queue manual/browser evidence requests for Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms. In the full workflow, add `--run-creator-follow-up`; use `--creator-follow-up-dry-run` for planning-only runs.
 - Use `scripts/follow_up_capture_runner.py` to execute only safe public follow-up capture tasks and generate manual evidence request files for browser-assisted platforms. In the full workflow, add `--run-follow-up-captures` when you want this stage to run.
 - Add `--capture-browser-assisted` to `scripts/follow_up_capture_runner.py`, or `--capture-browser-assisted-follow-ups` to the full workflow, when queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks should attempt public browser-visible snapshots before falling back to manual evidence requests.
-- Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, and safe structure summaries to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
-- Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction.
+- Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, content deconstruction summaries, and safe structure roles to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
+- Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction. Imported records include `contentDeconstruction` with ordered beats, copy mechanics, optional video architecture, reuse guidance, and evidence confidence.
 
 ### 3. Content Generation
 
@@ -662,7 +662,7 @@ Generate platform-native material:
 - Douyin: 30-second hooks, voiceover scripts, storyboard, captions, hashtags.
 - GitHub: README promotion copy, Release/Issue/Discussion drafts.
 
-When competitor search evidence exists, generated drafts should include `competitorInformed` metadata and should preserve source titles/hooks as evidence metadata only. Reuse structure; do not copy competitor wording or transfer competitor metrics into product claims.
+When competitor search evidence exists, generated drafts should include `competitorInformed` metadata and should preserve source titles/hooks/deconstruction summaries as evidence metadata only. Reuse structure and beat functions; do not copy competitor wording or transfer competitor metrics into product claims.
 
 When the user asks for a video file, run `scripts/render_video.py` to create an MP4 from the generated content JSON. Use `--voiceover-audio` for a real recorded/AI voiceover file, or `--generate-voiceover` on Windows for review-quality system TTS. Without either option the renderer creates a silent captioned artifact.
 

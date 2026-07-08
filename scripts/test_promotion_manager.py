@@ -978,7 +978,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "url": "https://www.xiaohongshu.com/explore/test-note-1",
                             "creator": "Growth Notes",
                             "hook": "Stop rewriting the same product intro.",
-                            "content": "Use one URL to create hooks, notes, and CTA variants. comments 87 likes 1.2k saves 420",
+                            "content": "Use one URL to create hooks, notes, and CTA variants. Try it with your next launch. comments 87 likes 1.2k saves 420",
                             "likes": "1.2k",
                             "favorites": "420",
                             "comments": "87",
@@ -1017,6 +1017,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["recordCount"], 2)
         self.assertEqual(report["records"][0]["visibleMetrics"]["likes"]["normalized"], 1200.0)
         self.assertEqual(report["records"][0]["contentFormat"], "note")
+        self.assertIn("contentDeconstruction", report["records"][0])
+        self.assertGreaterEqual(report["records"][0]["contentDeconstruction"]["beatCount"], 1)
+        self.assertIn("explicit_conversion_prompt", report["records"][0]["contentDeconstruction"]["copyMechanics"])
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
 
     def test_viral_content_library_ranks_multiplatform_capture_reports(self) -> None:
@@ -1047,6 +1050,11 @@ Prompt templates for product copy, SEO content, and video scripts.
                             },
                             "viralSignals": {"score": 160000.0, "hasObservedMetrics": True},
                             "reusablePatterns": ["visible_social_proof"],
+                            "contentDeconstruction": {
+                                "summary": "youtube/video structure hook -> proof with visible social proof.",
+                                "beats": [{"order": 1, "role": "hook", "function": "stop-scroll opener or curiosity trigger"}],
+                                "copyMechanics": ["visible_metric_proof"],
+                            },
                         }
                     ],
                 }
@@ -1094,6 +1102,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         library = json.loads((out_dir / "output/reports/promotion-manager/competitors/viral-content-library.json").read_text(encoding="utf-8"))
         self.assertEqual(library["recordCount"], 2)
         self.assertEqual(library["materials"][0]["platform"], "youtube")
+        self.assertEqual(library["materials"][0]["contentDeconstruction"]["summary"], "youtube/video structure hook -> proof with visible social proof.")
         self.assertEqual(library["materials"][0]["followUpCapture"]["mode"], "public_url_capture_candidate")
         self.assertEqual(library["materials"][1]["followUpCapture"]["mode"], "browser_assisted_capture_required")
         tasks = json.loads((out_dir / "output/reports/promotion-manager/competitors/follow-up-capture-tasks.json").read_text(encoding="utf-8"))
@@ -1330,6 +1339,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(deep["recordCount"], 1)
         self.assertEqual(deep["records"][0]["platform"], "github")
         self.assertEqual(deep["records"][0]["sourceFollowUpTask"]["materialId"], "viral-material-001")
+        self.assertIn("contentDeconstruction", deep["records"][0])
+        self.assertIn("reuseGuidance", deep["records"][0]["contentDeconstruction"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/follow-up-captures/manual-evidence/follow-up-002.md").exists())
 
     def test_follow_up_capture_runner_imports_browser_visible_platform_page(self) -> None:
@@ -1422,6 +1433,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(deep["recordCount"], 1)
         self.assertEqual(deep["records"][0]["platform"], "xiaohongshu")
         self.assertIn("Launch note teardown", deep["records"][0]["title"])
+        self.assertIn("contentDeconstruction", deep["records"][0])
+        self.assertGreaterEqual(deep["records"][0]["contentDeconstruction"]["beatCount"], 1)
 
     def test_competitor_content_enhancer_writes_back_content_and_publish_pack(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-content-enhancer-test-"))
@@ -1481,6 +1494,13 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "creatorName": "Launch Lab",
                             "hook": "Your product page is already a content plan.",
                             "reusablePatterns": ["numbered_title_or_claim", "visible_social_proof"],
+                            "contentDeconstruction": {
+                                "summary": "youtube/video structure hook -> problem -> solution -> cta with visible social proof.",
+                                "beats": [
+                                    {"order": 1, "role": "hook", "function": "stop-scroll opener or curiosity trigger"},
+                                    {"order": 2, "role": "solution", "function": "shows the mechanism or promised path"},
+                                ],
+                            },
                             "viralSignals": {"score": 160000.0},
                             "visibleMetrics": {"views": {"raw": "120k", "normalized": 120000.0}},
                         },
@@ -1542,6 +1562,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         enhanced = json.loads(content_path.read_text(encoding="utf-8"))
         self.assertEqual(enhanced["youtube"]["competitorInformed"]["status"], "ready")
+        self.assertIn("youtube/video structure", enhanced["youtube"]["competitorInformed"]["deconstructionSummaries"][0])
+        self.assertIn("stop-scroll opener", enhanced["youtube"]["competitorInformed"]["beatFunctions"][0])
         self.assertIn("Your product page is already a content plan", enhanced["youtube"]["shortVideoScript"])
         self.assertIn("Observed viral pattern", enhanced["xiaohongshu"]["description"])
         self.assertIn("Observed viral pattern", enhanced["douyin"]["voiceover"])
@@ -2551,6 +2573,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["records"][0]["title"], "One URL Into 30 Posts")
         self.assertEqual(report["records"][0]["creatorName"], "Growth Creator")
         self.assertEqual(report["records"][0]["visibleMetrics"]["views"]["normalized"], 12000.0)
+        self.assertIn("contentDeconstruction", report["records"][0])
+        self.assertIn("videoArchitecture", report["records"][0]["contentDeconstruction"])
+        self.assertIn("visible_metric_proof", report["records"][0]["contentDeconstruction"]["copyMechanics"])
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 1)
         self.assertTrue((out_dir / "reports/promotion-manager/competitors/imported-competitors.md").exists())
 

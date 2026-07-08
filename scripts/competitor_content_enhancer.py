@@ -122,6 +122,7 @@ def normalize_source_record(record: dict[str, Any], source_type: str) -> dict[st
         "contentExcerpt": normalize_space(record.get("contentExcerpt", "")),
         "reusablePatterns": record.get("reusablePatterns") if isinstance(record.get("reusablePatterns"), list) else [],
         "contentStructure": record.get("contentStructure") if isinstance(record.get("contentStructure"), list) else [],
+        "contentDeconstruction": record.get("contentDeconstruction") if isinstance(record.get("contentDeconstruction"), dict) else {},
         "visibleMetrics": record.get("visibleMetrics") if isinstance(record.get("visibleMetrics"), dict) else {},
         "score": numeric(signals.get("score"), 0.0),
     }
@@ -131,8 +132,16 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
     hooks = unique_non_empty([record.get("hook") for record in records])
     titles = unique_non_empty([record.get("title") for record in records])
     ctas = unique_non_empty([record.get("cta") for record in records])
+    deconstruction_summaries = unique_non_empty(
+        [
+            (record.get("contentDeconstruction") or {}).get("summary")
+            for record in records
+            if isinstance(record.get("contentDeconstruction"), dict)
+        ]
+    )
     patterns: dict[str, int] = {}
     structures: dict[str, int] = {}
+    beat_functions: dict[str, int] = {}
     for record in records:
         for pattern in record.get("reusablePatterns", []):
             patterns[str(pattern)] = patterns.get(str(pattern), 0) + 1
@@ -140,14 +149,24 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
             role = str(item.get("role", "")).strip()
             if role:
                 structures[role] = structures.get(role, 0) + 1
+        deconstruction = record.get("contentDeconstruction") if isinstance(record.get("contentDeconstruction"), dict) else {}
+        beats = deconstruction.get("beats", [])
+        if not isinstance(beats, list):
+            beats = []
+        for beat in beats:
+            function = str(beat.get("function", "")).strip()
+            if function:
+                beat_functions[function] = beat_functions.get(function, 0) + 1
     return {
         "platform": platform,
         "recordCount": len(records),
         "sourceTitles": titles[:5],
         "sourceHooks": hooks[:5],
         "sourceCtas": ctas[:5],
+        "deconstructionSummaries": deconstruction_summaries[:5],
         "dominantPatterns": [name for name, _ in sorted(patterns.items(), key=lambda item: item[1], reverse=True)[:5]],
         "structureRoles": [name for name, _ in sorted(structures.items(), key=lambda item: item[1], reverse=True)[:5]],
+        "beatFunctions": [name for name, _ in sorted(beat_functions.items(), key=lambda item: item[1], reverse=True)[:5]],
         "metricBackedRecords": sum(1 for record in records if record.get("visibleMetrics")),
         "safePatternSummary": summarize_patterns(patterns, hooks, titles),
         "sourceRecords": [
@@ -189,6 +208,9 @@ def apply_insights(platform: str, item: dict[str, Any], insights: dict[str, Any]
         "generatedAt": TODAY,
         "sourceTitles": insights.get("sourceTitles", [])[:5],
         "sourceHooks": insights.get("sourceHooks", [])[:5],
+        "deconstructionSummaries": insights.get("deconstructionSummaries", [])[:5],
+        "structureRoles": insights.get("structureRoles", [])[:5],
+        "beatFunctions": insights.get("beatFunctions", [])[:5],
         "dominantPatterns": insights.get("dominantPatterns", []),
         "metricBackedRecords": insights.get("metricBackedRecords", 0),
         "safeUseRule": "Use observed structures and patterns, not copied competitor wording or fabricated metrics.",

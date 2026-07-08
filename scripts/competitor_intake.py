@@ -231,6 +231,8 @@ def normalize_records(payload: SourcePayload) -> list[dict[str, Any]]:
         metrics = {**extract_metrics(content), **normalize_metric_mapping(metrics)}
         hook = first_non_empty(str(raw.get("hook") or ""), extract_hook(content))
         cta = first_non_empty(str(raw.get("cta") or ""), extract_cta(content))
+        content_format = str(raw.get("contentFormat") or infer_format(platform, str(raw.get("title") or ""), content))
+        structure = build_structure(content, hook, cta)
         record = {
             "id": f"competitor-{index:03d}",
             "platform": platform,
@@ -244,10 +246,11 @@ def normalize_records(payload: SourcePayload) -> list[dict[str, Any]]:
             "creatorName": str(raw.get("creatorName") or ""),
             "title": str(raw.get("title") or "Untitled competitor content"),
             "description": str(raw.get("description") or ""),
-            "contentFormat": str(raw.get("contentFormat") or infer_format(platform, str(raw.get("title") or ""), content)),
+            "contentFormat": content_format,
             "hook": hook,
             "contentExcerpt": trim(content, 900),
-            "contentStructure": build_structure(content, hook, cta),
+            "contentStructure": structure,
+            "contentDeconstruction": content_deconstruction(platform, content_format, str(raw.get("title") or ""), content, hook, cta, structure, metrics),
             "cta": cta,
             "visibleMetrics": metrics,
             "reusablePatterns": reusable_patterns(str(raw.get("title") or ""), hook, cta, metrics),
@@ -488,6 +491,105 @@ def reusable_patterns(title: str, hook: str, cta: str, metrics: dict[str, Any]) 
     return patterns
 
 
+def content_deconstruction(
+    platform: str,
+    content_format: str,
+    title: str,
+    content: str,
+    hook: str,
+    cta: str,
+    structure: list[dict[str, str]],
+    metrics: dict[str, Any],
+) -> dict[str, Any]:
+    roles = [item.get("role", "") for item in structure if item.get("role")]
+    return {
+        "summary": deconstruction_summary(platform, content_format, roles, metrics),
+        "beatCount": len(structure),
+        "beats": [
+            {
+                "order": index,
+                "role": item.get("role", "unknown"),
+                "function": beat_function(item.get("role", "")),
+                "sourceText": item.get("text", ""),
+            }
+            for index, item in enumerate(structure, start=1)
+        ],
+        "videoArchitecture": video_architecture(platform, content_format, structure),
+        "copyMechanics": copy_mechanics(title, hook, cta, metrics),
+        "reuseGuidance": [
+            "Reuse the beat order and persuasion function, not the competitor wording.",
+            "Keep all performance metrics attached to source evidence; do not transfer them into product claims.",
+            "Adapt hook, proof, and CTA to the promoted product's factual page evidence.",
+        ],
+        "evidence": {
+            "sourceType": "public_page_or_user_export",
+            "hasObservedMetrics": bool(metrics),
+            "confidence": confidence_for_record(content, metrics),
+        },
+    }
+
+
+def deconstruction_summary(platform: str, content_format: str, roles: list[str], metrics: dict[str, Any]) -> str:
+    observed = "with visible social proof" if metrics else "without visible social proof"
+    role_text = " -> ".join(roles) if roles else "needs manual beat review"
+    return f"{platform}/{content_format} structure {role_text} {observed}."
+
+
+def beat_function(role: str) -> str:
+    functions = {
+        "hook": "stop-scroll opener or curiosity trigger",
+        "context": "sets the situation and audience frame",
+        "problem": "names the pain point or friction",
+        "solution": "shows the mechanism or promised path",
+        "proof": "adds evidence, specificity, or credibility",
+        "cta": "converts attention into the next action",
+    }
+    return functions.get(role, "requires manual interpretation")
+
+
+def video_architecture(platform: str, content_format: str, structure: list[dict[str, str]]) -> list[dict[str, str]]:
+    if platform not in {"youtube", "douyin", "tiktok"} and "video" not in content_format:
+        return []
+    windows = ["0-3s", "3-8s", "8-18s", "18-28s", "28-35s", "35s+"]
+    architecture = []
+    for window, beat in zip(windows, structure):
+        architecture.append(
+            {
+                "timeWindow": window,
+                "role": beat.get("role", "unknown"),
+                "screenAction": screen_action_for_role(beat.get("role", "")),
+                "voiceoverPurpose": beat_function(beat.get("role", "")),
+            }
+        )
+    return architecture
+
+
+def screen_action_for_role(role: str) -> str:
+    actions = {
+        "hook": "large claim, surprising result, or direct problem text",
+        "context": "show the product/category situation or creator setup",
+        "problem": "show friction, failed workflow, or before state",
+        "solution": "show demo steps, transformation, or key feature",
+        "proof": "show evidence, checklist, metric, repo, or testimonial source",
+        "cta": "show next action, URL, comment prompt, or save/share cue",
+    }
+    return actions.get(role, "show supporting visual evidence")
+
+
+def copy_mechanics(title: str, hook: str, cta: str, metrics: dict[str, Any]) -> list[str]:
+    mechanics = []
+    combined = f"{title} {hook}"
+    if "?" in combined:
+        mechanics.append("question_or_open_loop")
+    if re.search(r"\d", combined):
+        mechanics.append("number_or_specificity")
+    if metrics:
+        mechanics.append("visible_metric_proof")
+    if cta:
+        mechanics.append("explicit_conversion_prompt")
+    return mechanics or ["plain_explainer_structure"]
+
+
 def aggregate_patterns(records: list[dict[str, Any]]) -> dict[str, Any]:
     titles = [record["title"] for record in records if record.get("title")]
     hooks = [record["hook"] for record in records if record.get("hook")]
@@ -581,6 +683,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("- Structure:")
         for item in record["contentStructure"]:
             lines.append(f"  - {item['role']}: {item['text']}")
+        deconstruction = record.get("contentDeconstruction") or {}
+        if deconstruction:
+            lines.append(f"- Deconstruction: {deconstruction.get('summary', 'needs review')}")
+            for beat in deconstruction.get("beats", [])[:6]:
+                lines.append(f"  - {beat.get('role', 'unknown')}: {beat.get('function', '')}")
     lines.extend(["", "## Guardrails"])
     lines.extend([f"- {item}" for item in report["guardrails"]])
     return "\n".join(lines)
