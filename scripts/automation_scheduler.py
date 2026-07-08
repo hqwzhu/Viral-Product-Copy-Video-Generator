@@ -94,7 +94,14 @@ def init_config(args: argparse.Namespace) -> None:
         "collectorPlatforms": ["youtube", "github"],
         "autoSearchCompetitors": args.auto_search_competitors,
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
-        "followUpCapture": {"enabled": False, "limit": 20, "dryRun": False, "captureBrowserAssisted": args.capture_browser_assisted_follow_ups},
+        "followUpCapture": {
+            "enabled": False,
+            "limit": 20,
+            "dryRun": False,
+            "captureBrowserAssisted": args.capture_browser_assisted_follow_ups,
+            "sampleVideoFrames": False,
+            "videoSampleCount": 5,
+        },
         "skipCreatorLeaderboard": args.skip_creator_leaderboard,
         "creatorFollowUp": {"enabled": args.run_creator_follow_up, "limit": 20, "topN": 5, "dryRun": args.creator_follow_up_dry_run},
         "multiQueryViralDiscovery": {"enabled": False, "dryRun": False, "queryCount": 5, "queries": []},
@@ -805,6 +812,9 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
             command.append("--allow-localhost-follow-up")
         if follow_up.get("captureBrowserAssisted"):
             command.append("--capture-browser-assisted-follow-ups")
+        if follow_up.get("sampleVideoFrames"):
+            command.append("--sample-video-frames")
+            command.extend(["--video-sample-count", str(follow_up.get("videoSampleCount") or 5)])
     if job.get("skipCreatorLeaderboard"):
         command.append("--skip-creator-leaderboard")
     creator_follow_up = job.get("creatorFollowUp") or {}

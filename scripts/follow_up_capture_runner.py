@@ -47,6 +47,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow browser_snapshot.py to run the official Playwright Chromium install when browser-assisted capture is requested.",
     )
+    parser.add_argument(
+        "--sample-video-frames",
+        action="store_true",
+        help="After a safe follow-up capture, sample browser-visible video metadata and frame screenshots for video platforms.",
+    )
+    parser.add_argument("--video-sample-count", type=int, default=5)
     return parser.parse_args()
 
 
@@ -113,6 +119,7 @@ def run_public_capture(args: argparse.Namespace, out_dir: Path, task: dict[str, 
     )
     records = records_from_import(imported_path, task)
     base["recordCount"] = len(records)
+    attach_video_sample(args, task, task_out_dir, base)
     return base, records
 
 
@@ -183,7 +190,55 @@ def run_browser_visible_capture(args: argparse.Namespace, out_dir: Path, task: d
     )
     records = records_from_import(imported_path, task)
     base["recordCount"] = len(records)
+    attach_video_sample(args, task, task_out_dir, base)
     return base, records
+
+
+def attach_video_sample(args: argparse.Namespace, task: dict[str, Any], task_out_dir: Path, result: dict[str, Any]) -> None:
+    if not args.sample_video_frames or not should_sample_video(task):
+        return
+    url = str(task.get("url") or "")
+    platform = str(task.get("platform") or "auto")
+    command = [
+        sys.executable,
+        str(SCRIPTS / "browser_video_sampler.py"),
+        "--url",
+        url,
+        "--platform",
+        platform,
+        "--sample-count",
+        str(args.video_sample_count),
+        "--out-dir",
+        str(task_out_dir),
+    ]
+    if args.allow_localhost:
+        command.append("--allow-localhost")
+    if args.install_browser_if_missing:
+        command.append("--install-browser-if-missing")
+    video_result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = task_out_dir / COMPETITOR_DIR / "video-sampling/browser-video-sampler.json"
+    payload = read_json(report_path)
+    result["videoSample"] = {
+        "status": payload.get("status", "error") if report_path.exists() and video_result.returncode == 0 else "error",
+        "report": str(report_path) if report_path.exists() else "",
+        "videoCount": payload.get("videoCount", 0),
+        "frameCount": len(payload.get("frames", [])) if isinstance(payload.get("frames"), list) else 0,
+        "exitCode": video_result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(video_result.stdout),
+        "stderrTail": tail(video_result.stderr),
+    }
+
+
+def should_sample_video(task: dict[str, Any]) -> bool:
+    platform = str(task.get("platform") or "").lower()
+    content_format = str(task.get("contentFormat") or task.get("format") or "").lower()
+    url = str(task.get("url") or "").lower()
+    if platform in {"youtube", "douyin", "tiktok"}:
+        return True
+    if "video" in content_format:
+        return True
+    return any(host in url for host in ["youtube.com", "youtu.be", "douyin.com", "tiktok.com"])
 
 
 def blocked_browser_capture(out_dir: Path, task: dict[str, Any], base: dict[str, Any], reason: str, snapshot_path: str) -> dict[str, Any]:
@@ -322,11 +377,37 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     statuses: dict[str, int] = {}
     modes: dict[str, int] = {}
     imported = 0
+    video_sample_runs = 0
+    video_sample_ready = 0
+    video_sample_frames = 0
     for result in results:
         statuses[str(result.get("status", "unknown"))] = statuses.get(str(result.get("status", "unknown")), 0) + 1
         modes[str(result.get("mode", "unknown"))] = modes.get(str(result.get("mode", "unknown")), 0) + 1
         imported += int(result.get("recordCount") or 0)
-    return {"statuses": dict(sorted(statuses.items())), "modes": dict(sorted(modes.items())), "importedRecords": imported}
+        video_sample = result.get("videoSample")
+        if isinstance(video_sample, dict):
+            video_sample_runs += 1
+            if video_sample.get("status") == "ready":
+                video_sample_ready += 1
+            video_sample_frames += int(video_sample.get("frameCount") or 0)
+    return {
+        "statuses": dict(sorted(statuses.items())),
+        "modes": dict(sorted(modes.items())),
+        "importedRecords": imported,
+        "videoSampleRuns": video_sample_runs,
+        "videoSampleReady": video_sample_ready,
+        "videoSampleFrames": video_sample_frames,
+    }
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def aggregate_deep_records(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -386,6 +467,8 @@ def render_results_markdown(report: dict[str, Any]) -> str:
         f"- Dry run: {report['dryRun']}",
         f"- Tasks: {report['recordCount']}",
         f"- Imported records: {report['summary']['importedRecords']}",
+        f"- Video sample runs: {report['summary'].get('videoSampleRuns', 0)}",
+        f"- Video sample frames: {report['summary'].get('videoSampleFrames', 0)}",
         "",
         "## Results",
     ]
@@ -405,6 +488,12 @@ def render_results_markdown(report: dict[str, Any]) -> str:
             lines.append(f"- Reason: {result['reason']}")
         if result.get("evidenceRequest"):
             lines.append(f"- Evidence request: {result['evidenceRequest']}")
+        video_sample = result.get("videoSample")
+        if isinstance(video_sample, dict):
+            lines.append(f"- Video sample: `{video_sample.get('status', '')}`")
+            lines.append(f"- Video sample frames: {video_sample.get('frameCount', 0)}")
+            if video_sample.get("report"):
+                lines.append(f"- Video sample report: {video_sample['report']}")
     lines.extend(["", "## Guardrails"])
     lines.extend(f"- {item}" for item in report["guardrails"])
     return "\n".join(lines)

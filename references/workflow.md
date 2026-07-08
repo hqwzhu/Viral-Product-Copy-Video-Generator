@@ -301,6 +301,29 @@ python scripts/follow_up_capture_runner.py \
 
 By default the runner fetches only `public_url_capture_candidate` tasks. With `--capture-browser-assisted`, it also attempts public Playwright snapshots for queued browser-assisted tasks, writes `follow-up-captures/<task>/browser-visible-snapshot.json`, imports visible page evidence into `deep-competitor-library.json`, and falls back to evidence request files when login, captcha, verification, draft, preview, or access-denied content is detected.
 
+Add browser-visible video sampling for video-like follow-up tasks:
+
+```bash
+python scripts/follow_up_capture_runner.py \
+  --tasks-json "./promotion-output/reports/promotion-manager/competitors/follow-up-capture-tasks.json" \
+  --capture-browser-assisted \
+  --sample-video-frames \
+  --video-sample-count 5 \
+  --out-dir "./promotion-output"
+```
+
+This writes per-task `video-sampling/browser-video-sampler.{json,md}` reports and `frames/*.png` screenshots under the task capture directory. It records only visible `<video>` metadata, redacted media URLs, visible transcript hints, and frame screenshots; it must not download private streams, extract signed media tokens, log in, or bypass risk controls.
+
+For a single known video URL:
+
+```bash
+python scripts/browser_video_sampler.py \
+  --url "https://example.com/video-page" \
+  --platform youtube \
+  --sample-count 5 \
+  --out-dir "./promotion-output"
+```
+
 Use the competitor-informed enhancer when ranked search materials or deep competitor records should shape the final drafts:
 
 ```bash

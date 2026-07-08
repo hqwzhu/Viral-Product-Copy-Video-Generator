@@ -282,6 +282,27 @@ python scripts/follow_up_capture_runner.py \
   --out-dir "./promotion-output"
 ```
 
+To also sample browser-visible video metadata and frame screenshots for video materials:
+
+```bash
+python scripts/follow_up_capture_runner.py \
+  --tasks-json "./promotion-output/reports/promotion-manager/competitors/follow-up-capture-tasks.json" \
+  --capture-browser-assisted \
+  --sample-video-frames \
+  --video-sample-count 5 \
+  --out-dir "./promotion-output"
+```
+
+To sample one known public/browser-visible video page directly:
+
+```bash
+python scripts/browser_video_sampler.py \
+  --url "https://example.com/video-page" \
+  --platform youtube \
+  --sample-count 5 \
+  --out-dir "./promotion-output"
+```
+
 To rewrite generated platform content with the ranked viral/deep competitor libraries before video rendering and publish-pack preparation:
 
 ```bash
@@ -595,6 +616,7 @@ The command writes:
 - `reports/promotion-manager/competitors/creator-follow-up-results.{json,md}` and `creator-deep-library.{json,md}` when `scripts/creator_follow_up_runner.py` runs safe public creator/account follow-up research or queues manual evidence.
 - `reports/promotion-manager/competitors/follow-up-capture-results.{json,md}` and `deep-competitor-library.{json,md}` when `scripts/follow_up_capture_runner.py` executes safe follow-up captures.
 - `reports/promotion-manager/competitors/follow-up-captures/<task>/browser-visible-snapshot.json` when browser-assisted follow-up capture opens a public platform URL and imports browser-visible page evidence.
+- `reports/promotion-manager/competitors/video-sampling/browser-video-sampler.{json,md}` and `video-sampling/frames/*.png` when `scripts/browser_video_sampler.py` captures browser-visible video metadata and frame screenshots. When run from follow-up captures, the same files are written under `follow-up-captures/<task>/reports/promotion-manager/competitors/video-sampling/`.
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from observed viral patterns. The workflow writes this back to `<product>-platform-content.json` before video rendering unless `--skip-competitor-informed-content` is supplied.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
@@ -649,6 +671,8 @@ The command writes:
 - Use `scripts/creator_follow_up_runner.py` after the creator leaderboard exists to run safe YouTube/GitHub creator follow-up through official/public connectors and queue manual/browser evidence requests for Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms. In the full workflow, add `--run-creator-follow-up`; use `--creator-follow-up-dry-run` for planning-only runs.
 - Use `scripts/follow_up_capture_runner.py` to execute only safe public follow-up capture tasks and generate manual evidence request files for browser-assisted platforms. In the full workflow, add `--run-follow-up-captures` when you want this stage to run.
 - Add `--capture-browser-assisted` to `scripts/follow_up_capture_runner.py`, or `--capture-browser-assisted-follow-ups` to the full workflow, when queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks should attempt public browser-visible snapshots before falling back to manual evidence requests.
+- Add `--sample-video-frames` and `--video-sample-count 5` to `scripts/follow_up_capture_runner.py`, or the same flags to `scripts/run_promotion_workflow.py`, when YouTube, Douyin, TikTok, or other video-like follow-up tasks should capture browser-visible video metadata and frame screenshots. This does not download private media streams or store signed media query tokens.
+- Use `scripts/browser_video_sampler.py` directly when the user provides a specific public/browser-visible video URL and wants frame evidence before deconstruction.
 - Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, content deconstruction summaries, and safe structure roles to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction. Imported records include `contentDeconstruction` with ordered beats, copy mechanics, optional video architecture, reuse guidance, and evidence confidence.
 
@@ -746,6 +770,7 @@ If a scheduled job has `nextRoundOptimization.enabled: true`, the scheduler runs
 If a scheduled job has `multiQueryViralDiscovery.enabled: true`, the scheduler runs `scripts/multi_query_viral_discovery.py` after the workflow manifest is created and records the merged discovery report path in state. Use `multiQueryViralDiscovery.dryRun: true` for planning-only recurring research.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted follow-up tasks.
+Scheduled jobs can set `followUpCapture.sampleVideoFrames: true` and `followUpCapture.videoSampleCount: 5` to sample browser-visible video metadata and frame screenshots during follow-up captures.
 Scheduled jobs can set `creatorFollowUp.enabled: true` to run safe creator/account follow-up research after the creator leaderboard. Use `creatorFollowUp.dryRun: true` for planning-only runs.
 Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rewriting with viral/deep competitor libraries, or `true` to pass the explicit `--use-competitor-informed-content` flag.
 
@@ -755,6 +780,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
+- `scripts/browser_video_sampler.py`: browser-visible video metadata and frame screenshot sampler for public video pages.
 - `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading.
 - `scripts/product_batch_runner.py`: batch URL runner that invokes Codex-first reading, one promotion cycle per ready product, optional per-product multi-query viral discovery, and optional next-round optimization from recovered evidence.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
+BROWSER_VIDEO_SAMPLER = ROOT / "scripts" / "browser_video_sampler.py"
 PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
 PRODUCT_BATCH_RUNNER = ROOT / "scripts" / "product_batch_runner.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
@@ -334,6 +335,92 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(profile["sourceType"], "browser_rendered_snapshot")
         self.assertEqual(profile["productName"], "AI Prompt Kit")
         self.assertEqual(profile["pricing"], "19")
+
+    def test_browser_video_sampler_captures_visible_video_frames(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-video-sampler-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        video_path = site_dir / "sample.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=0x2563eb:s=320x180:d=2",
+                "-pix_fmt",
+                "yuv420p",
+                str(video_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        (site_dir / "video.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Launch video teardown</title></head>
+<body>
+  <h1>Launch video teardown</h1>
+  <p>Hook: stop writing product launch scripts from scratch.</p>
+  <p>Voiceover: show pain, mechanism, proof, and CTA.</p>
+  <video controls width="320" height="180" src="/sample.mp4?signature=secret-token"></video>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/video.html"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BROWSER_VIDEO_SAMPLER),
+                "--url",
+                url,
+                "--platform",
+                "youtube",
+                "--sample-count",
+                "2",
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/competitors/video-sampling/browser-video-sampler.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["platform"], "youtube")
+        self.assertEqual(report["videoCount"], 1)
+        self.assertEqual(len(report["frames"]), 2)
+        self.assertTrue(all(Path(frame["screenshot"]).exists() for frame in report["frames"]))
+        self.assertTrue(report["primaryVideo"]["currentSrc"]["queryRedacted"])
+        self.assertNotIn("secret-token", json.dumps(report, ensure_ascii=False))
+        self.assertTrue(any("Voiceover" in item for item in report["visibleTranscriptHints"]))
+        self.assertEqual(report["contentEvidence"]["videoEvidence"]["frameCount"], 2)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/video-sampling/browser-video-sampler.md").exists())
 
     def test_product_url_reader_creates_structured_snapshot_then_profile(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-test-"))
@@ -1436,6 +1523,113 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("contentDeconstruction", deep["records"][0])
         self.assertGreaterEqual(deep["records"][0]["contentDeconstruction"]["beatCount"], 1)
 
+    def test_follow_up_capture_runner_samples_video_frames(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="follow-up-video-sampling-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        video_path = site_dir / "sample.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=0x16a34a:s=320x180:d=2",
+                "-pix_fmt",
+                "yuv420p",
+                str(video_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        (site_dir / "video.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Launch video teardown</title></head>
+<body>
+  <h1>Launch video teardown</h1>
+  <p>Hook: stop guessing the first three seconds.</p>
+  <p>Voiceover: show pain, mechanism, proof, CTA.</p>
+  <video controls width="320" height="180" src="/sample.mp4?token=secret-video-token"></video>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/video.html"
+        tasks_path = out_dir / "follow-up-capture-tasks.json"
+        tasks_path.write_text(
+            json.dumps(
+                {
+                    "tasks": [
+                        {
+                            "id": "follow-up-video-001",
+                            "materialId": "viral-video-001",
+                            "priority": 1,
+                            "platform": "youtube",
+                            "title": "Launch video teardown",
+                            "url": url,
+                            "contentFormat": "video",
+                            "mode": "public_url_capture_candidate",
+                            "status": "ready",
+                            "requiredEvidence": ["browser-visible video page"],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(FOLLOW_UP_CAPTURE_RUNNER),
+                "--tasks-json",
+                str(tasks_path),
+                "--sample-video-frames",
+                "--video-sample-count",
+                "2",
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        results_path = out_dir / "output/reports/promotion-manager/competitors/follow-up-capture-results.json"
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+        self.assertEqual(results["summary"]["videoSampleRuns"], 1)
+        self.assertEqual(results["summary"]["videoSampleReady"], 1)
+        self.assertEqual(results["summary"]["videoSampleFrames"], 2)
+        sample = results["results"][0]["videoSample"]
+        self.assertEqual(sample["status"], "ready")
+        self.assertEqual(sample["frameCount"], 2)
+        self.assertTrue(Path(sample["report"]).exists())
+        self.assertNotIn("secret-video-token", Path(sample["report"]).read_text(encoding="utf-8"))
+        markdown = results_path.with_suffix(".md").read_text(encoding="utf-8")
+        self.assertIn("Video sample report", markdown)
+
     def test_competitor_content_enhancer_writes_back_content_and_publish_pack(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-content-enhancer-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2389,6 +2583,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "platforms": ["youtube"],
                             "skipCreatorLeaderboard": True,
                             "creatorFollowUp": {"enabled": True, "limit": 7, "topN": 3, "dryRun": True},
+                            "followUpCapture": {"enabled": True, "dryRun": True, "sampleVideoFrames": True, "videoSampleCount": 3},
                             "competitorInformedContent": {"enabled": True},
                             "skipVideo": True,
                         },
@@ -2429,6 +2624,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--creator-follow-up-top-n", commands["enhancer-enabled"])
         self.assertIn("3", commands["enhancer-enabled"])
         self.assertIn("--creator-follow-up-dry-run", commands["enhancer-enabled"])
+        self.assertIn("--run-follow-up-captures", commands["enhancer-enabled"])
+        self.assertIn("--follow-up-dry-run", commands["enhancer-enabled"])
+        self.assertIn("--sample-video-frames", commands["enhancer-enabled"])
+        self.assertIn("--video-sample-count", commands["enhancer-enabled"])
         self.assertIn("--use-competitor-informed-content", commands["enhancer-enabled"])
         self.assertIn("--skip-competitor-informed-content", commands["enhancer-disabled"])
 
@@ -3730,8 +3929,12 @@ Prompt templates for product copy, SEO content, and video scripts.
             "blocked_by_safety_boundary",
         )
         self.assertEqual(by_requirement["retrospective_next_round_optimization"]["status"], "ready")
+        self.assertTrue(
+            any("browser_video_sampler.py" in path for path in by_requirement["viral_creator_content_research"]["evidence"])
+        )
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "capture_browser_visible_video_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(report["platformAccessAudit"]["ready"])
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolutionAudit"]["ready"])

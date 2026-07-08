@@ -36,6 +36,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/competitors/follow-up-capture-results.{json,md}` when `scripts/follow_up_capture_runner.py` executes or queues follow-up capture tasks
 - `reports/promotion-manager/competitors/deep-competitor-library.{json,md}` when safe public follow-up captures produce deeper competitor records with `contentDeconstruction` beat analysis
 - `reports/promotion-manager/competitors/follow-up-captures/<task>/browser-visible-snapshot.json` when safe browser-assisted follow-up capture imports a public platform page
+- `reports/promotion-manager/competitors/video-sampling/browser-video-sampler.{json,md}` and `video-sampling/frames/*.png` when `scripts/browser_video_sampler.py` samples browser-visible video evidence. From follow-up captures, these files are nested under `follow-up-captures/<task>/reports/promotion-manager/competitors/video-sampling/`
 - `reports/promotion-manager/competitors/follow-up-captures/manual-evidence/<task>.md` browser/manual evidence requests for platforms that cannot be safely fetched automatically
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from viral/deep competitor libraries
 - `reports/promotion-manager/competitors/auto-collected-competitors.{json,md}` when `scripts/competitor_collector.py` is run
@@ -217,7 +218,19 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `results[].browserSnapshot`: structured browser-visible page snapshot path when `--capture-browser-assisted` is used
 - `results[].importedCompetitors`: nested import report path when a public or browser-visible capture succeeds
 - `results[].evidenceRequest`: manual/browser evidence request path when automatic capture is not safe
-- `summary`: counts by mode/status and number of imported deep records
+- `results[].videoSample`: optional video sampling status, report path, visible video count, frame count, exit code, and sanitized command when `--sample-video-frames` is used
+- `summary`: counts by mode/status, number of imported deep records, `videoSampleRuns`, `videoSampleReady`, and `videoSampleFrames`
+
+`browser-video-sampler.json` includes:
+
+- `status`: `ready`, `no_video`, `blocked`, or `error`
+- `input`: URL, platform hint, and sample count
+- `platform`, `title`, `canonicalUrl`, `httpStatus`, and browser-visible page text excerpt
+- `videoCount`, `videos[]`, and `primaryVideo`: visible `<video>` metadata with media URL query strings redacted
+- `frames[]`: sampled frame screenshot path, timestamp, and status
+- `visibleTranscriptHints[]`: visible transcript, caption, hook, voiceover, or CTA lines detected in page text
+- `contentEvidence.videoEvidence`: video count, ready frame count, and frame records for competitor deconstruction
+- `guardrails`: no private stream download, no hidden token extraction, no login/captcha/risk bypass, and no fabricated unseen audio/comments/metrics
 
 `deep-competitor-library.json` includes:
 
@@ -536,6 +549,8 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].followUpCapture.limit`: optional max follow-up tasks to process
 - `jobs[].followUpCapture.dryRun`: optional boolean that plans follow-up captures without fetching public URLs
 - `jobs[].followUpCapture.captureBrowserAssisted`: optional boolean that passes `--capture-browser-assisted-follow-ups` to attempt public browser-visible snapshots for queued browser-assisted platform tasks
+- `jobs[].followUpCapture.sampleVideoFrames`: optional boolean that passes `--sample-video-frames` for video-like follow-up tasks
+- `jobs[].followUpCapture.videoSampleCount`: optional frame count passed as `--video-sample-count`; defaults to `5`
 - `jobs[].skipCreatorLeaderboard`: optional boolean that passes `--skip-creator-leaderboard`
 - `jobs[].creatorFollowUp.enabled`: optional boolean that passes `--run-creator-follow-up`
 - `jobs[].creatorFollowUp.limit`: optional max creator follow-up tasks to process

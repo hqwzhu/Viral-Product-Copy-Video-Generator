@@ -22,6 +22,7 @@ SAFE_INSTALLS = {"playwright_chromium"}
 
 SCRIPT_REQUIREMENTS = {
     "browser_snapshot": "browser_snapshot.py",
+    "browser_video_sampler": "browser_video_sampler.py",
     "product_url_reader": "product_url_reader.py",
     "product_batch_runner": "product_batch_runner.py",
     "product_intake": "product_intake.py",
@@ -270,7 +271,7 @@ def platform_status(
     browser_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
     )
-    shared_browser_search = scripts_ready(scripts, ["platform_search_browser", "platform_search_capture", "viral_content_library"])
+    shared_browser_search = scripts_ready(scripts, ["platform_search_browser", "platform_search_capture", "viral_content_library", "browser_video_sampler"])
     return {
         "youtube": {
             "viralSearch": status_value(scripts_ready(scripts, ["competitor_collector"]) or (shared_browser_search and browser_ready)),
@@ -342,6 +343,7 @@ def requirement_status(
             "creator_leaderboard",
             "creator_follow_up_runner",
             "follow_up_capture_runner",
+            "browser_video_sampler",
         ],
     )
     publish_ready = scripts_ready(
@@ -407,12 +409,14 @@ def requirement_status(
                     "creator_leaderboard",
                     "creator_follow_up_runner",
                     "follow_up_capture_runner",
+                    "browser_video_sampler",
                 ],
             ),
             "missing": [] if search_ready else ["search/capture/ranking scripts"],
             "limits": [
                 "YouTube and GitHub can use official/public connectors.",
                 "Zhihu, Xiaohongshu, Douyin, and TikTok require browser-visible evidence or official access; no private endpoint or anti-bot bypass is allowed.",
+                "Video sampling captures browser-visible video metadata and frame screenshots only; it does not download private media streams or extract hidden media tokens.",
             ],
         },
         {
@@ -670,6 +674,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/multi_query_viral_discovery.py --workflow-manifest "
                 f"\"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --top-n 20 --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "capture_browser_visible_video_evidence",
+            "command": (
+                f"python scripts/browser_video_sampler.py --url \"https://example.com/video-page\" "
+                f"--platform youtube --sample-count 5 --out-dir \"{out_dir}\""
             ),
         },
         {

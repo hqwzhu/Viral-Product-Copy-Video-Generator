@@ -24,6 +24,7 @@ Use this reference when the user asks for full automation.
 - Run safe creator/account follow-up research through supported official/public connectors for YouTube and GitHub, while routing Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms to browser-visible evidence requests.
 - Generate follow-up capture tasks from the viral material library, routing public YouTube/GitHub URLs to safe capture candidates and routing Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms to browser-assisted or user-export evidence.
 - Execute safe public follow-up capture tasks into a deep competitor library, attempt public browser-visible snapshots for queued browser-assisted platform pages when explicitly enabled, and write manual/browser evidence requests when login, captcha, verification, draft, preview, or access-denied content appears.
+- Capture browser-visible video metadata and sampled frame screenshots from public/video pages with `scripts/browser_video_sampler.py` or follow-up capture `--sample-video-frames`, while redacting signed media query strings and avoiding private stream downloads.
 - Rewrite generated platform content, video scripts, storyboards, and publish-pack content with observed viral/deep competitor structures before video rendering, while keeping competitor titles, hooks, and metrics as evidence metadata rather than product claims.
 - Read user-provided competitor URLs, exported data, screenshots, or notes and turn them into deconstruction reports.
 - Import real post-publish metrics from CSV, JSON, text exports, Codex/browser structured snapshots, GitHub public repository data, and YouTube official statistics when `YOUTUBE_API_KEY` is provided.
@@ -71,6 +72,7 @@ Use this reference when the user asks for full automation.
 - Do not claim competitor metrics unless they were observed from public pages, official APIs, exports, or user-provided evidence.
 - Do not infer hidden follower counts, private analytics, creator income, orders, or conversion performance from public creator ranking.
 - Do not treat creator follow-up dry-runs, queued evidence requests, or search plans as captured creator performance data.
+- Do not treat video frame sampling as a transcript, audio analysis, private media download, or proof of metrics; it is only browser-visible visual evidence plus visible page text.
 - Do not treat a promotion cycle as fully published unless the publish queue or published-items report contains proven published URLs.
 - Do not copy competitor wording into final product copy; reuse only structure, sequence, and safe pattern labels.
 - Do not claim revenue, orders, leads, views, likes, comments, or click data without evidence.

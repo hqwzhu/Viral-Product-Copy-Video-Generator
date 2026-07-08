@@ -80,6 +80,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follow-up-capture-limit", type=int, default=20)
     parser.add_argument("--follow-up-dry-run", action="store_true", help="Plan follow-up captures without fetching public URLs.")
     parser.add_argument("--allow-localhost-follow-up", action="store_true", help="Allow localhost follow-up URLs for local fixtures/tests only.")
+    parser.add_argument("--sample-video-frames", action="store_true", help="Sample browser-visible video metadata and frame screenshots during follow-up captures.")
+    parser.add_argument("--video-sample-count", type=int, default=5)
     parser.add_argument(
         "--capture-browser-assisted-follow-ups",
         action="store_true",
@@ -483,6 +485,9 @@ def run_follow_up_captures(
         command.append("--allow-localhost")
     if args.capture_browser_assisted_follow_ups:
         command.append("--capture-browser-assisted")
+    if args.sample_video_frames:
+        command.append("--sample-video-frames")
+        command.extend(["--video-sample-count", str(args.video_sample_count)])
     if args.install_browser_if_missing:
         command.append("--install-browser-if-missing")
     step = run_command("follow_up_capture_runner", command, check=False)
