@@ -141,6 +141,19 @@ python scripts/final_capability_runner.py \
 
 This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
+When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
+
+```bash
+python scripts/final_capability_runner.py \
+  --url "https://example.com/product" \
+  --platforms xiaohongshu \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-browser-form-fill \
+  --out-dir "./promotion-output"
+```
+
+This invokes `scripts/browser_publish_form_fill.py` for prepared payloads, fills only visible title/body/tags/cover fields, writes screenshots and `browserFormFill[]` results, and stops for login, captcha, account verification, or the final publish action.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

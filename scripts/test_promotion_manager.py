@@ -769,6 +769,107 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
         self.assertTrue((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.md").exists())
 
+    def test_final_capability_runner_can_fill_browser_publish_payloads(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-form-fill-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit</title><meta name="description" content="Prompt templates for launch copy."></head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into launch content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "publish.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Creator Publish Form</title></head>
+<body>
+  <form id="publish-form">
+    <input name="title" placeholder="Title">
+    <textarea name="body" placeholder="Body"></textarea>
+    <input name="tags" placeholder="Tags">
+    <input name="cover" placeholder="Cover">
+    <button id="publish" type="submit">Publish</button>
+  </form>
+  <script>
+    document.querySelector('#publish-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.body.dataset.submitted = 'yes';
+    });
+  </script>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        (site_dir / "note.html").write_text(
+            "<!doctype html><html><body><p>views: 100 likes: 10 comments: 2</p></body></html>",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        base_url = f"http://127.0.0.1:{server.server_address[1]}"
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_RUNNER),
+                "--url",
+                product_page.as_uri(),
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--multi-query-dry-run",
+                "--multi-query-query-count",
+                "1",
+                "--published-url",
+                f"xiaohongshu={base_url}/note.html",
+                "--post-publish-metrics-allow-localhost",
+                "--platform-publish-url",
+                f"xiaohongshu={base_url}/publish.html",
+                "--run-browser-form-fill",
+                "--browser-form-fill-allow-localhost",
+                "--skip-platform-access-audit",
+                "--skip-final-capability-audit",
+                "--skip-self-evolution-audit",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["browserFormFillRuns"], 1)
+        self.assertEqual(report["summary"]["browserFormFillReady"], 1)
+        self.assertEqual(report["summary"]["browserFormFillErrors"], 0)
+        self.assertGreaterEqual(report["summary"]["browserFormFillFilledFields"], 2)
+        form_fill = report["browserFormFill"][0]
+        self.assertEqual(form_fill["status"], "ready")
+        self.assertFalse(form_fill["submitted"])
+        self.assertTrue(form_fill["finalPublishUserActionRequired"])
+        self.assertTrue(Path(form_fill["report"]).exists())
+        self.assertTrue(Path(form_fill["screenshot"]).exists())
+
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -17,6 +17,7 @@ SCRIPTS = ROOT / "scripts"
 PRODUCT_BATCH_RUNNER = SCRIPTS / "product_batch_runner.py"
 PUBLISH_READINESS = SCRIPTS / "publish_readiness_runner.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
+BROWSER_PUBLISH_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 PLATFORM_ACCESS_AUDIT = SCRIPTS / "platform_access_audit.py"
 FINAL_CAPABILITY_AUDIT = SCRIPTS / "final_capability_audit.py"
 SELF_EVOLUTION_AUDIT = SCRIPTS / "self_evolution_audit.py"
@@ -33,9 +34,10 @@ def main() -> None:
     batch = run_product_batch(args, out_dir, steps)
     publish_readiness = run_publish_readiness(args, batch, steps)
     browser_publish = run_browser_publish_assistant(args, batch, steps)
+    browser_form_fill = run_browser_form_fill(args, browser_publish, steps)
     audits = run_audits(args, out_dir, steps)
     cycle_evidence = collect_cycle_evidence(batch)
-    report = build_report(args, out_dir, batch, publish_readiness, browser_publish, cycle_evidence, audits, steps)
+    report = build_report(args, out_dir, batch, publish_readiness, browser_publish, browser_form_fill, cycle_evidence, audits, steps)
     write_report(out_dir, report)
     print(f"Final capability run written to: {(report_dir(out_dir) / 'final-capability-run.json').resolve()}")
 
@@ -91,6 +93,13 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--skip-publish-readiness", action="store_true")
     publish.add_argument("--skip-browser-publish-assistant", action="store_true")
     publish.add_argument("--browser-publish-open-browser", action="store_true")
+    publish.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
+    publish.add_argument("--run-browser-form-fill", action="store_true", help="Fill visible publisher fields from prepared payloads and stop before final publish.")
+    publish.add_argument("--browser-form-fill-headed", action="store_true")
+    publish.add_argument("--browser-form-fill-allow-localhost", action="store_true")
+    publish.add_argument("--browser-form-fill-install-browser-if-missing", action="store_true")
+    publish.add_argument("--browser-form-fill-timeout-ms", type=int, default=30000)
+    publish.add_argument("--browser-form-fill-wait-until", default="domcontentloaded", choices=["load", "domcontentloaded", "networkidle"])
 
     metrics = parser.add_argument_group("Real evidence recovery")
     metrics.add_argument("--skip-metrics-recovery", action="store_true")
@@ -256,6 +265,7 @@ def run_browser_publish_assistant(args: argparse.Namespace, batch: dict[str, Any
         ]
         if args.browser_publish_open_browser:
             command.append("--open-browser")
+        append_many(command, "--platform-publish-url", args.platform_publish_url)
         step = run_command(f"browser_publish_assistant_{run.get('id', 'product')}", command, check=False)
         steps.append(step)
         report_path = run_dir / "reports/promotion-manager/browser-publish/browser-publish-assistant.json"
@@ -269,6 +279,76 @@ def run_browser_publish_assistant(args: argparse.Namespace, batch: dict[str, Any
                 "exitCode": step["exitCode"],
             }
         )
+    return results
+
+
+def run_browser_form_fill(args: argparse.Namespace, browser_publish: list[dict[str, Any]], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not args.run_browser_form_fill:
+        return []
+    results = []
+    for publish in browser_publish:
+        publish_report_path = existing_path(publish.get("report", ""))
+        if not publish_report_path:
+            continue
+        publish_report = read_json(publish_report_path)
+        run_dir = report_out_dir(publish_report_path)
+        for record in publish_report.get("records", []):
+            payload_json = str(((record.get("payloadFiles") or {}).get("json") or "")).strip()
+            payload_path = existing_path(payload_json)
+            platform = str(record.get("platform", ""))
+            if not payload_path:
+                results.append(
+                    {
+                        "productRunId": publish.get("productRunId", ""),
+                        "platform": platform,
+                        "status": "blocked",
+                        "reason": "Prepared browser publish payload JSON was missing.",
+                        "payloadJson": payload_json,
+                        "report": "",
+                        "exitCode": None,
+                    }
+                )
+                continue
+            fill_out_dir = run_dir / "browser-form-fill-runs" / safe_path_part(platform or "platform")
+            command = [
+                sys.executable,
+                str(BROWSER_PUBLISH_FORM_FILL),
+                "--payload-json",
+                str(payload_path),
+                "--out-dir",
+                str(fill_out_dir),
+                "--timeout-ms",
+                str(args.browser_form_fill_timeout_ms),
+                "--wait-until",
+                args.browser_form_fill_wait_until,
+            ]
+            if args.browser_form_fill_headed:
+                command.append("--headed")
+            if args.browser_form_fill_allow_localhost:
+                command.append("--allow-localhost")
+            if args.browser_form_fill_install_browser_if_missing:
+                command.append("--install-browser-if-missing")
+            step = run_command(f"browser_form_fill_{publish.get('productRunId', 'product')}_{platform or 'platform'}", command, check=False)
+            steps.append(step)
+            report_path = fill_out_dir / "reports/promotion-manager/browser-publish/browser-form-fill.json"
+            report = read_json(report_path)
+            results.append(
+                {
+                    "productRunId": publish.get("productRunId", ""),
+                    "platform": platform,
+                    "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+                    "report": str(report_path) if report_path.exists() else "",
+                    "screenshot": str(((report.get("artifacts") or {}).get("screenshot") or "")),
+                    "payloadJson": str(payload_path),
+                    "filledFields": len(report.get("filledFields", [])) if isinstance(report.get("filledFields"), list) else 0,
+                    "missingFields": report.get("missingFields", []),
+                    "submitted": bool(report.get("submitted", False)),
+                    "finalPublishUserActionRequired": bool(report.get("finalPublishUserActionRequired", True)),
+                    "exitCode": step["exitCode"],
+                    "stdoutTail": step["stdoutTail"],
+                    "stderrTail": step["stderrTail"],
+                }
+            )
     return results
 
 
@@ -302,6 +382,7 @@ def build_report(
     batch: dict[str, Any],
     publish_readiness: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
+    browser_form_fill: list[dict[str, Any]],
     cycle_evidence: list[dict[str, Any]],
     audits: dict[str, Any],
     steps: list[dict[str, Any]],
@@ -311,13 +392,18 @@ def build_report(
         "promotionRuns": len(batch.get("promotionRuns", [])),
         "publishReadinessRuns": len(publish_readiness),
         "browserPublishAssistantRuns": len(browser_publish),
+        "browserFormFillRuns": len(browser_form_fill),
+        "browserFormFillReady": sum(1 for item in browser_form_fill if item.get("status") == "ready"),
+        "browserFormFillBlocked": sum(1 for item in browser_form_fill if item.get("status") == "blocked"),
+        "browserFormFillErrors": sum(1 for item in browser_form_fill if item.get("status") == "error"),
+        "browserFormFillFilledFields": sum(int_value(item.get("filledFields")) for item in browser_form_fill),
         "nextRoundOptimizationRuns": int((batch.get("summary") or {}).get("nextRoundOptimizationRuns") or 0),
         "multiQueryDiscoveryRuns": int((batch.get("summary") or {}).get("multiQueryDiscoveryRuns") or 0),
     }
     summary.update(cycle_evidence_summary(cycle_evidence))
     return {
         "generatedAt": TODAY,
-        "status": final_status(batch, publish_readiness, browser_publish, audits),
+        "status": final_status(batch, publish_readiness, browser_publish, browser_form_fill, audits),
         "outDir": str(out_dir),
         "input": {
             "urls": args.url,
@@ -330,6 +416,7 @@ def build_report(
         "cycleEvidence": cycle_evidence,
         "publishReadiness": publish_readiness,
         "browserPublishAssistant": browser_publish,
+        "browserFormFill": browser_form_fill,
         "audits": audits,
         "externalGates": external_gates(),
         "recommendedNextCommands": recommended_next_commands(out_dir),
@@ -477,14 +564,16 @@ def final_status(
     batch: dict[str, Any],
     publish_readiness: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
+    browser_form_fill: list[dict[str, Any]],
     audits: dict[str, Any],
 ) -> str:
     if batch.get("status") in {"blocked", "error", ""}:
         return "blocked"
     failed_readiness = any(item.get("status") == "error" for item in publish_readiness)
     failed_browser = any(item.get("status") == "error" for item in browser_publish)
+    failed_form_fill = any(item.get("status") == "error" for item in browser_form_fill)
     failed_audit = any(item.get("exitCode") not in {0, None} for item in audits.values())
-    if failed_readiness or failed_browser or failed_audit:
+    if failed_readiness or failed_browser or failed_form_fill or failed_audit:
         return "partial_ready_with_errors"
     if batch.get("status") == "ready" and publish_readiness:
         return "partial_ready"
@@ -512,6 +601,10 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "prepare_browser_assisted_publish",
             "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+        },
+        {
+            "purpose": "fill_browser_publish_fields_without_submit",
+            "command": f"python scripts/browser_publish_form_fill.py --payload-json \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/browser-publish/payloads/<platform>.payload.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
         },
         {
             "purpose": "sync_installed_skill_when_approved",
@@ -562,6 +655,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- Publish readiness ({item['productRunId']}): `{item['status']}` {item['report']}")
     for item in report["browserPublishAssistant"]:
         lines.append(f"- Browser publish ({item['productRunId']}): `{item['status']}` {item['report']}")
+    for item in report["browserFormFill"]:
+        lines.append(
+            f"- Browser form fill ({item.get('productRunId', '')}/{item.get('platform', '')}): "
+            f"`{item.get('status', '')}` fields={item.get('filledFields', 0)} {item.get('report', '')}"
+        )
     for name, item in report["audits"].items():
         lines.append(f"- {name}: `{item['status']}` {item['report']}")
     lines.extend(["", "## Next Commands"])
@@ -625,6 +723,18 @@ def existing_path(value: Any) -> Path | None:
 def existing_dir(value: Any) -> Path | None:
     path = existing_path(value)
     return path if path and path.is_dir() else None
+
+
+def report_out_dir(report_path: Path) -> Path:
+    parts = report_path.parts
+    if len(parts) >= 4 and parts[-4:-1] == ("reports", "promotion-manager", "browser-publish"):
+        return report_path.parents[3]
+    return report_path.parent
+
+
+def safe_path_part(value: str) -> str:
+    text = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in value.lower()).strip("-")
+    return text or "item"
 
 
 def append_if_present(command: list[str], flag: str, value: Any) -> None:

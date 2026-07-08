@@ -137,6 +137,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
+- `browserFormFill[]`: optional per-platform result when `--run-browser-form-fill` is supplied; includes payload path, report path, screenshot, filled field count, missing fields, submitted flag, and final-user-action requirement
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
 - `externalGates[]`: explicit approval, credential, app-review, manual publish, metrics export, and Skill-sync requirements that cannot be bypassed safely
 - `recommendedNextCommands[]`: review and next-action commands
