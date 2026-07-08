@@ -18,6 +18,22 @@ import metric_parsing
 
 TODAY = date.today().isoformat()
 METRIC_FIELDS = metric_parsing.METRIC_FIELDS
+METRIC_EXPORT_ALIASES = {
+    "views": ["view", "viewCount", "view_count", "playCount", "play_count", "readCount", "read_count", "impressions", "impressionCount", "impression_count"],
+    "likes": ["like", "likeCount", "like_count", "diggCount", "digg_count"],
+    "favorites": ["favoriteCount", "favorite_count", "saveCount", "save_count", "collectCount", "collect_count", "bookmarkCount", "bookmark_count"],
+    "comments": ["commentCount", "comment_count", "replyCount", "reply_count"],
+    "shares": ["shareCount", "share_count", "repostCount", "repost_count"],
+    "clicks": ["clickCount", "click_count", "linkClicks", "link_clicks", "websiteClicks", "website_clicks"],
+    "messages": ["messageCount", "message_count", "dmCount", "dm_count", "consultCount", "consult_count"],
+    "leads": ["leadCount", "lead_count", "signupCount", "signup_count", "registrations", "registrationCount", "registration_count"],
+    "orders": ["orderCount", "order_count", "purchaseCount", "purchase_count", "paidOrders", "paid_orders"],
+    "revenue": ["amount", "paidAmount", "paid_amount", "orderTotal", "order_total", "totalRevenue", "total_revenue", "salesAmount", "sales_amount", "gmv"],
+    "stars": ["starCount", "star_count", "stargazers", "stargazersCount", "stargazers_count"],
+    "forks": ["forkCount", "fork_count", "forksCount", "forks_count"],
+    "watchers": ["watcherCount", "watcher_count", "watchersCount", "watchers_count", "subscriberCount", "subscriber_count", "followers", "followerCount", "follower_count"],
+    "openIssues": ["openIssueCount", "open_issue_count", "openIssuesCount", "open_issues_count"],
+}
 
 
 def main() -> None:
@@ -176,9 +192,7 @@ def structured_text(item: dict[str, Any]) -> str:
 def metrics_from_mapping(item: dict[str, Any]) -> dict[str, dict[str, Any]]:
     metrics = {}
     for field in METRIC_FIELDS:
-        if field not in item and snake_case(field) not in item:
-            continue
-        value = item.get(field, item.get(snake_case(field)))
+        value = metric_field_value(item, field)
         if isinstance(value, dict):
             value = first_non_empty(value.get("raw"), value.get("value"), value.get("normalized"))
         if value not in (None, ""):
@@ -191,7 +205,7 @@ def normalize_mapping(item: dict[str, Any], source: str) -> dict[str, Any]:
     platform = choose_platform(get_alias(item, "platform"), url or source)
     metrics = {}
     for field in METRIC_FIELDS:
-        value = get_alias(item, field, snake_case(field))
+        value = metric_field_value(item, field)
         if value:
             metrics[field] = metric_value(value)
     evidence = split_evidence(get_alias(item, "evidence", "evidenceUrl", "screenshot", "export"))
@@ -673,6 +687,23 @@ def split_evidence(value: str) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in re.split(r"[;,]\s*", value) if item.strip()]
+
+
+def metric_field_value(item: dict[str, Any], field: str) -> Any:
+    aliases = [field, snake_case(field), *METRIC_EXPORT_ALIASES.get(field, [])]
+    for key in aliases:
+        if key in item and item[key] not in (None, ""):
+            return item[key]
+    normalized = {normalize_header_key(key): value for key, value in item.items()}
+    for key in aliases:
+        value = normalized.get(normalize_header_key(key))
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def normalize_header_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
 
 
 def get_alias(item: dict[str, Any], *keys: str) -> str:

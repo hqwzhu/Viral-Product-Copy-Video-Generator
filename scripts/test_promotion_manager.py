@@ -3648,6 +3648,43 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["retrospective"]["status"], "ready")
         self.assertTrue((out_dir / "reports/promotion-manager/metrics/imported-metrics.md").exists())
 
+    def test_metrics_intake_imports_common_platform_export_aliases(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-alias-export-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        csv_path = out_dir / "metrics-export.csv"
+        csv_path.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,view_count,like_count,comment_count,share_count,click_count,lead_count,order_count,paid_amount,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,4200,360,41,22,108,13,2,99.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--csv-file",
+                str(csv_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics/imported-metrics.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["metrics"]["views"]["normalized"], 4200.0)
+        self.assertEqual(record["metrics"]["likes"]["normalized"], 360.0)
+        self.assertEqual(record["metrics"]["comments"]["normalized"], 41.0)
+        self.assertEqual(record["metrics"]["shares"]["normalized"], 22.0)
+        self.assertEqual(record["metrics"]["clicks"]["normalized"], 108.0)
+        self.assertEqual(record["metrics"]["leads"]["normalized"], 13.0)
+        self.assertEqual(record["metrics"]["orders"]["normalized"], 2.0)
+        self.assertEqual(record["metrics"]["revenue"]["normalized"], 99.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 99.0)
+
     def test_metrics_intake_imports_structured_browser_snapshot_metrics(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-structured-intake-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3688,6 +3725,50 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(record["metrics"]["orders"]["normalized"], 2.0)
         self.assertEqual(record["metrics"]["revenue"]["normalized"], 88.0)
         self.assertIn("xhs-analytics.png", record["evidence"])
+
+    def test_metrics_intake_imports_structured_nested_metric_aliases(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-structured-alias-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "published-metrics-snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://www.youtube.com/watch?v=abc123",
+                    "title": "Launch Video analytics",
+                    "analytics": {
+                        "viewCount": "12K",
+                        "likeCount": "840",
+                        "commentCount": "30",
+                        "shareCount": "12",
+                        "website_clicks": "144",
+                        "paid_amount": "$420.50",
+                    },
+                    "screenshotPath": "youtube-analytics.png",
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--structured-json",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics/imported-metrics.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["metrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(record["metrics"]["likes"]["normalized"], 840.0)
+        self.assertEqual(record["metrics"]["comments"]["normalized"], 30.0)
+        self.assertEqual(record["metrics"]["shares"]["normalized"], 12.0)
+        self.assertEqual(record["metrics"]["clicks"]["normalized"], 144.0)
+        self.assertEqual(record["metrics"]["revenue"]["normalized"], 420.5)
+        self.assertIn("youtube-analytics.png", record["evidence"])
 
     def test_metrics_recovery_merges_published_items_and_business_exports(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-test-"))
@@ -3748,6 +3829,61 @@ Prompt templates for product copy, SEO content, and video scripts.
         serialized = json.dumps(report)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
         self.assertNotIn("GITHUB_TOKEN", serialized)
+
+    def test_metrics_recovery_imports_platform_export_aliases(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-alias-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_items = out_dir / "published-items.json"
+        published_items.write_text(
+            json.dumps(
+                [
+                    {
+                        "platform": "xiaohongshu",
+                        "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        "title": "Launch Note",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        metrics_csv = out_dir / "metrics-export.csv"
+        metrics_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,view_count,like_count,comment_count,share_count,click_count,lead_count,order_count,paid_amount,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,4200,360,41,22,108,13,2,99.00,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--published-items-json",
+                str(published_items),
+                "--metrics-csv",
+                str(metrics_csv),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "ready")
+        self.assertEqual(report["coverage"]["publishedItemsDiscovered"], 1)
+        self.assertEqual(report["coverage"]["recordsWithMetrics"], 1)
+        self.assertEqual(report["coverage"]["manualOrPendingRequirements"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["views"], 4200.0)
+        self.assertEqual(report["aggregates"]["totals"]["likes"], 360.0)
+        self.assertEqual(report["aggregates"]["totals"]["comments"], 41.0)
+        self.assertEqual(report["aggregates"]["totals"]["shares"], 22.0)
+        self.assertEqual(report["aggregates"]["totals"]["clicks"], 108.0)
+        self.assertEqual(report["aggregates"]["totals"]["leads"], 13.0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 99.0)
+        self.assertEqual(report["metricSources"][0]["type"], "metrics_csv")
 
     def test_metrics_recovery_imports_structured_metrics_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-structured-test-"))
