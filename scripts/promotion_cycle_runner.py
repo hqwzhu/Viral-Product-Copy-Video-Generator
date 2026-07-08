@@ -522,10 +522,12 @@ def cycle_status(
         return "comment_evidence_capture_failed"
     if business_attribution.get("status") not in {"ready", "skipped"}:
         return "business_attribution_failed"
-    if metrics.get("status") != "ready":
+    if metrics.get("status") not in {"ready", "skipped"}:
         return "metrics_recovery_failed"
     if next_round_optimization.get("status") not in {"ready", "partial_ready", "waiting_real_data", "skipped"}:
         return "next_round_optimization_failed"
+    if metrics.get("status") == "skipped":
+        return "ready_waiting_real_data"
     recovery_status = (metrics.get("summary") or {}).get("recoveryStatus", "")
     if recovery_status == "ready":
         return "ready_with_real_metrics"

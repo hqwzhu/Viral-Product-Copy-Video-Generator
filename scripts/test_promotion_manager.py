@@ -22,6 +22,7 @@ PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
 BROWSER_VIDEO_SAMPLER = ROOT / "scripts" / "browser_video_sampler.py"
 PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
+PRODUCT_URL_DISCOVERY = ROOT / "scripts" / "product_url_discovery.py"
 PRODUCT_BATCH_RUNNER = ROOT / "scripts" / "product_batch_runner.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
@@ -487,6 +488,55 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("--product-url", record["nextWorkflowCommand"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/intake/product-url-reader.md").exists())
 
+    def test_product_url_discovery_selects_product_links_from_saved_html(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-discovery-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        index = out_dir / "index.html"
+        index.write_text(
+            """<!doctype html>
+<html>
+<head><title>Example AI Tools</title></head>
+<body>
+  <a href="/products/ai-prompt-kit">AI Prompt Kit product</a>
+  <a href="/tools/video-script-generator">Video Script Generator tool</a>
+  <a href="/blog/growth-notes">Growth notes blog</a>
+  <a href="/login">Login</a>
+  <a href="/privacy">Privacy</a>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_URL_DISCOVERY),
+                "--html-file",
+                str(index),
+                "--base-url",
+                "https://example.com",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/intake/product-url-discovery.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["selectedUrls"], 2)
+        self.assertEqual(
+            set(report["selectedUrls"]),
+            {"https://example.com/products/ai-prompt-kit", "https://example.com/tools/video-script-generator"},
+        )
+        urls_file = out_dir / "output/product-url-discovery/product-urls.txt"
+        self.assertTrue(urls_file.exists())
+        urls_text = urls_file.read_text(encoding="utf-8")
+        self.assertIn("https://example.com/products/ai-prompt-kit", urls_text)
+        self.assertNotIn("/blog/growth-notes", urls_text)
+        self.assertNotIn("/login", urls_text)
+
     def test_product_batch_runner_reads_urls_then_runs_promotion_cycles(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-runner-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -573,6 +623,99 @@ Prompt templates for product copy, SEO content, and video scripts.
             else:
                 self.assertEqual(run["sourceMode"], "static_url_fallback")
                 self.assertIn("--product-url", command_text)
+
+    def test_product_batch_runner_discovers_urls_then_reads_and_runs_cycles(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-discovery-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        (site_dir / "products").mkdir(parents=True)
+        (site_dir / "tools").mkdir(parents=True)
+        (site_dir / "blog").mkdir(parents=True)
+        (site_dir / "index.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Example AI Tools</title></head>
+<body>
+  <a href="/products/ai-prompt-kit.html">AI Prompt Kit product</a>
+  <a href="/tools/video-script-generator.html">Video Script Generator tool</a>
+  <a href="/blog/growth-notes.html">Growth notes blog</a>
+  <a href="/login">Login</a>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        (site_dir / "products" / "ai-prompt-kit.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into promotion content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+        (site_dir / "tools" / "video-script-generator.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>Video Script Generator</title>
+  <meta name="description" content="Generate short-video scripts, hooks, and platform captions.">
+  <script type="application/ld+json">{"@type":"Product","name":"Video Script Generator","offers":{"price":"29"}}</script>
+</head>
+<body><h1>Video Script Generator</h1><p>Create scripts for YouTube, Xiaohongshu, and Douyin.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+        (site_dir / "blog" / "growth-notes.html").write_text("<html><body>blog</body></html>", encoding="utf-8")
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        start_url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_BATCH_RUNNER),
+                "--discover-from-url",
+                start_url,
+                "--discovery-allow-localhost",
+                "--skip-browser",
+                "--platforms",
+                "github,xiaohongshu",
+                "--skip-video",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["discoveredUrls"], 2)
+        self.assertEqual(report["summary"]["requestedUrls"], 2)
+        self.assertEqual(report["summary"]["readyProductProfiles"], 2)
+        self.assertEqual(report["summary"]["readyPromotionRuns"], 2)
+        self.assertTrue(Path(report["discoveryReport"]).exists())
+        self.assertTrue(Path(report["readerReport"]).exists())
+        self.assertEqual(len(report["discoveredUrls"]), 2)
+        product_names = {run["product"]["productName"] for run in report["promotionRuns"]}
+        self.assertEqual(product_names, {"AI Prompt Kit", "Video Script Generator"})
 
     def test_product_batch_runner_runs_multi_query_discovery_after_each_cycle(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-multi-query-test-"))
@@ -742,6 +885,91 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--run-next-round-optimization", " ".join(run["command"]))
         self.assertIn("--post-publish-metrics-allow-localhost", " ".join(run["command"]))
         self.assertIn("--comment-evidence-allow-localhost", " ".join(run["command"]))
+
+    def test_final_capability_runner_discovers_products_from_site_url(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-discovery-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        (site_dir / "products").mkdir(parents=True)
+        (site_dir / "index.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Tool Station</title></head>
+<body>
+  <a href="/products/ai-prompt-kit.html">AI Prompt Kit product</a>
+  <a href="/blog/post.html">Blog post</a>
+  <a href="/login">Login</a>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        (site_dir / "products" / "ai-prompt-kit.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into platform-native promotion content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        start_url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_RUNNER),
+                "--discover-from-url",
+                start_url,
+                "--discovery-allow-localhost",
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--skip-publish-queue",
+                "--skip-publish-readiness",
+                "--skip-browser-publish-assistant",
+                "--skip-metrics-recovery",
+                "--skip-multi-query-viral-discovery",
+                "--skip-post-publish-metrics-capture",
+                "--skip-comment-evidence-capture",
+                "--skip-business-attribution",
+                "--skip-next-round-optimization",
+                "--skip-platform-access-audit",
+                "--skip-final-capability-audit",
+                "--skip-self-evolution-audit",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "output/reports/promotion-manager/final-run/final-capability-run.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(report["status"], "partial_ready")
+        self.assertEqual(report["input"]["discoverFromUrl"], start_url)
+        self.assertEqual(report["productBatch"]["summary"]["discoveredUrls"], 1)
+        self.assertTrue(Path(report["productBatch"]["discoveryReport"]).exists())
+        self.assertEqual(report["cycleEvidence"][0]["product"]["productName"], "AI Prompt Kit")
 
     def test_final_capability_runner_orchestrates_safe_full_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-capability-runner-test-"))

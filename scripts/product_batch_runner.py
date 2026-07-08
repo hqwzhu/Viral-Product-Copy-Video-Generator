@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+PRODUCT_URL_DISCOVERY = SCRIPTS / "product_url_discovery.py"
 PRODUCT_URL_READER = SCRIPTS / "product_url_reader.py"
 PROMOTION_CYCLE_RUNNER = SCRIPTS / "promotion_cycle_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
@@ -27,10 +28,11 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     steps: list[dict[str, Any]] = []
 
-    reader = run_product_url_reader(args, out_dir, steps)
+    discovery = run_product_url_discovery(args, out_dir, steps)
+    reader = run_product_url_reader(args, out_dir, steps, discovery)
     runs = run_promotion_cycles(args, out_dir, reader, steps)
     attach_multi_query_viral_discovery(args, runs, steps)
-    report = build_report(args, out_dir, reader, runs, steps)
+    report = build_report(args, out_dir, discovery, reader, runs, steps)
     write_report(out_dir, report)
     print(f"Product batch runner report written to: {(batch_dir(out_dir) / 'product-batch-runner.json').resolve()}")
 
@@ -40,6 +42,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", action="append", default=[], help="Product URL. Can be repeated.")
     parser.add_argument("--urls-file", default="", help="Text file with one product URL per line.")
     parser.add_argument("--out-dir", default="./promotion-output")
+
+    discovery = parser.add_argument_group("Product URL discovery")
+    discovery.add_argument("--discover-from-url", default="", help="Public website or landing page URL to discover product URLs from before reading products.")
+    discovery.add_argument("--discovery-html-file", default="", help="Saved public website HTML to discover product URLs from.")
+    discovery.add_argument("--discovery-base-url", default="", help="Base URL for resolving links in --discovery-html-file.")
+    discovery.add_argument("--discovery-top-n", type=int, default=50)
+    discovery.add_argument("--discovery-min-score", type=float, default=3.0)
+    discovery.add_argument("--discovery-max-pages", type=int, default=20)
+    discovery.add_argument("--discovery-max-depth", type=int, default=1)
+    discovery.add_argument("--discovery-timeout", type=float, default=20.0)
+    discovery.add_argument("--discovery-include-external", action="store_true")
+    discovery.add_argument("--discovery-allow-localhost", action="store_true")
 
     reader = parser.add_argument_group("Codex/browser URL reading")
     reader.add_argument("--skip-browser", action="store_true")
@@ -119,10 +133,51 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_product_url_reader(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
+def run_product_url_discovery(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    if not args.discover_from_url and not args.discovery_html_file:
+        return {"status": "skipped", "reason": "No product URL discovery source was supplied."}
+    command = [sys.executable, str(PRODUCT_URL_DISCOVERY), "--out-dir", str(out_dir)]
+    append_if_present(command, "--site-url", args.discover_from_url)
+    append_if_present(command, "--html-file", args.discovery_html_file)
+    append_if_present(command, "--base-url", args.discovery_base_url)
+    command.extend(
+        [
+            "--top-n",
+            str(args.discovery_top_n),
+            "--min-score",
+            str(args.discovery_min_score),
+            "--max-pages",
+            str(args.discovery_max_pages),
+            "--max-depth",
+            str(args.discovery_max_depth),
+            "--timeout",
+            str(args.discovery_timeout),
+        ]
+    )
+    if args.discovery_include_external:
+        command.append("--include-external")
+    if args.discovery_allow_localhost:
+        command.append("--allow-localhost")
+    step = run_command("product_url_discovery", command, check=False)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/intake/product-url-discovery.json"
+    report = read_json(report_path)
+    report["_path"] = str(report_path) if report_path.exists() else ""
+    report["_step"] = step
+    return report if report else {"status": "error", "reason": "Product URL discovery did not create a report.", "_step": step}
+
+
+def run_product_url_reader(
+    args: argparse.Namespace,
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    discovery: dict[str, Any],
+) -> dict[str, Any]:
     command = [sys.executable, str(PRODUCT_URL_READER), "--out-dir", str(out_dir)]
     for url in args.url:
         command.extend(["--url", url])
+    for url in discovery.get("selectedUrls", []) if isinstance(discovery.get("selectedUrls"), list) else []:
+        command.extend(["--url", str(url)])
     append_if_present(command, "--urls-file", args.urls_file)
     if args.skip_browser:
         command.append("--skip-browser")
@@ -420,12 +475,15 @@ def build_multi_query_command(args: argparse.Namespace, manifest_path: Path, run
 def build_report(
     args: argparse.Namespace,
     out_dir: Path,
+    discovery: dict[str, Any],
     reader: dict[str, Any],
     runs: list[dict[str, Any]],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    discovered_urls = discovery.get("selectedUrls", []) if isinstance(discovery.get("selectedUrls"), list) else []
     summary = {
         "requestedUrls": (reader.get("summary") or {}).get("requestedUrls", len(reader.get("records", []))),
+        "discoveredUrls": len(discovered_urls),
         "readyProductProfiles": sum(1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") == "ready"),
         "blockedProductProfiles": sum(1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") != "ready"),
         "readyPromotionRuns": sum(1 for item in runs if item.get("status") == "ready"),
@@ -448,17 +506,23 @@ def build_report(
         "status": batch_status(runs),
         "outDir": str(out_dir),
         "readerReport": reader.get("_path", ""),
+        "discoveryReport": discovery.get("_path", ""),
         "input": {
             "urls": args.url,
             "urlsFile": args.urls_file,
+            "discoverFromUrl": args.discover_from_url,
+            "discoveryHtmlFile": args.discovery_html_file,
             "platforms": args.platforms,
             "codexReadFirst": True,
         },
         "summary": summary,
+        "discoverySummary": discovery.get("summary", {}) if isinstance(discovery.get("summary"), dict) else {},
+        "discoveredUrls": discovered_urls,
         "readerSummary": reader.get("summary", {}),
         "promotionRuns": runs,
         "guardrails": [
             "Each product URL is read by product_url_reader.py before a promotion cycle starts.",
+            "Product URL discovery uses public HTML links only and produces candidates that still require product_url_reader.py evidence.",
             "Browser structured snapshots are passed to promotion_cycle_runner.py with --structured-json when available.",
             "Static URL intake is used only when browser capture is skipped or unavailable and fallback is allowed.",
             "Multi-query viral discovery uses public/browser-visible platform evidence, official APIs, or dry-run query plans.",
@@ -500,7 +564,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Status: `{report['status']}`",
         f"- Requested URLs: {report['summary']['requestedUrls']}",
         f"- Ready product profiles: {report['summary']['readyProductProfiles']}",
+        f"- Discovered URLs: {report['summary'].get('discoveredUrls', 0)}",
         f"- Ready promotion runs: {report['summary']['readyPromotionRuns']}",
+        f"- Discovery report: {report.get('discoveryReport', '')}",
         f"- Reader report: {report['readerReport']}",
         "",
         "## Promotion Runs",

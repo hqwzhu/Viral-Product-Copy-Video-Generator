@@ -15,9 +15,10 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` captures browser-visible product page evidence
+- `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` when `scripts/product_url_reader.py` reads one or more product URLs into structured page snapshots and product profiles
 - `product-url-reader/<id>/structured-product-page.json` and `product-url-reader/<id>/intake/product-profile.{json,md}` per product URL read by `scripts/product_url_reader.py`
-- `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization after each cycle
+- `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization after each cycle
 - `product-batch-runs/<id>/reports/promotion-manager/cycle/promotion-cycle.{json,md}` per product cycle run created by `scripts/product_batch_runner.py`
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
@@ -93,13 +94,30 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 `product-url-reader/<id>/structured-product-page.json` is the browser-visible page evidence passed into `product_intake.py`. `product-url-reader/<id>/intake/product-profile.json` is the normalized product profile used by later promotion workflow stages.
 
+## Product URL Discovery
+
+`product-url-discovery.json` includes:
+
+- `status`: `ready` or `no_product_urls_found`
+- `input`: source website URL or saved HTML file, base URL, scoring thresholds, crawl limits, and external-link setting
+- `summary`: pages read, candidate URL count, and selected URL count
+- `selectedUrls[]`: likely product URLs selected for follow-up reading
+- `candidates[]`: scored URL candidates with anchor text, source page, source depth, reasons, and `selected`
+- `fetchRecords[]`: public page fetch ledger when `--site-url` is used
+- `artifacts.urlsFile`: path to `product-url-discovery/product-urls.txt`
+- `guardrails`: public HTML only, no login/captcha/token bypass, and candidate-only evidence status
+
+Discovered URLs are not treated as product facts. They must still pass through `product_url_reader.py` and `product_intake.py` before later promotion stages use them.
+
 ## Product Batch Runner
 
 `product-batch-runner.json` includes:
 
 - `status`: `ready`, `partial_ready`, or `blocked`
+- `discoveryReport`: the optional `product-url-discovery.json` path when discovery was supplied
 - `readerReport`: the `product-url-reader.json` path used as the Codex-first product evidence source
-- `summary`: requested URL count, ready/blocked product profile counts, ready/failed/blocked promotion run counts, source-mode counts, multi-query discovery counts, and next-round optimization counts
+- `discoveredUrls[]`: candidate product URLs passed from discovery into the reader
+- `summary`: requested URL count, discovered URL count, ready/blocked product profile counts, ready/failed/blocked promotion run counts, source-mode counts, multi-query discovery counts, and next-round optimization counts
 - `promotionRuns[]`: one cycle run per ready product URL
 - `promotionRuns[].sourceMode`: `browser_structured_snapshot` when a rendered snapshot was passed to `promotion_cycle_runner.py --structured-json`, otherwise `static_url_fallback`
 - `promotionRuns[].cycleReport`: the per-product `promotion-cycle.json`
@@ -132,7 +150,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 `final-capability-run.json` includes:
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
-- `input`: product URLs, URL file, platform targets, and `codexReadFirst`
+- `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, and `codexReadFirst`
 - `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish queue count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts

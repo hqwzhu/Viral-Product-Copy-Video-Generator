@@ -48,6 +48,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--urls-file", default="", help="Text file with one product URL per line.")
     parser.add_argument("--out-dir", default="./promotion-output")
 
+    product_discovery = parser.add_argument_group("Product URL discovery")
+    product_discovery.add_argument("--discover-from-url", default="", help="Public website or landing page URL to discover product URLs from before reading products.")
+    product_discovery.add_argument("--discovery-html-file", default="", help="Saved public website HTML to discover product URLs from.")
+    product_discovery.add_argument("--discovery-base-url", default="", help="Base URL for resolving links in --discovery-html-file.")
+    product_discovery.add_argument("--discovery-top-n", type=int, default=50)
+    product_discovery.add_argument("--discovery-min-score", type=float, default=3.0)
+    product_discovery.add_argument("--discovery-max-pages", type=int, default=20)
+    product_discovery.add_argument("--discovery-max-depth", type=int, default=1)
+    product_discovery.add_argument("--discovery-timeout", type=float, default=20.0)
+    product_discovery.add_argument("--discovery-include-external", action="store_true")
+    product_discovery.add_argument("--discovery-allow-localhost", action="store_true")
+
     product = parser.add_argument_group("Product reading")
     product.add_argument("--skip-browser", action="store_true")
     product.add_argument("--no-static-fallback", action="store_true")
@@ -133,6 +145,27 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
     command = [sys.executable, str(PRODUCT_BATCH_RUNNER), "--out-dir", str(out_dir)]
     append_many(command, "--url", args.url)
     append_if_present(command, "--urls-file", args.urls_file)
+    append_if_present(command, "--discover-from-url", args.discover_from_url)
+    append_if_present(command, "--discovery-html-file", args.discovery_html_file)
+    append_if_present(command, "--discovery-base-url", args.discovery_base_url)
+    command.extend(
+        [
+            "--discovery-top-n",
+            str(args.discovery_top_n),
+            "--discovery-min-score",
+            str(args.discovery_min_score),
+            "--discovery-max-pages",
+            str(args.discovery_max_pages),
+            "--discovery-max-depth",
+            str(args.discovery_max_depth),
+            "--discovery-timeout",
+            str(args.discovery_timeout),
+        ]
+    )
+    if args.discovery_include_external:
+        command.append("--discovery-include-external")
+    if args.discovery_allow_localhost:
+        command.append("--discovery-allow-localhost")
     append_common_batch_args(command, args)
     step = run_command("product_batch_runner", command)
     steps.append(step)
@@ -142,6 +175,8 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
         "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
         "report": str(report_path) if report_path.exists() else "",
         "summary": report.get("summary", {}),
+        "discoveryReport": report.get("discoveryReport", ""),
+        "discoveredUrls": report.get("discoveredUrls", []),
         "promotionRuns": report.get("promotionRuns", []),
         "exitCode": step["exitCode"],
     }
@@ -418,6 +453,8 @@ def build_report(
         "input": {
             "urls": args.url,
             "urlsFile": args.urls_file,
+            "discoverFromUrl": args.discover_from_url,
+            "discoveryHtmlFile": args.discovery_html_file,
             "platforms": args.platforms,
             "codexReadFirst": True,
         },

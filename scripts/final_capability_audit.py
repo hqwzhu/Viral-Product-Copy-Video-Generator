@@ -23,6 +23,7 @@ SAFE_INSTALLS = {"playwright_chromium"}
 SCRIPT_REQUIREMENTS = {
     "browser_snapshot": "browser_snapshot.py",
     "browser_video_sampler": "browser_video_sampler.py",
+    "product_url_discovery": "product_url_discovery.py",
     "product_url_reader": "product_url_reader.py",
     "product_batch_runner": "product_batch_runner.py",
     "product_intake": "product_intake.py",
@@ -326,7 +327,7 @@ def requirement_status(
 ) -> list[dict[str, Any]]:
     browser_intake_ready = scripts_ready(
         scripts,
-        ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+        ["browser_snapshot", "product_url_discovery", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
     )
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
@@ -388,11 +389,11 @@ def requirement_status(
             "status": "ready" if browser_intake_ready and browser_runtime_ready else "partial_ready",
             "evidence": scripts_present(
                 scripts,
-                ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+                ["browser_snapshot", "product_url_discovery", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
             ),
             "missing": missing_for_scripts(
                 scripts,
-                ["browser_snapshot", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
+                ["browser_snapshot", "product_url_discovery", "product_url_reader", "product_batch_runner", "product_intake", "run_workflow"],
             )
             + ([] if browser_runtime_ready else ["Playwright Chromium runtime not verified"]),
         },
@@ -648,9 +649,24 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             ),
         },
         {
+            "purpose": "final_capability_runner_from_website_discovery",
+            "command": (
+                f"python scripts/final_capability_runner.py --discover-from-url \"https://example.com\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --business-csv \"./orders-and-revenue.csv\" "
+                f"--out-dir \"{out_dir}\""
+            ),
+        },
+        {
             "purpose": "batch_product_url_cycles",
             "command": (
                 f"python scripts/product_batch_runner.py --urls-file \"./product-urls.txt\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "discover_product_urls_then_run_batch_cycles",
+            "command": (
+                f"python scripts/product_batch_runner.py --discover-from-url \"https://example.com\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
             ),
         },

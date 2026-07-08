@@ -88,6 +88,16 @@ python scripts/product_url_reader.py \
 
 This writes `reports/promotion-manager/intake/product-url-reader.{json,md}`, a per-URL structured page snapshot, and a per-URL product profile. When browser rendering succeeds, each record includes a `nextWorkflowCommand` that uses `--structured-json`; if only static fallback succeeds, it uses `--product-url` and marks the record as `partial_ready`.
 
+To discover likely product URLs from a public website or tool-station entry page before reading them:
+
+```bash
+python scripts/product_url_discovery.py \
+  --site-url "https://example.com" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/intake/product-url-discovery.{json,md}` plus `product-url-discovery/product-urls.txt`. Discovery uses public HTML links only, filters obvious non-product pages such as login, blog, privacy, docs, and checkout pages, and treats all discovered URLs as candidates that still need `product_url_reader.py` evidence.
+
 To read multiple product URLs first and then run a complete local promotion cycle for each ready product:
 
 ```bash
@@ -97,7 +107,16 @@ python scripts/product_batch_runner.py \
   --out-dir "./promotion-output"
 ```
 
-The batch runner writes `reports/promotion-manager/batch/product-batch-runner.{json,md}` and one `product-batch-runs/<id>/...` output folder per product. It passes browser-visible snapshots to `promotion_cycle_runner.py --structured-json` when available and uses static `--product-url` fallback only when browser capture is skipped or unavailable.
+The batch runner can also discover product URLs before reading them:
+
+```bash
+python scripts/product_batch_runner.py \
+  --discover-from-url "https://example.com" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+The batch runner writes `reports/promotion-manager/batch/product-batch-runner.{json,md}` and one `product-batch-runs/<id>/...` output folder per product. It records discovery reports when supplied, passes browser-visible snapshots to `promotion_cycle_runner.py --structured-json` when available, and uses static `--product-url` fallback only when browser capture is skipped or unavailable.
 
 Add multi-query viral discovery when every ready product should automatically derive several search queries, search/capture public platform evidence, and merge materials/creators:
 
