@@ -46,7 +46,7 @@ METRIC_ALIASES = {
     "revenue": ["revenue", "gmv", "sales", "收入", "营收", "销售额", "成交额"],
     "stars": ["stars?", "星标"],
     "forks": ["forks?"],
-    "watchers": ["watchers?", "subscribers?", "订阅"],
+    "watchers": ["watchers?", "subscribers?", "followers?", "订阅", "粉丝", "关注者"],
     "openIssues": ["open\\s*issues?", "issues?"],
 }
 

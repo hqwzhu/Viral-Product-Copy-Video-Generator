@@ -254,6 +254,8 @@ python scripts/platform_search_capture.py \
   --out-dir "./promotion-output"
 ```
 
+Search capture parses visible English and Chinese metrics such as views/plays, likes, saves/favorites, comments, shares, stars/forks, and creator audience labels such as `followers`, `粉丝`, `关注者`, and `订阅`. These values are ranking evidence only when visible in the public page, browser snapshot, official API/export, screenshot OCR/text, or user export.
+
 To rank captured platform search results into a viral material library and follow-up capture queue:
 
 ```bash
@@ -681,7 +683,7 @@ The command writes:
 - Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Use `scripts/viral_discovery_runner.py` when the user specifically asks to automatically find viral creators, posts, videos, or repositories from a keyword before product copy generation. It chains browser-visible platform search, normalized capture, ranked viral library creation, creator leaderboard generation, and optional follow-up queues.
 - Use `scripts/multi_query_viral_discovery.py` when one keyword is too narrow. It derives queries from the product profile, value proposition, keywords, audience, and pain points; runs or plans one discovery pass per query; then dedupes and ranks the merged viral materials and creator leaderboard.
-- Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms.
+- Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms. It parses visible English/Chinese metrics and creator audience labels from search evidence for ranking; missing metrics remain missing.
 - Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified. Preserve `contentDeconstruction` as the primary hook/beat/video-architecture evidence for later copy and script generation.
 - Use `scripts/creator_leaderboard.py` after the viral library exists to identify high-signal creators/accounts, aggregate their observed public metrics, and create creator follow-up tasks. The full workflow does this automatically unless `--skip-creator-leaderboard` is supplied.
 - Use `scripts/creator_follow_up_runner.py` after the creator leaderboard exists to run safe YouTube/GitHub creator follow-up through official/public connectors and queue manual/browser evidence requests for Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms. In the full workflow, add `--run-creator-follow-up`; use `--creator-follow-up-dry-run` for planning-only runs.

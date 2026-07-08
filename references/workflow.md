@@ -261,6 +261,8 @@ python scripts/platform_search_capture.py \
   --out-dir "./promotion-output"
 ```
 
+Search capture parses visible English/Chinese metrics and audience labels in rendered snapshots, saved HTML, copied text, or public static HTML, including `12K`, `2.4M`, `1.2万`, `3亿`, `粉丝`, `关注者`, and `订阅`. Parsed values feed the viral score and creator leaderboard only when they are visible evidence; hidden analytics still require official APIs, exports, screenshots, or user-provided evidence.
+
 After search capture, build the cross-platform viral material library:
 
 ```bash

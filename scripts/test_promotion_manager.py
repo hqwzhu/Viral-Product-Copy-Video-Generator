@@ -1143,6 +1143,58 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("explicit_conversion_prompt", report["records"][0]["contentDeconstruction"]["copyMechanics"])
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
 
+    def test_platform_search_capture_parses_chinese_visible_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-capture-chinese-metrics-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "douyin.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "AI 产品推广",
+                    "items": [
+                        {
+                            "title": "AI 工具站一条视频带来首批用户",
+                            "url": "https://www.douyin.com/video/test-video-1",
+                            "creator": "增长实验室",
+                            "content": "开头先展示结果，再拆解工具站推广流程。播放量 1.2万 点赞 3.4k 收藏 560 评论 87 分享 42 粉丝 2万",
+                        },
+                        {
+                            "title": "产品发布前要准备的内容清单",
+                            "url": "https://www.douyin.com/video/test-video-2",
+                            "creator": "AI 运营手记",
+                            "content": "适合发布前自查。播放量 900 点赞 120 评论 9",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "douyin",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-douyin.json").read_text(encoding="utf-8"))
+        metrics = report["records"][0]["visibleMetrics"]
+        self.assertEqual(metrics["views"]["normalized"], 12000.0)
+        self.assertEqual(metrics["likes"]["normalized"], 3400.0)
+        self.assertEqual(metrics["favorites"]["normalized"], 560.0)
+        self.assertEqual(metrics["comments"]["normalized"], 87.0)
+        self.assertEqual(metrics["shares"]["normalized"], 42.0)
+        self.assertEqual(metrics["subscribers"]["normalized"], 20000.0)
+        self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
+
     def test_viral_content_library_ranks_multiplatform_capture_reports(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-content-library-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

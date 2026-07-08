@@ -14,6 +14,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+import metric_parsing
+
 
 TODAY = date.today().isoformat()
 METRIC_NAMES = [
@@ -402,29 +404,9 @@ def first_url(text: str) -> str:
 
 
 def extract_metrics(text: str) -> dict[str, dict[str, Any]]:
-    metrics: dict[str, dict[str, Any]] = {}
-    aliases = {
-        "views": ["views", "plays", "view_count"],
-        "likes": ["likes", "liked"],
-        "favorites": ["favorites", "saves", "bookmarks"],
-        "comments": ["comments", "replies"],
-        "shares": ["shares", "reposts"],
-        "clicks": ["clicks"],
-        "stars": ["stars"],
-        "forks": ["forks"],
-        "subscribers": ["subscribers", "followers"],
-    }
-    for name, labels in aliases.items():
-        for label in labels:
-            patterns = [
-                rf"(?i){re.escape(label)}\s*[:=]?\s*([$]?\s*[\d,.]+\s*(?:k|m|b)?)",
-                rf"(?i)([$]?\s*[\d,.]+\s*(?:k|m|b)?)\s*{re.escape(label)}",
-            ]
-            match = re.search(patterns[0], text) or re.search(patterns[1], text)
-            if match:
-                raw = normalize_space(match.group(1))
-                metrics[name] = {"raw": raw, "normalized": parse_metric_value(raw)}
-                break
+    metrics = metric_parsing.extract_metrics(text, [name for name in METRIC_NAMES if name != "subscribers"] + ["watchers"])
+    if "watchers" in metrics and "subscribers" not in metrics:
+        metrics["subscribers"] = metrics.pop("watchers")
     return metrics
 
 
@@ -442,22 +424,7 @@ def normalize_metric_mapping(metrics: dict[str, Any]) -> dict[str, dict[str, Any
 
 
 def parse_metric_value(value: str) -> float | None:
-    text = normalize_space(value).replace(",", "").replace("$", "")
-    multiplier = 1.0
-    lower = text.lower()
-    if lower.endswith("k"):
-        multiplier = 1_000.0
-        text = text[:-1]
-    elif lower.endswith("m"):
-        multiplier = 1_000_000.0
-        text = text[:-1]
-    elif lower.endswith("b"):
-        multiplier = 1_000_000_000.0
-        text = text[:-1]
-    try:
-        return float(text.strip()) * multiplier
-    except ValueError:
-        return None
+    return metric_parsing.parse_metric_number(value)
 
 
 def viral_score(metrics: dict[str, dict[str, Any]], index: int) -> float:
