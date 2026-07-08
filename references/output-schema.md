@@ -344,13 +344,16 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 `platform-access-audit.json` includes:
 
-- `status`: `full_official_access_ready`, `partial_ready_credentials_required`, or `partial_ready_official_paths_mapped`
+- `status`: `full_official_access_ready`, `partial_ready_credentials_required`, `partial_ready_official_paths_mapped`, or `partial_ready_official_doc_verification_failed`
 - `checkLive`: whether official documentation URLs were fetched during the run
+- `officialDocSummary`: total official docs, reachable docs, missing-doc capability count, unchecked docs, and capability evidence status counts
 - `platforms[]`: one access record per requested platform
 - `platforms[].publish`: official API, official app-review candidate, or manual/browser-assisted publishing access mode
 - `platforms[].metrics`: official API, public API, official export, manual export, or structured-snapshot metric access mode
 - `platforms[].credentialStatus`: required environment variable names, present environment variable names, missing names, and `valuesStored: false`
 - `platforms[].officialDocs`: official documentation URLs used as evidence
+- `platforms[].officialDocs[].liveCheck`: optional live documentation check with status, HTTP status, final URL, content type, and UTC check time when `--check-live` is used
+- `platforms[].publish.officialDocEvidenceStatus` and `platforms[].metrics.officialDocEvidenceStatus`: `missing_official_docs`, `configured_not_live_checked`, `all_reachable`, `partially_reachable`, or `unreachable`
 - `platforms[].automationLevel`: `official_publish_and_metrics_ready`, `official_publish_ready_when_credentials_present`, `official_app_integration_required`, or `manual_or_browser_assisted_required`
 - `implementationGaps[]`: missing official executors, missing verified creator publish APIs, or metric evidence requirements
 - `guardrails`: no private endpoints, no hidden tokens, no captcha bypass, and no fully automated claim without official access

@@ -538,6 +538,12 @@ To audit official publishing and metrics access paths before claiming full autom
 python scripts/platform_access_audit.py --out-dir "./promotion-output"
 ```
 
+To refresh official documentation reachability during that audit:
+
+```bash
+python scripts/platform_access_audit.py --check-live --out-dir "./promotion-output"
+```
+
 To run one full local promotion cycle from product intake through publish queue, published URL registration, and real metrics recovery:
 
 ```bash
@@ -630,7 +636,7 @@ The command writes:
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
-- `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries.
+- `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries. With `--check-live`, it also records official documentation reachability, UTC check time, and doc-evidence gaps.
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` captures a browser-visible published page and registers the real URL.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence.
 - `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs.
@@ -732,7 +738,7 @@ Use `scripts/publish_queue.py` after a workflow run to convert publish packs int
 Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes.
 Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare browser-assisted payload files, platform entry URLs, generic form-fill helper scripts, browser form-fill commands, and post-publish URL registration commands for Zhihu, Xiaohongshu, Douyin, TikTok, or similar platforms. It may open publisher entry URLs in the user's default browser with `--open-browser`, but it must not auto-login, solve captcha, or click the final publish button.
 Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when the user wants Codex to fill visible publisher fields. It writes a screenshot and report, does not submit the form, and must stop for login, captcha, risk control, account verification, or final publish.
-Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted.
+Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted. Add `--check-live` when the decision depends on current official documentation; live reachability is evidence for documentation existence, not account authorization.
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
 Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
 Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.

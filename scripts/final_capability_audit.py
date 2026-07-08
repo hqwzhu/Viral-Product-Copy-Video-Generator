@@ -688,6 +688,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": f"python scripts/platform_access_audit.py --out-dir \"{out_dir}\"",
         },
         {
+            "purpose": "audit_platform_official_access_with_live_docs",
+            "command": f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+        },
+        {
             "purpose": "audit_self_evolution",
             "command": f"python scripts/self_evolution_audit.py --out-dir \"{out_dir}\"",
         },

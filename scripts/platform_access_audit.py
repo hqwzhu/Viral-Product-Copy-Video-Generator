@@ -8,7 +8,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -216,6 +216,7 @@ def main() -> None:
         "checkLive": bool(args.check_live),
         "platforms": records,
         "summary": summary(records),
+        "officialDocSummary": official_doc_summary(records),
         "implementationGaps": implementation_gaps(records),
         "guardrails": [
             "Use official APIs only for automated writes.",
@@ -271,6 +272,7 @@ def capability_record(config: dict[str, Any], check_live: bool) -> dict[str, Any
         for doc in docs:
             doc["liveCheck"] = check_url(str(doc["url"]))
     env = env_status(config)
+    doc_status = official_doc_status(docs, check_live)
     return {
         "access": config["access"],
         "mode": config["mode"],
@@ -278,9 +280,23 @@ def capability_record(config: dict[str, Any], check_live: bool) -> dict[str, Any
         "credentialStatus": env,
         "approvalRequired": bool(config.get("approvalRequired", False)),
         "officialDocs": docs,
+        "officialDocEvidenceStatus": doc_status,
         "notes": config["notes"],
         "readyForAutomation": ready_for_automation(config, env),
     }
+
+
+def official_doc_status(docs: list[dict[str, Any]], check_live: bool) -> str:
+    if not docs:
+        return "missing_official_docs"
+    if not check_live:
+        return "configured_not_live_checked"
+    statuses = [str((doc.get("liveCheck") or {}).get("status", "not_checked")) for doc in docs]
+    if all(status == "reachable" for status in statuses):
+        return "all_reachable"
+    if any(status == "reachable" for status in statuses):
+        return "partially_reachable"
+    return "unreachable"
 
 
 def env_status(config: dict[str, Any]) -> dict[str, Any]:
@@ -337,6 +353,14 @@ def next_actions(platform: str, publish: dict[str, Any], metrics: dict[str, Any]
 
 
 def overall_status(records: list[dict[str, Any]]) -> str:
+    doc_statuses = {
+        record[area]["officialDocEvidenceStatus"]
+        for record in records
+        for area in ["publish", "metrics"]
+        if record[area]["access"] in {"implemented_official_api", "official_candidate_not_integrated"}
+    }
+    if "unreachable" in doc_statuses:
+        return "partial_ready_official_doc_verification_failed"
     levels = {record["automationLevel"] for record in records}
     if levels == {"official_publish_and_metrics_ready"}:
         return "full_official_access_ready"
@@ -353,6 +377,47 @@ def summary(records: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(result.items()))
 
 
+def official_doc_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: dict[str, int] = {
+        "totalDocs": 0,
+        "missingDocCapabilities": 0,
+        "reachableDocs": 0,
+        "unreachableDocs": 0,
+        "httpErrorDocs": 0,
+        "uncheckedDocs": 0,
+    }
+    checked_at: list[str] = []
+    by_status: dict[str, int] = {}
+    for record in records:
+        for area in ["publish", "metrics"]:
+            capability = record[area]
+            status = str(capability.get("officialDocEvidenceStatus", "unknown"))
+            by_status[status] = by_status.get(status, 0) + 1
+            docs = capability.get("officialDocs") or []
+            if not docs:
+                counts["missingDocCapabilities"] += 1
+                continue
+            for doc in docs:
+                counts["totalDocs"] += 1
+                live = doc.get("liveCheck") or {}
+                live_status = str(live.get("status") or "unchecked")
+                if live.get("checkedAt"):
+                    checked_at.append(str(live["checkedAt"]))
+                if live_status == "reachable":
+                    counts["reachableDocs"] += 1
+                elif live_status == "http_error":
+                    counts["httpErrorDocs"] += 1
+                elif live_status == "unchecked":
+                    counts["uncheckedDocs"] += 1
+                else:
+                    counts["unreachableDocs"] += 1
+    return {
+        **counts,
+        "capabilityEvidenceStatus": dict(sorted(by_status.items())),
+        "checkedAt": sorted(set(checked_at)),
+    }
+
+
 def implementation_gaps(records: list[dict[str, Any]]) -> list[dict[str, str]]:
     gaps: list[dict[str, str]] = []
     for record in records:
@@ -364,20 +429,40 @@ def implementation_gaps(records: list[dict[str, Any]]) -> list[dict[str, str]]:
             gaps.append({"platform": record["platform"], "area": "publish", "gap": "verified_official_creator_publish_api_missing"})
         if metrics["access"] in {"manual_export_or_structured_snapshot_required", "official_or_manual_export_required"}:
             gaps.append({"platform": record["platform"], "area": "metrics", "gap": "official_or_user_export_evidence_required"})
+        for area in ["publish", "metrics"]:
+            capability = record[area]
+            doc_status = capability.get("officialDocEvidenceStatus")
+            if doc_status == "missing_official_docs":
+                gaps.append({"platform": record["platform"], "area": area, "gap": "official_doc_evidence_missing"})
+            elif doc_status == "unreachable":
+                gaps.append({"platform": record["platform"], "area": area, "gap": "official_doc_live_check_failed"})
+            elif doc_status == "partially_reachable":
+                gaps.append({"platform": record["platform"], "area": area, "gap": "official_doc_live_check_partial"})
     return gaps
 
 
 def check_url(url: str) -> dict[str, Any]:
     request = urllib.request.Request(url, headers={"User-Agent": "CodexSkillPlatformAccessAudit/1.0"})
+    checked_at = live_timestamp()
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
-            return {"status": "reachable", "httpStatus": response.status}
+            return {
+                "status": "reachable",
+                "httpStatus": response.status,
+                "finalUrl": response.geturl(),
+                "contentType": response.headers.get("Content-Type", ""),
+                "checkedAt": checked_at,
+            }
     except urllib.error.HTTPError as exc:
-        return {"status": "http_error", "httpStatus": exc.code}
+        return {"status": "http_error", "httpStatus": exc.code, "checkedAt": checked_at}
     except urllib.error.URLError as exc:
-        return {"status": "unreachable", "reason": str(exc.reason)[:160]}
+        return {"status": "unreachable", "reason": str(exc.reason)[:160], "checkedAt": checked_at}
     except TimeoutError:
-        return {"status": "timeout"}
+        return {"status": "timeout", "checkedAt": checked_at}
+
+
+def live_timestamp() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:
@@ -411,6 +496,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         )
         for action in record["nextActions"]:
             lines.append(f"- Next action: {action}")
+        lines.append(f"- Publish doc evidence: `{record['publish']['officialDocEvidenceStatus']}`")
+        lines.append(f"- Metrics doc evidence: `{record['metrics']['officialDocEvidenceStatus']}`")
         docs = record["publish"]["officialDocs"] + record["metrics"]["officialDocs"]
         if docs:
             lines.append("- Official docs:")

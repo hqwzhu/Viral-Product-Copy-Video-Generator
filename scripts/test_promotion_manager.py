@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import http.server
 import os
@@ -56,6 +57,16 @@ SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
+
+
+def load_script_module(path: Path):
+    module_name = f"_promotion_manager_test_{path.stem}_{os.getpid()}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def playwright_chromium_available() -> bool:
@@ -4007,6 +4018,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "optimize_next_round_from_recovered_evidence" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "audit_platform_official_access_with_live_docs" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
@@ -4064,6 +4076,30 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
         self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
+
+    def test_platform_access_audit_summarizes_live_official_doc_evidence(self) -> None:
+        module = load_script_module(PLATFORM_ACCESS_AUDIT)
+        module.check_url = lambda url: {
+            "status": "reachable",
+            "httpStatus": 200,
+            "finalUrl": url,
+            "contentType": "text/html",
+            "checkedAt": "2026-07-08T00:00:00Z",
+        }
+
+        records = [module.platform_record("youtube", True), module.platform_record("zhihu", True)]
+        youtube = records[0]
+        zhihu = records[1]
+        self.assertEqual(youtube["publish"]["officialDocEvidenceStatus"], "all_reachable")
+        self.assertEqual(youtube["publish"]["officialDocs"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
+        self.assertEqual(zhihu["publish"]["officialDocEvidenceStatus"], "missing_official_docs")
+
+        summary = module.official_doc_summary(records)
+        self.assertEqual(summary["reachableDocs"], 2)
+        self.assertEqual(summary["missingDocCapabilities"], 2)
+        self.assertIn("all_reachable", summary["capabilityEvidenceStatus"])
+        gaps = module.implementation_gaps(records)
+        self.assertTrue(any(item["gap"] == "official_doc_evidence_missing" for item in gaps))
 
     def test_viral_discovery_runner_builds_multiplatform_library_and_creator_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-runner-test-"))
