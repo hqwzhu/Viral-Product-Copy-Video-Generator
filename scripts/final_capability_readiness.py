@@ -170,15 +170,42 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
     runs = int_value(summary.get("multiQueryDiscoveryRuns"))
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
+    metrics = {
+        "multiQueryDiscoveryRuns": runs,
+        "searchCapturesReady": int_value(summary.get("multiQuerySearchCapturesReady")),
+        "viralMaterialsObserved": int_value(summary.get("multiQueryViralMaterialsObserved")),
+        "mergedMaterials": int_value(summary.get("multiQueryMergedMaterials")),
+        "mergedCreators": int_value(summary.get("multiQueryMergedCreators")),
+        "deepEvidenceRuns": int_value(summary.get("multiQueryDeepEvidenceRuns")),
+        "followUpCaptureRuns": int_value(summary.get("multiQueryFollowUpCaptureRuns")),
+        "followUpImportedRecords": int_value(summary.get("multiQueryFollowUpImportedRecords")),
+        "browserVisibleCaptureReady": int_value(summary.get("multiQueryBrowserVisibleCaptureReady")),
+        "videoSampleRuns": int_value(summary.get("multiQueryVideoSampleRuns")),
+        "videoSampleReady": int_value(summary.get("multiQueryVideoSampleReady")),
+        "videoSampleFrames": int_value(summary.get("multiQueryVideoSampleFrames")),
+    }
     if final_run and runs == 0:
         status = "needs_real_run_evidence"
         missing.append("no multi-query viral discovery run evidence in the final run")
+    elif final_run and metrics["mergedMaterials"] > 0 and metrics["mergedCreators"] > 0 and metrics["videoSampleFrames"] > 0:
+        status = "ready_with_video_evidence"
+    elif final_run and (
+        metrics["followUpImportedRecords"] > 0
+        or metrics["browserVisibleCaptureReady"] > 0
+        or metrics["deepEvidenceRuns"] > 0
+    ):
+        status = "partial_ready_deep_content_evidence"
+        missing.append("no browser-visible video frame samples were captured in the final run")
+    elif final_run and (metrics["mergedMaterials"] > 0 or metrics["searchCapturesReady"] > 0):
+        status = "partial_ready_search_capture_only"
+        missing.append("no deep competitor records or video frame samples were captured in the final run")
     return row(
         "viral_creator_video_research",
         status,
         audit_item.get("evidence") or [],
         missing or audit_item.get("missing") or [],
         audit_item.get("limits") or [],
+        metrics,
     )
 
 
@@ -304,7 +331,7 @@ def row(
         "id": requirement_id,
         "label": definition["label"],
         "status": status or "unknown",
-        "satisfied": status in {"ready", "full_ready"},
+        "satisfied": status in {"ready", "full_ready", "ready_with_video_evidence"},
         "blocked": blocked,
         "evidence": [str(item) for item in evidence if item],
         "missing": [str(item) for item in missing if item],
@@ -333,6 +360,18 @@ def build_action_queue(
                 "run_multi_query_viral_discovery",
                 "Run product-driven viral discovery and follow-up captures.",
                 final_runner_command(out_dir) + " --run-follow-up-captures --sample-video-frames",
+            )
+        )
+    if by_id["viral_creator_video_research"]["status"] in {
+        "partial_ready_search_capture_only",
+        "partial_ready_deep_content_evidence",
+    }:
+        actions.append(
+            action(
+                21,
+                "run_video_evidence_capture",
+                "Run multi-query viral discovery with follow-up captures and browser-visible video frame sampling.",
+                final_runner_command(out_dir) + " --multi-query-run-follow-up-captures --multi-query-sample-video-frames",
             )
         )
     if "no MP4 generated" in " ".join(by_id["copy_and_real_video_generation"]["missing"]):

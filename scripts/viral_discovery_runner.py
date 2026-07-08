@@ -385,11 +385,18 @@ def run_follow_up_captures(
     results_path = out_dir / "reports/promotion-manager/competitors/follow-up-capture-results.json"
     deep_path = out_dir / "reports/promotion-manager/competitors/deep-competitor-library.json"
     payload = read_json(results_path) if results_path.exists() else {}
+    capture_results = payload.get("results", []) if isinstance(payload.get("results"), list) else []
     return {
         "status": "ready" if results_path.exists() and step["exitCode"] == 0 else "error",
         "results": str(results_path),
         "deepCompetitorLibrary": str(deep_path),
         "summary": payload.get("summary", {}),
+        "browserVisibleCaptureAttempts": sum(1 for item in capture_results if item.get("mode") == "browser_visible_capture"),
+        "browserVisibleCaptureReady": sum(
+            1 for item in capture_results if item.get("mode") == "browser_visible_capture" and item.get("status") == "ready"
+        ),
+        "publicCaptureReady": sum(1 for item in capture_results if item.get("mode") == "public_url_capture_candidate" and item.get("status") == "ready"),
+        "manualEvidenceQueued": sum(1 for item in capture_results if item.get("status") == "queued_manual_evidence"),
         "exitCode": step["exitCode"],
     }
 
@@ -421,7 +428,7 @@ def build_report(
         "creatorLeaderboard": creator_leaderboard,
         "creatorFollowUp": creator_follow_up,
         "followUpCaptures": follow_up_captures,
-        "coverage": coverage_summary(args, browser_search, search_captures, viral_library, creator_leaderboard),
+        "coverage": coverage_summary(args, browser_search, search_captures, viral_library, creator_leaderboard, follow_up_captures),
         "guardrails": [
             "Automatic capture is limited to official APIs, public pages, and browser-visible evidence.",
             "Zhihu, Xiaohongshu, Douyin, and TikTok records may require browser-visible/manual follow-up evidence when login, captcha, or risk controls appear.",
@@ -453,18 +460,45 @@ def coverage_summary(
     search_captures: list[dict[str, Any]],
     viral_library: dict[str, Any],
     creator_leaderboard: dict[str, Any],
+    follow_up_captures: dict[str, Any],
 ) -> dict[str, Any]:
     platform_count = len(split_csv(args.platforms))
     browser_ready = sum(1 for item in browser_search.get("records", []) if item.get("status") == "ready")
     captures_ready = sum(1 for item in search_captures if item.get("status") == "ready")
+    task_summary = viral_library.get("taskSummary") if isinstance(viral_library.get("taskSummary"), dict) else {}
+    task_modes = task_summary.get("modes") if isinstance(task_summary.get("modes"), dict) else {}
+    follow_summary = follow_up_captures.get("summary") if isinstance(follow_up_captures.get("summary"), dict) else {}
+    follow_statuses = follow_summary.get("statuses") if isinstance(follow_summary.get("statuses"), dict) else {}
+    follow_modes = follow_summary.get("modes") if isinstance(follow_summary.get("modes"), dict) else {}
+    follow_up_runs = sum(int_value(value) for value in follow_statuses.values())
     return {
         "requestedPlatforms": platform_count,
         "browserSearchReady": browser_ready,
         "searchCapturesReady": captures_ready,
         "viralMaterials": viral_library.get("recordCount", 0),
         "creators": creator_leaderboard.get("creatorCount", 0),
+        "followUpTasksQueued": sum(int_value(value) for value in task_modes.values()),
+        "followUpPublicUrlTasks": int_value(task_modes.get("public_url_capture_candidate")),
+        "followUpBrowserAssistedTasks": int_value(task_modes.get("browser_assisted_capture_required")),
+        "followUpCaptureStatus": follow_up_captures.get("status", "skipped"),
+        "followUpCaptureRuns": follow_up_runs,
+        "followUpImportedRecords": int_value(follow_summary.get("importedRecords")),
+        "followUpPublicCaptureReady": int_value(follow_up_captures.get("publicCaptureReady")),
+        "followUpBrowserVisibleAttempts": int_value(follow_up_captures.get("browserVisibleCaptureAttempts") or follow_modes.get("browser_visible_capture")),
+        "followUpBrowserVisibleReady": int_value(follow_up_captures.get("browserVisibleCaptureReady")),
+        "followUpManualEvidenceQueued": int_value(follow_up_captures.get("manualEvidenceQueued")),
+        "videoSampleRuns": int_value(follow_summary.get("videoSampleRuns")),
+        "videoSampleReady": int_value(follow_summary.get("videoSampleReady")),
+        "videoSampleFrames": int_value(follow_summary.get("videoSampleFrames")),
         "fullyCapturedAcrossRequestedPlatforms": captures_ready == platform_count and platform_count > 0,
     }
+
+
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:

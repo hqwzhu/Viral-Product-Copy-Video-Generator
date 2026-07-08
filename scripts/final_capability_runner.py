@@ -659,6 +659,11 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
     business = item.get("businessAttribution", {}).get("summary", {})
     metrics = item.get("metricsRecovery", {}).get("summary", {})
     optimization = item.get("nextRoundOptimization", {}).get("summary", {})
+    multi_query = (
+        item.get("competitorResearch", {})
+        .get("multiQueryViralDiscovery", {})
+        .get("summary", {})
+    )
     return {
         "capturedMetricRecords": int_value(post_metrics.get("capturedMetricRecords")),
         "commentCount": int_value(comments.get("commentCount") or optimization.get("commentCount")),
@@ -667,6 +672,17 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
         "manualOrPendingRequirements": int_value(metrics.get("manualOrPendingRequirements"))
         + int_value(optimization.get("manualOrPendingRequirements")),
         "nextRoundContent": int_value(optimization.get("nextRoundContent")),
+        "multiQuerySearchCapturesReady": int_value(multi_query.get("searchCapturesReady")),
+        "multiQueryViralMaterialsObserved": int_value(multi_query.get("viralMaterialsObserved")),
+        "multiQueryMergedMaterials": int_value(multi_query.get("mergedMaterials")),
+        "multiQueryMergedCreators": int_value(multi_query.get("mergedCreators")),
+        "multiQueryDeepEvidenceRuns": int_value(multi_query.get("deepEvidenceRuns")),
+        "multiQueryFollowUpCaptureRuns": int_value(multi_query.get("followUpCaptureRuns")),
+        "multiQueryFollowUpImportedRecords": int_value(multi_query.get("followUpImportedRecords")),
+        "multiQueryBrowserVisibleCaptureReady": int_value(multi_query.get("followUpBrowserVisibleReady")),
+        "multiQueryVideoSampleRuns": int_value(multi_query.get("videoSampleRuns")),
+        "multiQueryVideoSampleReady": int_value(multi_query.get("videoSampleReady")),
+        "multiQueryVideoSampleFrames": int_value(multi_query.get("videoSampleFrames")),
     }
 
 
@@ -687,6 +703,17 @@ def cycle_evidence_summary(cycle_evidence: list[dict[str, Any]]) -> dict[str, in
         "recordsWithMetrics": sum(int_value(item.get("recordsWithMetrics")) for item in counts),
         "manualOrPendingRequirements": sum(int_value(item.get("manualOrPendingRequirements")) for item in counts),
         "nextRoundContent": sum(int_value(item.get("nextRoundContent")) for item in counts),
+        "multiQuerySearchCapturesReady": sum(int_value(item.get("multiQuerySearchCapturesReady")) for item in counts),
+        "multiQueryViralMaterialsObserved": sum(int_value(item.get("multiQueryViralMaterialsObserved")) for item in counts),
+        "multiQueryMergedMaterials": sum(int_value(item.get("multiQueryMergedMaterials")) for item in counts),
+        "multiQueryMergedCreators": sum(int_value(item.get("multiQueryMergedCreators")) for item in counts),
+        "multiQueryDeepEvidenceRuns": sum(int_value(item.get("multiQueryDeepEvidenceRuns")) for item in counts),
+        "multiQueryFollowUpCaptureRuns": sum(int_value(item.get("multiQueryFollowUpCaptureRuns")) for item in counts),
+        "multiQueryFollowUpImportedRecords": sum(int_value(item.get("multiQueryFollowUpImportedRecords")) for item in counts),
+        "multiQueryBrowserVisibleCaptureReady": sum(int_value(item.get("multiQueryBrowserVisibleCaptureReady")) for item in counts),
+        "multiQueryVideoSampleRuns": sum(int_value(item.get("multiQueryVideoSampleRuns")) for item in counts),
+        "multiQueryVideoSampleReady": sum(int_value(item.get("multiQueryVideoSampleReady")) for item in counts),
+        "multiQueryVideoSampleFrames": sum(int_value(item.get("multiQueryVideoSampleFrames")) for item in counts),
     }
 
 

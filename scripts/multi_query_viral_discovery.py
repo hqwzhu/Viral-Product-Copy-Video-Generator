@@ -183,6 +183,8 @@ def run_or_plan_discovery(args: argparse.Namespace, out_dir: Path, query_plan: l
             )
             continue
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        run_report_path = viral_discovery_run_path(run_dir)
+        run_report = read_json(run_report_path)
         runs.append(
             {
                 "queryId": query["id"],
@@ -195,6 +197,8 @@ def run_or_plan_discovery(args: argparse.Namespace, out_dir: Path, query_plan: l
                 "stderrTail": tail(result.stderr),
                 "viralLibrary": str(viral_library_path(run_dir)),
                 "creatorLeaderboard": str(creator_leaderboard_path(run_dir)),
+                "viralDiscoveryRun": str(run_report_path) if run_report_path.exists() else "",
+                "coverage": run_report.get("coverage", {}) if isinstance(run_report.get("coverage"), dict) else {},
             }
         )
     return runs
@@ -249,6 +253,8 @@ def run_record_from_existing(run_dir: Path) -> dict[str, Any]:
         materials = payload.get("materials", [])
         if materials and isinstance(materials[0], dict):
             query = first_non_empty(materials[0].get("query"), "")
+    run_report_path = viral_discovery_run_path(run_dir)
+    run_report = read_json(run_report_path)
     return {
         "queryId": "existing",
         "query": query,
@@ -257,6 +263,8 @@ def run_record_from_existing(run_dir: Path) -> dict[str, Any]:
         "command": [],
         "viralLibrary": str(library),
         "creatorLeaderboard": str(leaderboard),
+        "viralDiscoveryRun": str(run_report_path) if run_report_path.exists() else "",
+        "coverage": run_report.get("coverage", {}) if isinstance(run_report.get("coverage"), dict) else {},
     }
 
 
@@ -346,6 +354,7 @@ def build_report(
     materials: list[dict[str, Any]],
     creators: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    coverage = aggregate_run_coverage(runs)
     return {
         "generatedAt": TODAY,
         "status": run_status(runs, materials, args.dry_run),
@@ -360,6 +369,7 @@ def build_report(
             "mergedMaterials": len(materials),
             "mergedCreators": len(creators),
             "platforms": sorted({material.get("platform", "unknown") for material in materials}),
+            **coverage,
         },
         "artifacts": {
             "mergedViralLibrary": str(report_dir(out_dir) / "multi-query-viral-content-library.json"),
@@ -377,6 +387,36 @@ def run_status(runs: list[dict[str, Any]], materials: list[dict[str, Any]], dry_
     if any(run.get("status") == "ready" for run in runs):
         return "partial_ready_no_mergeable_materials"
     return "blocked"
+
+
+def aggregate_run_coverage(runs: list[dict[str, Any]]) -> dict[str, int]:
+    coverage_records = [run.get("coverage", {}) for run in runs if isinstance(run.get("coverage"), dict)]
+    return {
+        "searchCapturesReady": sum_coverage(coverage_records, "searchCapturesReady"),
+        "viralMaterialsObserved": sum_coverage(coverage_records, "viralMaterials"),
+        "creatorsObserved": sum_coverage(coverage_records, "creators"),
+        "fullyCapturedRuns": sum(1 for item in coverage_records if item.get("fullyCapturedAcrossRequestedPlatforms")),
+        "followUpCaptureRuns": sum_coverage(coverage_records, "followUpCaptureRuns"),
+        "followUpImportedRecords": sum_coverage(coverage_records, "followUpImportedRecords"),
+        "followUpPublicCaptureReady": sum_coverage(coverage_records, "followUpPublicCaptureReady"),
+        "followUpBrowserVisibleAttempts": sum_coverage(coverage_records, "followUpBrowserVisibleAttempts"),
+        "followUpBrowserVisibleReady": sum_coverage(coverage_records, "followUpBrowserVisibleReady"),
+        "followUpManualEvidenceQueued": sum_coverage(coverage_records, "followUpManualEvidenceQueued"),
+        "videoSampleRuns": sum_coverage(coverage_records, "videoSampleRuns"),
+        "videoSampleReady": sum_coverage(coverage_records, "videoSampleReady"),
+        "videoSampleFrames": sum_coverage(coverage_records, "videoSampleFrames"),
+        "deepEvidenceRuns": sum(
+            1
+            for item in coverage_records
+            if int_value(item.get("followUpImportedRecords"))
+            or int_value(item.get("followUpBrowserVisibleReady"))
+            or int_value(item.get("videoSampleFrames"))
+        ),
+    }
+
+
+def sum_coverage(records: list[dict[str, Any]], key: str) -> int:
+    return sum(int_value(item.get(key)) for item in records)
 
 
 def write_outputs(out_dir: Path, report: dict[str, Any], materials: list[dict[str, Any]], creators: list[dict[str, Any]]) -> None:
@@ -410,6 +450,10 @@ def viral_library_path(run_dir: Path) -> Path:
 
 def creator_leaderboard_path(run_dir: Path) -> Path:
     return run_dir / COMPETITOR_DIR / "creator-leaderboard.json"
+
+
+def viral_discovery_run_path(run_dir: Path) -> Path:
+    return run_dir / COMPETITOR_DIR / "viral-discovery-run.json"
 
 
 def html_snapshot_dir_for(root: str, slug: str) -> Path | None:
@@ -528,6 +572,13 @@ def first_non_empty(*values: Any) -> str:
     return ""
 
 
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", "" if value is None else str(value)).strip()
 
@@ -595,6 +646,8 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         f"- Ready runs: {report['summary']['readyRuns']}",
         f"- Merged materials: {report['summary']['mergedMaterials']}",
         f"- Merged creators: {report['summary']['mergedCreators']}",
+        f"- Deep evidence runs: {report['summary'].get('deepEvidenceRuns', 0)}",
+        f"- Video sample frames: {report['summary'].get('videoSampleFrames', 0)}",
         "",
         "## Query Plan",
     ]

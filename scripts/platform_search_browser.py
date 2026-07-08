@@ -336,6 +336,9 @@ def relevant_url(platform: str, url: str) -> bool:
     if not url:
         return False
     host = urllib.parse.urlparse(url).netloc.lower()
+    hostname = urllib.parse.urlparse(url).hostname or ""
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return True
     if platform == "youtube":
         return "youtube.com" in host or "youtu.be" in host
     if platform == "zhihu":

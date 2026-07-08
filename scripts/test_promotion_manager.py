@@ -4776,6 +4776,17 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "summary": {
                         "promotionRuns": 1,
                         "multiQueryDiscoveryRuns": 1,
+                        "multiQuerySearchCapturesReady": 2,
+                        "multiQueryViralMaterialsObserved": 4,
+                        "multiQueryMergedMaterials": 3,
+                        "multiQueryMergedCreators": 2,
+                        "multiQueryDeepEvidenceRuns": 1,
+                        "multiQueryFollowUpCaptureRuns": 1,
+                        "multiQueryFollowUpImportedRecords": 1,
+                        "multiQueryBrowserVisibleCaptureReady": 1,
+                        "multiQueryVideoSampleRuns": 1,
+                        "multiQueryVideoSampleReady": 1,
+                        "multiQueryVideoSampleFrames": 2,
                         "contentArtifacts": 1,
                         "videoFilesGenerated": 0,
                         "capturedMetricRecords": 0,
@@ -4914,6 +4925,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["status"], "partial_ready_blocked_by_platform_or_safety_limits")
         by_requirement = {item["id"]: item for item in report["requirements"]}
         self.assertEqual(by_requirement["product_url_codex_structured_intake"]["status"], "ready")
+        self.assertEqual(by_requirement["viral_creator_video_research"]["status"], "ready_with_video_evidence")
+        self.assertTrue(by_requirement["viral_creator_video_research"]["satisfied"])
+        self.assertEqual(by_requirement["viral_creator_video_research"]["metrics"]["videoSampleFrames"], 2)
         self.assertEqual(by_requirement["copy_and_real_video_generation"]["status"], "partial_ready")
         self.assertEqual(by_requirement["real_metrics_comments_orders_revenue"]["status"], "waiting_real_data")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["installedSkillStatus"], "drift_detected")
@@ -5076,7 +5090,119 @@ Prompt templates for product copy, SEO content, and video scripts.
         task_summary = report["viralContentLibrary"]["taskSummary"]["modes"]
         self.assertEqual(task_summary["public_url_capture_candidate"], 2)
         self.assertEqual(task_summary["browser_assisted_capture_required"], 3)
+        self.assertEqual(report["coverage"]["followUpTasksQueued"], 5)
+        self.assertEqual(report["coverage"]["followUpPublicUrlTasks"], 2)
+        self.assertEqual(report["coverage"]["followUpBrowserAssistedTasks"], 3)
+        self.assertEqual(report["coverage"]["followUpCaptureStatus"], "skipped")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.md").exists())
+
+    def test_viral_discovery_runner_reports_deep_video_follow_up_evidence(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-video-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        video_path = site_dir / "sample.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=0x2563eb:s=320x180:d=2",
+                "-pix_fmt",
+                "yuv420p",
+                str(video_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        (site_dir / "video.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Launch video teardown</title></head>
+<body>
+  <h1>Launch video teardown</h1>
+  <p>creator: Launch Lab views: 120000 likes: 9000 comments: 420</p>
+  <p>Hook: show the product result before explaining the workflow.</p>
+  <p>Voiceover: problem, mechanism, proof, CTA.</p>
+  <video controls width="320" height="180" src="/sample.mp4?token=secret-video-token"></video>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        video_page_url = f"http://127.0.0.1:{server.server_address[1]}/video.html"
+        html_dir = out_dir / "html"
+        html_dir.mkdir()
+        (html_dir / "youtube.html").write_text(
+            f"""
+            <html><head><title>youtube search</title></head>
+            <body>
+              <article>
+                <a href="{video_page_url}">Launch video teardown</a>
+                <p>creator: Launch Lab views: 120000 likes: 9000 comments: 420</p>
+                <p>Hook: show the product result before explaining the workflow.</p>
+              </article>
+            </body></html>
+            """,
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_DISCOVERY_RUNNER),
+                "--query",
+                "AI product video launch",
+                "--platforms",
+                "youtube",
+                "--top-n",
+                "1",
+                "--html-snapshot-dir",
+                str(html_dir),
+                "--run-follow-up-captures",
+                "--allow-localhost-follow-up",
+                "--sample-video-frames",
+                "--video-sample-count",
+                "2",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn("secret-video-token", report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["coverage"]["followUpCaptureStatus"], "ready")
+        self.assertEqual(report["coverage"]["followUpImportedRecords"], 1)
+        self.assertEqual(report["coverage"]["followUpPublicCaptureReady"], 1)
+        self.assertEqual(report["coverage"]["videoSampleRuns"], 1)
+        self.assertEqual(report["coverage"]["videoSampleReady"], 1)
+        self.assertEqual(report["coverage"]["videoSampleFrames"], 2)
+        self.assertTrue(Path(report["followUpCaptures"]["deepCompetitorLibrary"]).exists())
 
     def test_multi_query_viral_discovery_dry_run_builds_product_search_plan(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="multi-query-discovery-plan-test-"))

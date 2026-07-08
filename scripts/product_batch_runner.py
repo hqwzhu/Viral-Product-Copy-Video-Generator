@@ -494,6 +494,7 @@ def build_report(
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     discovered_urls = discovery.get("selectedUrls", []) if isinstance(discovery.get("selectedUrls"), list) else []
+    multi_query_totals = aggregate_multi_query_summaries(runs)
     summary = {
         "requestedUrls": (reader.get("summary") or {}).get("requestedUrls", len(reader.get("records", []))),
         "discoveredUrls": len(discovered_urls),
@@ -513,6 +514,7 @@ def build_report(
         "partialReadyNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") == "partial_ready"),
         "waitingRealDataNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") == "waiting_real_data"),
         "failedNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") in {"blocked", "error"}),
+        **multi_query_totals,
     }
     return {
         "generatedAt": TODAY,
@@ -562,6 +564,31 @@ def batch_status(runs: list[dict[str, Any]]) -> str:
     if any(status == "ready" for status in cycle_statuses):
         return "partial_ready"
     return "blocked"
+
+
+def aggregate_multi_query_summaries(runs: list[dict[str, Any]]) -> dict[str, int]:
+    summaries = [
+        item.get("multiQueryViralDiscovery", {}).get("summary", {})
+        for item in runs
+        if isinstance(item.get("multiQueryViralDiscovery", {}).get("summary"), dict)
+    ]
+    return {
+        "multiQuerySearchCapturesReady": sum_summary(summaries, "searchCapturesReady"),
+        "multiQueryViralMaterialsObserved": sum_summary(summaries, "viralMaterialsObserved"),
+        "multiQueryMergedMaterials": sum_summary(summaries, "mergedMaterials"),
+        "multiQueryMergedCreators": sum_summary(summaries, "mergedCreators"),
+        "multiQueryDeepEvidenceRuns": sum_summary(summaries, "deepEvidenceRuns"),
+        "multiQueryFollowUpCaptureRuns": sum_summary(summaries, "followUpCaptureRuns"),
+        "multiQueryFollowUpImportedRecords": sum_summary(summaries, "followUpImportedRecords"),
+        "multiQueryBrowserVisibleCaptureReady": sum_summary(summaries, "followUpBrowserVisibleReady"),
+        "multiQueryVideoSampleRuns": sum_summary(summaries, "videoSampleRuns"),
+        "multiQueryVideoSampleReady": sum_summary(summaries, "videoSampleReady"),
+        "multiQueryVideoSampleFrames": sum_summary(summaries, "videoSampleFrames"),
+    }
+
+
+def sum_summary(summaries: list[dict[str, Any]], key: str) -> int:
+    return sum(int_value(item.get(key)) for item in summaries)
 
 
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:
@@ -655,6 +682,13 @@ def join_list(value: Any) -> str:
 
 def safe_id(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in value.lower()).strip("-") or "product"
+
+
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def display_command(command: list[str]) -> list[str]:
