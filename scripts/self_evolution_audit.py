@@ -142,6 +142,7 @@ def build_report(
     tools = tool_status(skip_runtime_checks=args.skip_runtime_checks)
     installed = installed_skill_status()
     runtime_gaps = runtime_gap_list(tools)
+    platform_learning = platform_learning_status(out_dir)
     report = {
         "generatedAt": TODAY,
         "status": audit_status(installed, runtime_gaps, args.skip_runtime_checks),
@@ -153,6 +154,7 @@ def build_report(
         "runtimeGaps": runtime_gaps,
         "safeInstallCandidates": safe_install_candidates(tools, out_dir),
         "installResults": install_results,
+        "platformLearning": platform_learning,
         "syncInstalledSkill": sync_result
         or {
             "requested": False,
@@ -183,7 +185,7 @@ def build_report(
                 "captcha, login, risk-control, or account-verification bypass",
             ],
         },
-        "nextActions": next_actions(installed, runtime_gaps, out_dir),
+        "nextActions": next_actions(installed, runtime_gaps, platform_learning, out_dir),
         "guardrails": [
             "Record only credential environment variable names, never values.",
             "Do not install arbitrary network code or upgrade dependencies without a reviewed source and explicit command.",
@@ -425,7 +427,49 @@ def learning_and_upgrade_loop(out_dir: Path) -> list[dict[str, Any]]:
     ]
 
 
-def next_actions(installed: dict[str, Any], runtime_gaps: list[dict[str, str]], out_dir: Path) -> list[dict[str, Any]]:
+def platform_learning_status(out_dir: Path) -> dict[str, Any]:
+    path = out_dir / "reports/promotion-manager/platform-access/platform-access-audit.json"
+    if not path.exists():
+        return {
+            "status": "missing_platform_access_audit",
+            "report": "",
+            "checkLive": False,
+            "refreshCommand": f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+        }
+    try:
+        report = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "invalid_platform_access_audit",
+            "report": str(path),
+            "checkLive": False,
+            "refreshCommand": f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+        }
+    freshness = report.get("learningFreshness") if isinstance(report.get("learningFreshness"), dict) else {}
+    doc_summary = report.get("officialDocSummary") if isinstance(report.get("officialDocSummary"), dict) else {}
+    return {
+        "status": freshness.get("status") or ("fresh_live_checked" if report.get("checkLive") else "stale_not_live_checked"),
+        "report": str(path),
+        "checkLive": bool(report.get("checkLive")),
+        "checkedAt": freshness.get("checkedAt") or doc_summary.get("checkedAt", []),
+        "totalDocs": int_value(freshness.get("totalDocs") or doc_summary.get("totalDocs")),
+        "reachableDocs": int_value(freshness.get("reachableDocs") or doc_summary.get("reachableDocs")),
+        "missingDocCapabilities": int_value(freshness.get("missingDocCapabilities") or doc_summary.get("missingDocCapabilities")),
+        "failedDocs": (
+            int_value(freshness.get("failedDocs"))
+            if "failedDocs" in freshness
+            else int_value(doc_summary.get("unreachableDocs")) + int_value(doc_summary.get("httpErrorDocs"))
+        ),
+        "refreshCommand": freshness.get("refreshCommand") or f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+    }
+
+
+def next_actions(
+    installed: dict[str, Any],
+    runtime_gaps: list[dict[str, str]],
+    platform_learning: dict[str, Any],
+    out_dir: Path,
+) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if runtime_gaps:
         actions.append(
@@ -445,14 +489,18 @@ def next_actions(installed: dict[str, Any], runtime_gaps: list[dict[str, str]], 
                 "command": installed["syncCommand"],
             }
         )
-    actions.append(
-        {
-            "priority": 3,
-            "area": "learning_loop",
-            "action": "Refresh official platform access docs before adding or changing direct publishing executors.",
-            "command": f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
-        }
-    )
+    if platform_learning.get("status") != "fresh_live_checked":
+        action = "Refresh official platform access docs before adding or changing direct publishing executors."
+        if platform_learning.get("status") == "partial_missing_official_doc_sources":
+            action = "Add verified official doc sources for missing platform capabilities, or keep those capabilities manual/browser-assisted."
+        actions.append(
+            {
+                "priority": 3,
+                "area": "learning_loop",
+                "action": action,
+                "command": platform_learning.get("refreshCommand") or f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+            }
+        )
     return actions
 
 
@@ -501,6 +549,13 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- Requested: {sync['requested']}")
     lines.append(f"- Status: `{sync['status']}`")
     lines.append(f"- Approval required: `{sync['approvalRequired']}`")
+    learning = report.get("platformLearning", {})
+    lines.extend(["", "## Platform Learning"])
+    lines.append(f"- Status: `{learning.get('status', '')}`")
+    lines.append(f"- Live checked: {learning.get('checkLive', False)}")
+    if learning.get("report"):
+        lines.append(f"- Report: {learning['report']}")
+    lines.append(f"- Refresh command: `{learning.get('refreshCommand', '')}`")
     lines.extend(["", "## Next Actions"])
     for action in report["nextActions"]:
         lines.append(f"- P{action['priority']} {action['area']}: {action['action']}")
@@ -531,6 +586,13 @@ def tail(value: str, limit: int = 1200) -> str:
     if len(text) <= limit:
         return text
     return text[-limit:]
+
+
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 if __name__ == "__main__":

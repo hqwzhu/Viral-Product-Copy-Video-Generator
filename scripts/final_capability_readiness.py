@@ -106,6 +106,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
 def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any]) -> dict[str, Any]:
     final_run = sources["finalRun"]
     final_audit = sources["finalAudit"]
+    platform_access = sources["platformAccess"]
     self_evolution = sources["selfEvolution"]
     readiness = sources["publishReadiness"]
     setup = sources["publishSetup"]
@@ -116,9 +117,9 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         publish_row(final_run, final_audit, readiness, setup),
         metrics_row(final_run, final_audit),
         optimization_row(final_run, final_audit),
-        self_evolution_row(self_evolution, final_audit),
+        self_evolution_row(self_evolution, final_audit, platform_access),
     ]
-    action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, self_evolution)
+    action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, self_evolution, platform_access)
     summary = summarize(rows, action_queue)
     return {
         "generatedAt": TODAY,
@@ -318,12 +319,19 @@ def optimization_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> 
     return row("next_round_optimization", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], audit_item.get("limits") or [])
 
 
-def self_evolution_row(self_evolution: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
+def self_evolution_row(
+    self_evolution: dict[str, Any],
+    final_audit: dict[str, Any],
+    platform_access: dict[str, Any],
+) -> dict[str, Any]:
     audit_item = requirement(final_audit, "fully_autonomous_self_evolution")
     installed = self_evolution.get("installedSkill") if isinstance(self_evolution.get("installedSkill"), dict) else {}
+    learning = platform_learning_metrics(self_evolution, platform_access)
     missing = list(audit_item.get("missing") or [])
     if installed.get("status") == "drift_detected":
         missing.append("installed Codex Skill is drifted from the reviewed repository")
+    if learning["status"] != "fresh_live_checked":
+        missing.append(platform_learning_missing_message(learning["status"]))
     status = audit_item.get("status") or self_evolution.get("status") or "unknown"
     return row(
         "controlled_self_evolution",
@@ -335,6 +343,11 @@ def self_evolution_row(self_evolution: dict[str, Any], final_audit: dict[str, An
             "installedSkillStatus": installed.get("status", ""),
             "syncCommand": installed.get("syncCommand", ""),
             "repositoryClean": bool((self_evolution.get("repository") or {}).get("clean")),
+            "platformLearningStatus": learning["status"],
+            "platformLearningLiveChecked": learning["checkLive"],
+            "platformLearningReachableDocs": learning["reachableDocs"],
+            "platformLearningMissingDocCapabilities": learning["missingDocCapabilities"],
+            "platformLearningRefreshCommand": learning["refreshCommand"],
         },
     )
 
@@ -370,6 +383,7 @@ def build_action_queue(
     readiness_reports: list[dict[str, Any]],
     setup_reports: list[dict[str, Any]],
     self_evolution: dict[str, Any],
+    platform_access: dict[str, Any],
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     by_id = {item["id"]: item for item in rows}
@@ -471,6 +485,21 @@ def build_action_queue(
             )
         )
     installed = self_evolution.get("installedSkill") if isinstance(self_evolution.get("installedSkill"), dict) else {}
+    learning = platform_learning_metrics(self_evolution, platform_access)
+    if learning["status"] != "fresh_live_checked":
+        action_id = "refresh_platform_access_docs"
+        description = "Refresh official platform publishing and metrics documentation before changing direct publishing executors."
+        if learning["status"] == "partial_missing_official_doc_sources":
+            action_id = "resolve_missing_official_doc_sources"
+            description = "Add verified official doc sources for missing platform capabilities, or keep those capabilities manual/browser-assisted."
+        actions.append(
+            action(
+                79,
+                action_id,
+                description,
+                learning["refreshCommand"],
+            )
+        )
     if installed.get("status") == "drift_detected":
         actions.append(
             action(
@@ -687,6 +716,42 @@ def real_evidence_metrics(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def platform_learning_metrics(self_evolution: dict[str, Any], platform_access: dict[str, Any]) -> dict[str, Any]:
+    learning = self_evolution.get("platformLearning") if isinstance(self_evolution.get("platformLearning"), dict) else {}
+    freshness = platform_access.get("learningFreshness") if isinstance(platform_access.get("learningFreshness"), dict) else {}
+    doc_summary = platform_access.get("officialDocSummary") if isinstance(platform_access.get("officialDocSummary"), dict) else {}
+    status = (
+        str(learning.get("status") or freshness.get("status") or "")
+        or ("fresh_live_checked" if platform_access.get("checkLive") else "missing_platform_access_audit")
+    )
+    check_live = bool(learning.get("checkLive") or freshness.get("checkLive") or platform_access.get("checkLive"))
+    return {
+        "status": status,
+        "checkLive": check_live,
+        "reachableDocs": int_value(learning.get("reachableDocs") or freshness.get("reachableDocs") or doc_summary.get("reachableDocs")),
+        "missingDocCapabilities": int_value(
+            learning.get("missingDocCapabilities")
+            or freshness.get("missingDocCapabilities")
+            or doc_summary.get("missingDocCapabilities")
+        ),
+        "refreshCommand": str(
+            learning.get("refreshCommand")
+            or freshness.get("refreshCommand")
+            or "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\""
+        ),
+    }
+
+
+def platform_learning_missing_message(status: str) -> str:
+    if status == "partial_missing_official_doc_sources":
+        return "some platform capabilities have no verified official doc source"
+    if status == "partial_live_check_failed":
+        return "some official platform documentation live checks failed"
+    if status in {"stale_not_live_checked", "missing_platform_access_audit", "invalid_platform_access_audit"}:
+        return "official platform access docs are not freshly live-checked"
+    return "official platform access learning evidence is incomplete"
+
+
 def first_existing(values: list[Any]) -> Path | None:
     for value in values:
         if not value:
@@ -788,6 +853,14 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"comments={metrics.get('commentsEvidenceRecords', 0)}, "
                 f"orders={metrics.get('ordersEvidenceRecords', 0)}, "
                 f"revenue={metrics.get('revenueEvidenceRecords', 0)}"
+            )
+        if item["id"] == "controlled_self_evolution" and item.get("metrics"):
+            metrics = item["metrics"]
+            lines.append(
+                "  Platform learning: "
+                f"status={metrics.get('platformLearningStatus', '')}, "
+                f"liveChecked={metrics.get('platformLearningLiveChecked', False)}, "
+                f"reachableDocs={metrics.get('platformLearningReachableDocs', 0)}"
             )
     lines.extend(["", "## Action Queue"])
     for item in report["actionQueue"]:

@@ -190,7 +190,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `status`: `full_ready`, `partial_ready`, `partial_ready_waiting_external_evidence`, or `partial_ready_blocked_by_platform_or_safety_limits`
 - `sourceReports`: final-run, final-audit, platform-access, self-evolution, publish-readiness, and publish-setup report paths used as evidence
 - `summary`: requirement count, satisfied count, blocked/waiting count, partial count, action count, and approval-gated action count
-- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, and revenue, with statuses such as `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`.
+- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, and revenue, with statuses such as `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`. Controlled self-evolution reports installed Skill drift plus platform-learning freshness from the latest platform-access audit.
 - `platformMatrix`: per-platform search, publish, metrics, and publish-readiness status merged from the final audit and publish-readiness reports
 - `externalGates[]`: requirements still blocked by credentials, app review, manual/browser-assisted publishing, real data, or Skill sync approval
 - `actionQueue[]`: prioritized next commands, with `approvalRequired` set for gated actions such as `I_APPROVE_PUBLISH` or `I_APPROVE_SKILL_SYNC`
@@ -428,6 +428,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `status`: `full_official_access_ready`, `partial_ready_credentials_required`, `partial_ready_official_paths_mapped`, or `partial_ready_official_doc_verification_failed`
 - `checkLive`: whether official documentation URLs were fetched during the run
 - `officialDocSummary`: total official docs, reachable docs, missing-doc capability count, unchecked docs, and capability evidence status counts
+- `learningFreshness`: whether official platform docs were freshly live-checked, stale/not live-checked, partially missing, or failed; includes checked timestamps, doc counts, and the refresh command
 - `platforms[]`: one access record per requested platform
 - `platforms[].publish`: official API, official app-review candidate, or manual/browser-assisted publishing access mode
 - `platforms[].metrics`: official API, public API, official export, manual export, or structured-snapshot metric access mode
@@ -601,6 +602,7 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 - `runtimeGaps[]`: missing tools and their impact on product intake, browser-visible research, video rendering, or reviewed upgrades
 - `safeInstallCandidates[]`: allowlisted or review-required install actions with command templates and source notes
 - `installResults[]`: sanitized result records when an allowlisted install was explicitly requested
+- `platformLearning`: latest platform-access audit learning status, including live-check freshness, reachable doc count, missing official-doc capability count, and refresh command
 - `syncInstalledSkill`: whether local reviewed files were copied into the installed Skill, the required approval phrase, copied files, and status
 - `learningAndUpgradeLoop[]`: repeatable commands for capability audit, official platform access refresh, self-evolution audit, tests, compile checks, and sensitive scan
 - `selfUpgradePolicy`: what the Skill can do autonomously, what needs approval, and what is not allowed

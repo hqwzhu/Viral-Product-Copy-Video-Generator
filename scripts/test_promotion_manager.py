@@ -4642,6 +4642,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("installedSkill", report)
         self.assertIn("repository", report)
         self.assertTrue(any(item["id"] == "playwright_chromium" for item in report["safeInstallCandidates"]))
+        self.assertEqual(report["platformLearning"]["status"], "missing_platform_access_audit")
+        self.assertTrue(any(item["area"] == "learning_loop" for item in report["nextActions"]))
         self.assertEqual(report["syncInstalledSkill"]["status"], "not_requested")
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
 
@@ -4878,6 +4880,24 @@ Prompt templates for product copy, SEO content, and video scripts.
             ),
             encoding="utf-8",
         )
+        platform_access_dir = out_dir / "reports/promotion-manager/platform-access"
+        platform_access_dir.mkdir(parents=True)
+        (platform_access_dir / "platform-access-audit.json").write_text(
+            json.dumps(
+                {
+                    "checkLive": False,
+                    "learningFreshness": {
+                        "status": "stale_not_live_checked",
+                        "checkLive": False,
+                        "reachableDocs": 0,
+                        "missingDocCapabilities": 2,
+                        "refreshCommand": "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\"",
+                    },
+                    "officialDocSummary": {"reachableDocs": 0, "missingDocCapabilities": 2},
+                }
+            ),
+            encoding="utf-8",
+        )
         readiness_dir = out_dir / "product-batch-runs/ai-prompt-kit/reports/promotion-manager/publish-readiness"
         readiness_dir.mkdir(parents=True)
         (readiness_dir / "publish-readiness.json").write_text(
@@ -4932,7 +4952,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_requirement["copy_and_real_video_generation"]["status"], "partial_ready")
         self.assertEqual(by_requirement["real_metrics_comments_orders_revenue"]["status"], "waiting_real_data")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["installedSkillStatus"], "drift_detected")
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["platformLearningStatus"], "stale_not_live_checked")
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
@@ -5090,6 +5112,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("publish_executor.py", by_platform["douyin"]["publish"]["implementedBy"])
         self.assertFalse(by_platform["douyin"]["publish"]["readyForAutomation"])
         self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
+        self.assertEqual(report["learningFreshness"]["status"], "stale_not_live_checked")
         self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
 
@@ -5114,6 +5137,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(summary["reachableDocs"], 2)
         self.assertEqual(summary["missingDocCapabilities"], 2)
         self.assertIn("all_reachable", summary["capabilityEvidenceStatus"])
+        self.assertEqual(module.learning_freshness(True, module.official_doc_summary([youtube]))["status"], "fresh_live_checked")
+        self.assertEqual(module.learning_freshness(False, summary)["status"], "stale_not_live_checked")
         gaps = module.implementation_gaps(records)
         self.assertTrue(any(item["gap"] == "official_doc_evidence_missing" for item in gaps))
 

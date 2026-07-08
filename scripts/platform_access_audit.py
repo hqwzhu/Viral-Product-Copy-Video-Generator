@@ -210,13 +210,15 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     platforms = select_platforms(args.platforms)
     records = [platform_record(platform, args.check_live) for platform in platforms]
+    doc_summary = official_doc_summary(records)
     report = {
         "generatedAt": TODAY,
         "status": overall_status(records),
         "checkLive": bool(args.check_live),
         "platforms": records,
         "summary": summary(records),
-        "officialDocSummary": official_doc_summary(records),
+        "officialDocSummary": doc_summary,
+        "learningFreshness": learning_freshness(args.check_live, doc_summary),
         "implementationGaps": implementation_gaps(records),
         "guardrails": [
             "Use official APIs only for automated writes.",
@@ -418,6 +420,33 @@ def official_doc_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def learning_freshness(check_live: bool, doc_summary: dict[str, Any]) -> dict[str, Any]:
+    missing = int(doc_summary.get("missingDocCapabilities") or 0)
+    total = int(doc_summary.get("totalDocs") or 0)
+    reachable = int(doc_summary.get("reachableDocs") or 0)
+    failed = int(doc_summary.get("unreachableDocs") or 0) + int(doc_summary.get("httpErrorDocs") or 0)
+    if not check_live:
+        status = "stale_not_live_checked"
+    elif failed:
+        status = "partial_live_check_failed"
+    elif missing:
+        status = "partial_missing_official_doc_sources"
+    elif total and reachable == total:
+        status = "fresh_live_checked"
+    else:
+        status = "partial_no_reachable_docs"
+    return {
+        "status": status,
+        "checkLive": bool(check_live),
+        "checkedAt": doc_summary.get("checkedAt", []),
+        "totalDocs": total,
+        "reachableDocs": reachable,
+        "missingDocCapabilities": missing,
+        "failedDocs": failed,
+        "refreshCommand": "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\"",
+    }
+
+
 def implementation_gaps(records: list[dict[str, Any]]) -> list[dict[str, str]]:
     gaps: list[dict[str, str]] = []
     for record in records:
@@ -479,6 +508,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Generated: {report['generatedAt']}",
         f"- Status: `{report['status']}`",
         f"- Live doc check: {report['checkLive']}",
+        f"- Learning freshness: `{report.get('learningFreshness', {}).get('status', '')}`",
         "",
         "## Platforms",
     ]
