@@ -40,6 +40,7 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 
 `scripts/platform_access_audit.py` creates the official access boundary report before implementation or execution decisions. It maps each platform to implemented official API paths, official app-review candidates, manual/browser-assisted fallbacks, metrics evidence sources, required environment variable names, and implementation gaps. Use `--check-live` only when you want to verify that official documentation URLs are reachable.
 When `--check-live` is used, the report records `officialDocEvidenceStatus`, live HTTP status, final URL, content type, UTC check time, and `officialDocSummary`. A reachable official documentation page is evidence that the documented path exists; it is not evidence that the current account has approved scopes, quota, app review, or publish permission.
+The report also includes `officialDocGapResearch` for missing or limited capabilities. Candidate official sources in that section are research leads and fallback justification only; they are not treated as verified direct-publish or analytics APIs unless the capability has a specific `officialDocs` entry for the documented path.
 
 `scripts/publish_executor.py` supports:
 

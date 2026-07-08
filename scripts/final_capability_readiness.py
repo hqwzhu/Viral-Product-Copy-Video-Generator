@@ -332,6 +332,10 @@ def self_evolution_row(
         missing.append("installed Codex Skill is drifted from the reviewed repository")
     if learning["status"] != "fresh_live_checked":
         missing.append(platform_learning_missing_message(learning["status"]))
+    if learning["officialDocGapResearchStatus"] == "missing_official_doc_gap_research":
+        missing.append("official platform doc gap research artifact is missing")
+    elif learning["officialDocGapResearchMissingCapabilities"] > 0:
+        missing.append("official platform doc gap research still has unresolved missing capabilities")
     status = audit_item.get("status") or self_evolution.get("status") or "unknown"
     return row(
         "controlled_self_evolution",
@@ -348,6 +352,10 @@ def self_evolution_row(
             "platformLearningReachableDocs": learning["reachableDocs"],
             "platformLearningMissingDocCapabilities": learning["missingDocCapabilities"],
             "platformLearningRefreshCommand": learning["refreshCommand"],
+            "officialDocGapResearchStatus": learning["officialDocGapResearchStatus"],
+            "officialDocGapResearchRecords": learning["officialDocGapResearchRecords"],
+            "officialDocGapResearchMissingCapabilities": learning["officialDocGapResearchMissingCapabilities"],
+            "officialDocGapResearchManualFallbacks": learning["officialDocGapResearchManualFallbacks"],
         },
     )
 
@@ -720,6 +728,8 @@ def platform_learning_metrics(self_evolution: dict[str, Any], platform_access: d
     learning = self_evolution.get("platformLearning") if isinstance(self_evolution.get("platformLearning"), dict) else {}
     freshness = platform_access.get("learningFreshness") if isinstance(platform_access.get("learningFreshness"), dict) else {}
     doc_summary = platform_access.get("officialDocSummary") if isinstance(platform_access.get("officialDocSummary"), dict) else {}
+    gap_research = platform_access.get("officialDocGapResearch") if isinstance(platform_access.get("officialDocGapResearch"), dict) else {}
+    gap_summary = gap_research.get("summary") if isinstance(gap_research.get("summary"), dict) else {}
     status = (
         str(learning.get("status") or freshness.get("status") or "")
         or ("fresh_live_checked" if platform_access.get("checkLive") else "missing_platform_access_audit")
@@ -739,6 +749,10 @@ def platform_learning_metrics(self_evolution: dict[str, Any], platform_access: d
             or freshness.get("refreshCommand")
             or "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\""
         ),
+        "officialDocGapResearchStatus": str(gap_research.get("status") or "missing_official_doc_gap_research"),
+        "officialDocGapResearchRecords": int_value(gap_summary.get("records")),
+        "officialDocGapResearchMissingCapabilities": int_value(gap_summary.get("missingOfficialDocCapabilities")),
+        "officialDocGapResearchManualFallbacks": int_value(gap_summary.get("manualOrBrowserFallbacks")),
     }
 
 
@@ -860,7 +874,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "  Platform learning: "
                 f"status={metrics.get('platformLearningStatus', '')}, "
                 f"liveChecked={metrics.get('platformLearningLiveChecked', False)}, "
-                f"reachableDocs={metrics.get('platformLearningReachableDocs', 0)}"
+                f"reachableDocs={metrics.get('platformLearningReachableDocs', 0)}, "
+                f"gapResearch={metrics.get('officialDocGapResearchStatus', '')}, "
+                f"gapRecords={metrics.get('officialDocGapResearchRecords', 0)}"
             )
     lines.extend(["", "## Action Queue"])
     for item in report["actionQueue"]:

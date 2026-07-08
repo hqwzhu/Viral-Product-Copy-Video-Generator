@@ -59,7 +59,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` converts readiness into credential names, target gaps, official setup references, approval gates, and next commands
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads, browser form-fill commands, and registers supplied real published URLs
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from a prepared payload and stops before final publish
-- `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
+- `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, manual/browser-assisted access boundaries, and official documentation gap research
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` extracts a real platform URL from post-publish browser-visible evidence
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence
 - `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, `post-publish-metrics-export.json`, and `post-publish-metrics-snapshot.json` when `scripts/post_publish_metrics_capture.py` captures public/browser-visible metrics from registered published URLs
@@ -190,7 +190,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `status`: `full_ready`, `partial_ready`, `partial_ready_waiting_external_evidence`, or `partial_ready_blocked_by_platform_or_safety_limits`
 - `sourceReports`: final-run, final-audit, platform-access, self-evolution, publish-readiness, and publish-setup report paths used as evidence
 - `summary`: requirement count, satisfied count, blocked/waiting count, partial count, action count, and approval-gated action count
-- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, and revenue, with statuses such as `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`. Controlled self-evolution reports installed Skill drift plus platform-learning freshness from the latest platform-access audit.
+- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, and revenue, with statuses such as `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`. Controlled self-evolution reports installed Skill drift, platform-learning freshness, and official documentation gap-research status from the latest platform-access audit.
 - `platformMatrix`: per-platform search, publish, metrics, and publish-readiness status merged from the final audit and publish-readiness reports
 - `externalGates[]`: requirements still blocked by credentials, app review, manual/browser-assisted publishing, real data, or Skill sync approval
 - `actionQueue[]`: prioritized next commands, with `approvalRequired` set for gated actions such as `I_APPROVE_PUBLISH` or `I_APPROVE_SKILL_SYNC`
@@ -429,6 +429,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `checkLive`: whether official documentation URLs were fetched during the run
 - `officialDocSummary`: total official docs, reachable docs, missing-doc capability count, unchecked docs, and capability evidence status counts
 - `learningFreshness`: whether official platform docs were freshly live-checked, stale/not live-checked, partially missing, or failed; includes checked timestamps, doc counts, and the refresh command
+- `officialDocGapResearch`: unresolved missing official-doc capabilities, candidate official sources checked or listed, safe manual/browser/export fallbacks, next actions, and prohibited workarounds for capabilities that cannot be safely automated yet
 - `platforms[]`: one access record per requested platform
 - `platforms[].publish`: official API, official app-review candidate, or manual/browser-assisted publishing access mode
 - `platforms[].metrics`: official API, public API, official export, manual export, or structured-snapshot metric access mode
@@ -437,7 +438,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `platforms[].officialDocs[].liveCheck`: optional live documentation check with status, HTTP status, final URL, content type, and UTC check time when `--check-live` is used
 - `platforms[].publish.officialDocEvidenceStatus` and `platforms[].metrics.officialDocEvidenceStatus`: `missing_official_docs`, `configured_not_live_checked`, `all_reachable`, `partially_reachable`, or `unreachable`
 - `platforms[].automationLevel`: `official_publish_and_metrics_ready`, `official_publish_ready_when_credentials_present`, `official_app_integration_required`, or `manual_or_browser_assisted_required`
-- `implementationGaps[]`: missing official executors, missing verified creator publish APIs, or metric evidence requirements
+- `implementationGaps[]`: missing official executors, missing verified creator publish APIs, missing official documentation evidence, or metric evidence requirements
 - `guardrails`: no private endpoints, no hidden tokens, no captcha bypass, and no fully automated claim without official access
 
 ## Published Items

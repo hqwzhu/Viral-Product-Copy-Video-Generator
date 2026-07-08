@@ -4894,6 +4894,23 @@ Prompt templates for product copy, SEO content, and video scripts.
                         "refreshCommand": "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\"",
                     },
                     "officialDocSummary": {"reachableDocs": 0, "missingDocCapabilities": 2},
+                    "officialDocGapResearch": {
+                        "status": "unresolved_missing_official_docs",
+                        "summary": {
+                            "records": 2,
+                            "missingOfficialDocCapabilities": 2,
+                            "manualOrBrowserFallbacks": 2,
+                            "officialAppOrExecutorGaps": 0,
+                        },
+                        "records": [
+                            {
+                                "platform": "zhihu",
+                                "area": "publish",
+                                "safeFallback": "manual_or_browser_assisted_publish",
+                                "finding": "No verified official public creator article publishing endpoint is configured.",
+                            }
+                        ],
+                    },
                 }
             ),
             encoding="utf-8",
@@ -4953,6 +4970,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_requirement["real_metrics_comments_orders_revenue"]["status"], "waiting_real_data")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["installedSkillStatus"], "drift_detected")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["platformLearningStatus"], "stale_not_live_checked")
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchStatus"], "unresolved_missing_official_docs")
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchRecords"], 2)
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchMissingCapabilities"], 2)
+        self.assertIn(
+            "official platform doc gap research still has unresolved missing capabilities",
+            by_requirement["controlled_self_evolution"]["missing"],
+        )
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
@@ -5114,6 +5138,15 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
         self.assertEqual(report["learningFreshness"]["status"], "stale_not_live_checked")
         self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
+        gap_research = report["officialDocGapResearch"]
+        self.assertEqual(gap_research["status"], "unresolved_missing_official_docs")
+        self.assertGreaterEqual(gap_research["summary"]["records"], 1)
+        zhihu_research = [
+            item for item in gap_research["records"] if item["platform"] == "zhihu" and item["area"] == "publish"
+        ]
+        self.assertTrue(zhihu_research)
+        self.assertEqual(zhihu_research[0]["safeFallback"], "manual_or_browser_assisted_publish")
+        self.assertTrue(zhihu_research[0]["searchedOfficialSources"])
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
 
     def test_platform_access_audit_summarizes_live_official_doc_evidence(self) -> None:
@@ -5141,6 +5174,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(module.learning_freshness(False, summary)["status"], "stale_not_live_checked")
         gaps = module.implementation_gaps(records)
         self.assertTrue(any(item["gap"] == "official_doc_evidence_missing" for item in gaps))
+        gap_research = module.official_doc_gap_research(records, True)
+        self.assertEqual(gap_research["status"], "unresolved_missing_official_docs")
+        self.assertEqual(gap_research["summary"]["missingOfficialDocCapabilities"], 2)
+        zhihu_publish = [
+            item for item in gap_research["records"] if item["platform"] == "zhihu" and item["area"] == "publish"
+        ][0]
+        self.assertEqual(zhihu_publish["safeFallback"], "manual_or_browser_assisted_publish")
+        self.assertEqual(zhihu_publish["searchedOfficialSources"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
 
     def test_viral_discovery_runner_builds_multiplatform_library_and_creator_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-runner-test-"))

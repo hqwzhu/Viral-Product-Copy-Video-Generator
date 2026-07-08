@@ -204,6 +204,135 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
 }
 
 
+OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
+    "zhihu": {
+        "publish": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Zhihu developer portal",
+                    "url": "https://developer.zhihu.com/",
+                    "purpose": "Candidate official developer entry; not configured as verified creator article publishing documentation.",
+                },
+                {
+                    "title": "Zhihu creator entry",
+                    "url": "https://www.zhihu.com/creator",
+                    "purpose": "User-visible creator entry for manual/browser-assisted publishing, not an automation API.",
+                },
+            ],
+            "searchedTerms": [
+                "Zhihu developer API article publish",
+                "Zhihu creator publishing API",
+                "Zhihu Open Platform article API",
+            ],
+            "finding": "No verified official public creator article publishing endpoint is configured for automated writes.",
+            "safeFallback": "manual_or_browser_assisted_publish",
+        },
+        "metrics": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Zhihu developer portal",
+                    "url": "https://developer.zhihu.com/",
+                    "purpose": "Candidate official developer entry; not configured as verified creator analytics documentation.",
+                },
+                {
+                    "title": "Zhihu creator entry",
+                    "url": "https://www.zhihu.com/creator",
+                    "purpose": "User-visible creator entry for manual analytics export or browser-visible evidence.",
+                },
+            ],
+            "searchedTerms": [
+                "Zhihu creator analytics API",
+                "Zhihu answer article statistics API",
+                "Zhihu Open Platform metrics API",
+            ],
+            "finding": "No verified official public creator analytics endpoint is configured for automated recovery.",
+            "safeFallback": "manual_export_or_structured_snapshot",
+        },
+    },
+    "xiaohongshu": {
+        "publish": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Xiaohongshu Open Platform API index",
+                    "url": "https://open.xiaohongshu.com/document/api",
+                    "purpose": "Configured official API index; no creator note publishing executor is verified in this Skill.",
+                }
+            ],
+            "searchedTerms": [
+                "Xiaohongshu creator note publishing API",
+                "Xiaohongshu Open Platform note publish",
+            ],
+            "finding": "Open-platform documentation is reachable, but a stable public creator note publishing executor is not verified.",
+            "safeFallback": "manual_or_browser_assisted_publish",
+        },
+        "metrics": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Xiaohongshu Open Platform API index",
+                    "url": "https://open.xiaohongshu.com/document/api",
+                    "purpose": "Configured official API index; account analytics still require approved access, export, or visible evidence.",
+                }
+            ],
+            "searchedTerms": [
+                "Xiaohongshu creator analytics API",
+                "Xiaohongshu note metrics export",
+            ],
+            "finding": "Metric recovery stays limited to exports, screenshots, public pages, or structured browser snapshots.",
+            "safeFallback": "manual_export_or_structured_snapshot",
+        },
+    },
+    "douyin": {
+        "metrics": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Douyin Open Platform docs",
+                    "url": "https://open.douyin.com/platform/doc",
+                    "purpose": "Configured official documentation entry; analytics require approved access or export evidence.",
+                }
+            ],
+            "searchedTerms": [
+                "Douyin Open Platform video data API",
+                "Douyin creator analytics export",
+            ],
+            "finding": "Publishing has an official executor path, but metrics recovery still requires approved official access, export, or visible evidence.",
+            "safeFallback": "official_export_or_structured_snapshot",
+        }
+    },
+    "tiktok": {
+        "publish": {
+            "searchedOfficialSources": [
+                {
+                    "title": "TikTok Content Posting API",
+                    "url": "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+                    "purpose": "Configured official direct-post documentation; executor integration is not bundled.",
+                }
+            ],
+            "searchedTerms": [
+                "TikTok Content Posting API direct post",
+                "TikTok video.publish scope",
+            ],
+            "finding": "Official app path exists, but no reviewed direct-post executor is integrated in this Skill.",
+            "safeFallback": "official_app_integration_or_browser_assisted_publish",
+        },
+        "metrics": {
+            "searchedOfficialSources": [
+                {
+                    "title": "TikTok Research API overview",
+                    "url": "https://developers.tiktok.com/doc/research-api-specs-query-videos/",
+                    "purpose": "Configured official documentation entry; creator analytics require approved access or export evidence.",
+                }
+            ],
+            "searchedTerms": [
+                "TikTok creator analytics API",
+                "TikTok video metrics export",
+            ],
+            "finding": "Metric recovery stays limited to approved official access, exports, screenshots, or structured browser snapshots.",
+            "safeFallback": "official_export_or_structured_snapshot",
+        },
+    },
+}
+
+
 def main() -> None:
     args = parse_args()
     out_dir = Path(args.out_dir)
@@ -219,6 +348,7 @@ def main() -> None:
         "summary": summary(records),
         "officialDocSummary": doc_summary,
         "learningFreshness": learning_freshness(args.check_live, doc_summary),
+        "officialDocGapResearch": official_doc_gap_research(records, args.check_live),
         "implementationGaps": implementation_gaps(records),
         "guardrails": [
             "Use official APIs only for automated writes.",
@@ -470,6 +600,132 @@ def implementation_gaps(records: list[dict[str, Any]]) -> list[dict[str, str]]:
     return gaps
 
 
+def official_doc_gap_research(records: list[dict[str, Any]], check_live: bool) -> dict[str, Any]:
+    live_cache: dict[str, dict[str, Any]] = {}
+    items: list[dict[str, Any]] = []
+    for record in records:
+        for area in ["publish", "metrics"]:
+            capability = record[area]
+            if not needs_gap_research(capability):
+                continue
+            items.append(gap_research_record(record, area, capability, check_live, live_cache))
+    missing_docs = sum(1 for item in items if item["docEvidenceStatus"] == "missing_official_docs")
+    manual_fallbacks = sum(
+        1
+        for item in items
+        if item["safeFallback"] in {"manual_or_browser_assisted_publish", "manual_export_or_structured_snapshot"}
+    )
+    official_app_gaps = sum(1 for item in items if item["access"] == "official_candidate_not_integrated")
+    if missing_docs:
+        status = "unresolved_missing_official_docs"
+    elif official_app_gaps:
+        status = "official_app_or_executor_gaps_documented"
+    elif items:
+        status = "manual_or_evidence_fallbacks_documented"
+    else:
+        status = "no_gap_research_required"
+    return {
+        "status": status,
+        "checkLive": bool(check_live),
+        "summary": {
+            "records": len(items),
+            "missingOfficialDocCapabilities": missing_docs,
+            "manualOrBrowserFallbacks": manual_fallbacks,
+            "officialAppOrExecutorGaps": official_app_gaps,
+        },
+        "records": items,
+        "guardrails": [
+            "A candidate source is not treated as a verified official API unless the capability officialDocs entry names a specific documented path.",
+            "Missing official documentation keeps the capability manual/browser-assisted or export/snapshot based.",
+            "Do not use private endpoints, hidden browser tokens, cookies, or captcha/login bypass as a substitute for official access.",
+        ],
+    }
+
+
+def needs_gap_research(capability: dict[str, Any]) -> bool:
+    access = str(capability.get("access") or "")
+    return (
+        capability.get("officialDocEvidenceStatus") == "missing_official_docs"
+        or access
+        in {
+            "no_verified_public_creator_publish_endpoint",
+            "official_candidate_not_integrated",
+            "manual_export_or_structured_snapshot_required",
+            "official_or_manual_export_required",
+        }
+    )
+
+
+def gap_research_record(
+    platform_record_value: dict[str, Any],
+    area: str,
+    capability: dict[str, Any],
+    check_live: bool,
+    live_cache: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    platform = str(platform_record_value["platform"])
+    configured = OFFICIAL_GAP_RESEARCH.get(platform, {}).get(area, {})
+    sources = [dict(item) for item in configured.get("searchedOfficialSources", [])]
+    if check_live:
+        for source in sources:
+            url = str(source.get("url") or "")
+            if not url:
+                continue
+            if url not in live_cache:
+                live_cache[url] = check_url(url)
+            source["liveCheck"] = dict(live_cache[url])
+    doc_status = str(capability.get("officialDocEvidenceStatus") or "")
+    access = str(capability.get("access") or "")
+    return {
+        "platform": platform,
+        "label": platform_record_value.get("label", platform),
+        "area": area,
+        "access": access,
+        "mode": capability.get("mode", ""),
+        "docEvidenceStatus": doc_status,
+        "finding": configured.get("finding") or default_gap_finding(access, doc_status),
+        "safeFallback": configured.get("safeFallback") or default_gap_fallback(area, access),
+        "searchedTerms": configured.get("searchedTerms", []),
+        "searchedOfficialSources": sources,
+        "nextAction": gap_research_next_action(area, access, doc_status),
+        "prohibitedWorkarounds": [
+            "private endpoints",
+            "cookie or hidden-token extraction",
+            "automatic login",
+            "captcha or risk-control bypass",
+            "claiming full automation without real official execution evidence",
+        ],
+    }
+
+
+def default_gap_finding(access: str, doc_status: str) -> str:
+    if doc_status == "missing_official_docs":
+        return "No verified official documentation source is configured for this capability."
+    if access == "official_candidate_not_integrated":
+        return "Official app documentation is configured, but no reviewed executor is integrated."
+    if access == "no_verified_public_creator_publish_endpoint":
+        return "No verified public creator publishing endpoint is integrated."
+    return "Capability requires official export, user export, public page evidence, or structured browser-visible evidence."
+
+
+def default_gap_fallback(area: str, access: str) -> str:
+    if access == "official_candidate_not_integrated":
+        return "official_app_integration_required"
+    if area == "publish":
+        return "manual_or_browser_assisted_publish"
+    return "manual_export_or_structured_snapshot"
+
+
+def gap_research_next_action(area: str, access: str, doc_status: str) -> str:
+    if doc_status == "missing_official_docs":
+        return "Add a specific verified official documentation URL for this capability, or keep the capability on the safe fallback path."
+    if access == "official_candidate_not_integrated":
+        return "Implement and review an official executor only after app approval, scopes, and authorization are available."
+    if area == "publish":
+        return "Prepare browser-assisted/manual publish payloads and register the real URL after the user publishes."
+    return "Recover only from official exports, screenshots, public pages, business exports, or structured browser-visible snapshots."
+
+
 def check_url(url: str) -> dict[str, Any]:
     request = urllib.request.Request(url, headers={"User-Agent": "CodexSkillPlatformAccessAudit/1.0"})
     checked_at = live_timestamp()
@@ -544,6 +800,30 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(["", "## Implementation Gaps"])
         for gap in report["implementationGaps"]:
             lines.append(f"- {gap['platform']} {gap['area']}: `{gap['gap']}`")
+    gap_research = report.get("officialDocGapResearch") if isinstance(report.get("officialDocGapResearch"), dict) else {}
+    if gap_research:
+        summary = gap_research.get("summary") if isinstance(gap_research.get("summary"), dict) else {}
+        lines.extend(
+            [
+                "",
+                "## Official Doc Gap Research",
+                f"- Status: `{gap_research.get('status', '')}`",
+                f"- Records: {summary.get('records', 0)}",
+                f"- Missing official-doc capabilities: {summary.get('missingOfficialDocCapabilities', 0)}",
+                f"- Manual/browser fallbacks: {summary.get('manualOrBrowserFallbacks', 0)}",
+            ]
+        )
+        for item in gap_research.get("records", []):
+            lines.append(
+                f"- {item['platform']} {item['area']}: `{item['finding']}` "
+                f"-> fallback `{item['safeFallback']}`"
+            )
+            for source in item.get("searchedOfficialSources", []):
+                suffix = ""
+                if source.get("liveCheck"):
+                    suffix = f" ({source['liveCheck']['status']})"
+                lines.append(f"  - Candidate source: {source['title']}: {source['url']}{suffix}")
+            lines.append(f"  - Next action: {item['nextAction']}")
     lines.extend(["", "## Guardrails"])
     lines.extend(f"- {item}" for item in report["guardrails"])
     return "\n".join(lines)
