@@ -1162,6 +1162,23 @@ Prompt templates for product copy, SEO content, and video scripts.
             ),
             encoding="utf-8",
         )
+        search_snapshot_root = out_dir / "search-snapshots"
+        search_snapshot_root.mkdir()
+        (search_snapshot_root / "xiaohongshu.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Xiaohongshu AI Prompt Kit Search</title></head>
+<body>
+  <article>
+    <h2>3 minute AI product promotion workflow</h2>
+    <a href="https://www.xiaohongshu.com/explore/demo-note">viral note</a>
+    <p>likes 360 saves 88 comments 41</p>
+    <p>creator: Content Growth Lab</p>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
 
         subprocess.run(
             [
@@ -1182,6 +1199,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--multi-query-dry-run",
                 "--multi-query-query-count",
                 "2",
+                "--multi-query-html-snapshot-root",
+                str(search_snapshot_root),
                 "--multi-query-run-follow-up-captures",
                 "--multi-query-sample-video-frames",
                 "--multi-query-video-sample-count",
@@ -1224,6 +1243,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--capture-browser-assisted-follow-ups", batch_command)
         self.assertIn("--multi-query-sample-video-frames", batch_command)
         self.assertIn("--multi-query-video-sample-count", batch_command)
+        self.assertIn("--multi-query-html-snapshot-root", batch_command)
+        self.assertIn(str(search_snapshot_root), batch_command)
+        batch_report = json.loads(Path(report["productBatch"]["report"]).read_text(encoding="utf-8"))
+        multi_query_command = batch_report["promotionRuns"][0]["multiQueryViralDiscovery"]["command"]
+        self.assertIn("--html-snapshot-root", multi_query_command)
+        self.assertIn(str(search_snapshot_root), multi_query_command)
         readiness_command = next(item["command"] for item in report["steps"] if item["name"].startswith("publish_readiness_"))
         self.assertIn("--execute-publish", readiness_command)
         self.assertIn("--approval", readiness_command)
@@ -6727,6 +6752,27 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertGreater(video_path.stat().st_size, 1000)
         metadata = json.loads(video_path.with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(metadata["platform"], "douyin")
+
+        relative_root = Path(tempfile.mkdtemp(prefix="video-relative-test-", dir=ROOT / "promotion-output"))
+        self.addCleanup(shutil.rmtree, relative_root, ignore_errors=True)
+        relative_video_path = Path(os.path.relpath(relative_root / "nested" / "relative-douyin.mp4", ROOT))
+        subprocess.run(
+            [
+                sys.executable,
+                str(RENDER_VIDEO),
+                "--content-json",
+                str(content_json),
+                "--platform",
+                "douyin",
+                "--out",
+                str(relative_video_path),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        absolute_relative_video_path = ROOT / relative_video_path
+        self.assertTrue(absolute_relative_video_path.exists())
+        self.assertGreater(absolute_relative_video_path.stat().st_size, 1000)
 
     def test_video_renderer_muxes_voiceover_audio_file(self) -> None:
         if shutil.which("ffmpeg") is None:

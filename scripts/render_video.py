@@ -20,7 +20,7 @@ def main() -> None:
         raise SystemExit("ffmpeg is required to render MP4 video. Install ffmpeg or run on a machine that has it in PATH.")
     content = load_content(args)
     title, segments = build_segments(content, args.platform)
-    out_path = Path(args.out)
+    out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     work_dir = out_path.parent / f"{out_path.stem}-assets"
     work_dir.mkdir(parents=True, exist_ok=True)

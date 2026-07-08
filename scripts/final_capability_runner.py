@@ -119,6 +119,7 @@ def parse_args() -> argparse.Namespace:
     discovery.add_argument("--multi-query-query-count", type=int, default=5)
     discovery.add_argument("--multi-query-platforms", default="")
     discovery.add_argument("--multi-query-top-n", type=int, default=20)
+    discovery.add_argument("--multi-query-html-snapshot-root", default="", help="Directory of Codex/browser-rendered platform search HTML snapshots for multi-query discovery.")
     discovery.add_argument("--multi-query-live-official", action="store_true")
     discovery.add_argument("--multi-query-run-creator-follow-up", action="store_true")
     discovery.add_argument("--multi-query-run-follow-up-captures", action="store_true")
@@ -261,6 +262,7 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
         command.extend(["--multi-query-query-count", str(args.multi_query_query_count), "--multi-query-top-n", str(args.multi_query_top_n)])
         append_many(command, "--multi-query-query", args.multi_query_query)
         append_if_present(command, "--multi-query-platforms", args.multi_query_platforms)
+        append_if_present(command, "--multi-query-html-snapshot-root", args.multi_query_html_snapshot_root)
         if args.multi_query_dry_run:
             command.append("--multi-query-dry-run")
         if args.multi_query_live_official:
