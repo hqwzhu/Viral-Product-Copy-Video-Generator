@@ -113,6 +113,22 @@ python scripts/product_batch_runner.py \
 
 Use `--multi-query-dry-run` for planning-only runs that write search plans and commands without opening platform pages.
 
+Add next-round optimization when every ready product should also recover real public metrics, comment evidence, and business attribution before producing the next content round:
+
+```bash
+python scripts/product_batch_runner.py \
+  --urls-file "./product-urls.txt" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-post-publish-metrics-capture \
+  --run-comment-evidence-capture \
+  --run-business-attribution \
+  --run-next-round-optimization \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+The batch report records `nextRoundOptimization` per product cycle. It may be `waiting_real_data` when no real metrics, comments, or business attribution exist.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

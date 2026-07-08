@@ -523,6 +523,118 @@ Prompt templates for product copy, SEO content, and video scripts.
         discovery_report = json.loads(Path(multi_query["report"]).read_text(encoding="utf-8"))
         self.assertEqual(discovery_report["summary"]["queries"], 2)
 
+    def test_product_batch_runner_runs_next_round_optimization_after_each_cycle(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-next-round-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content.</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>views: 4,200 likes: 360 comments: 41</p>
+    <section class="comments">
+      <p>Comment by Alice: How does pricing work? likes: 9</p>
+      <p>Bob: Need Zapier integration replies: 2</p>
+      <p>Carol: This solved our content workflow</p>
+    </section>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        published_url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        business_csv = out_dir / "orders.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "orderId,utm_source,referrer,revenue,status",
+                    f"order-1,xiaohongshu,{published_url},99.00,paid",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_BATCH_RUNNER),
+                "--url",
+                product_page.as_uri(),
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--skip-publish-queue",
+                "--published-url",
+                f"xiaohongshu={published_url}",
+                "--run-post-publish-metrics-capture",
+                "--post-publish-metrics-allow-localhost",
+                "--run-comment-evidence-capture",
+                "--comment-evidence-allow-localhost",
+                "--run-business-attribution",
+                "--business-csv",
+                str(business_csv),
+                "--run-next-round-optimization",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(report["status"], "partial_ready")
+        self.assertEqual(report["summary"]["readyPromotionRuns"], 1)
+        self.assertEqual(report["summary"]["nextRoundOptimizationRuns"], 1)
+        self.assertEqual(report["summary"]["partialReadyNextRoundOptimizationRuns"], 1)
+        run = report["promotionRuns"][0]
+        self.assertEqual(run["status"], "ready")
+        self.assertEqual(run["nextRoundOptimization"]["status"], "partial_ready")
+        self.assertTrue(Path(run["nextRoundOptimization"]["report"]).exists())
+        self.assertEqual(run["nextRoundOptimization"]["summary"]["commentCount"], 3)
+        self.assertEqual(run["nextRoundOptimization"]["summary"]["businessAttributions"], 1)
+        self.assertIn("--run-next-round-optimization", " ".join(run["command"]))
+        self.assertIn("--post-publish-metrics-allow-localhost", " ".join(run["command"]))
+        self.assertIn("--comment-evidence-allow-localhost", " ".join(run["command"]))
+
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3387,6 +3499,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(
             any(
                 item["purpose"] == "batch_product_url_cycles_with_multi_query_viral_discovery"
+                for item in report["recommendedCommands"]
+            )
+        )
+        self.assertTrue(
+            any(
+                item["purpose"] == "batch_product_url_closed_loop_with_next_round_optimization"
                 for item in report["recommendedCommands"]
             )
         )

@@ -91,12 +91,27 @@ def parse_args() -> argparse.Namespace:
     metrics = parser.add_argument_group("Metrics recovery")
     metrics.add_argument("--skip-metrics-recovery", action="store_true")
     metrics.add_argument("--published-url", action="append", default=[])
+    metrics.add_argument("--metrics-github-repo", action="append", default=[])
+    metrics.add_argument("--metrics-youtube-video-id", action="append", default=[])
     metrics.add_argument("--business-csv", action="append", default=[])
     metrics.add_argument("--business-json", action="append", default=[])
     metrics.add_argument("--business-text", action="append", default=[])
     metrics.add_argument("--run-post-publish-metrics-capture", action="store_true")
+    metrics.add_argument("--post-publish-metrics-limit", type=int, default=20)
+    metrics.add_argument("--post-publish-metrics-allow-localhost", action="store_true")
+    metrics.add_argument("--post-publish-metrics-capture-browser-assisted", action="store_true")
+    metrics.add_argument("--post-publish-metrics-install-browser-if-missing", action="store_true")
     metrics.add_argument("--run-comment-evidence-capture", action="store_true")
+    metrics.add_argument("--comment-evidence-limit", type=int, default=20)
+    metrics.add_argument("--comment-evidence-platform", default="")
+    metrics.add_argument("--comment-evidence-structured-json", default="")
+    metrics.add_argument("--comment-evidence-html-file", default="")
+    metrics.add_argument("--comment-evidence-text-file", default="")
+    metrics.add_argument("--comment-evidence-allow-localhost", action="store_true")
+    metrics.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
+    metrics.add_argument("--comment-evidence-install-browser-if-missing", action="store_true")
     metrics.add_argument("--run-business-attribution", action="store_true")
+    metrics.add_argument("--run-next-round-optimization", action="store_true")
     return parser.parse_args()
 
 
@@ -213,15 +228,37 @@ def build_cycle_command(args: argparse.Namespace, record: dict[str, Any], source
     if args.skip_metrics_recovery:
         command.append("--skip-metrics-recovery")
     append_many(command, "--published-url", args.published_url)
+    append_many(command, "--metrics-github-repo", args.metrics_github_repo)
+    append_many(command, "--metrics-youtube-video-id", args.metrics_youtube_video_id)
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--business-json", args.business_json)
     append_many(command, "--business-text", args.business_text)
     if args.run_post_publish_metrics_capture:
         command.append("--run-post-publish-metrics-capture")
+    command.extend(["--post-publish-metrics-limit", str(args.post_publish_metrics_limit)])
+    if args.post_publish_metrics_allow_localhost:
+        command.append("--post-publish-metrics-allow-localhost")
+    if args.post_publish_metrics_capture_browser_assisted:
+        command.append("--post-publish-metrics-capture-browser-assisted")
+    if args.post_publish_metrics_install_browser_if_missing:
+        command.append("--post-publish-metrics-install-browser-if-missing")
     if args.run_comment_evidence_capture:
         command.append("--run-comment-evidence-capture")
+    command.extend(["--comment-evidence-limit", str(args.comment_evidence_limit)])
+    append_if_present(command, "--comment-evidence-platform", args.comment_evidence_platform)
+    append_if_present(command, "--comment-evidence-structured-json", args.comment_evidence_structured_json)
+    append_if_present(command, "--comment-evidence-html-file", args.comment_evidence_html_file)
+    append_if_present(command, "--comment-evidence-text-file", args.comment_evidence_text_file)
+    if args.comment_evidence_allow_localhost:
+        command.append("--comment-evidence-allow-localhost")
+    if args.comment_evidence_capture_browser_assisted:
+        command.append("--comment-evidence-capture-browser-assisted")
+    if args.comment_evidence_install_browser_if_missing:
+        command.append("--comment-evidence-install-browser-if-missing")
     if args.run_business_attribution:
         command.append("--run-business-attribution")
+    if args.run_next_round_optimization:
+        command.append("--run-next-round-optimization")
     return command
 
 
@@ -231,16 +268,18 @@ def summarize_cycle_run(record: dict[str, Any], run_dir: Path, source: dict[str,
     workflow_manifest = str((cycle.get("workflow") or {}).get("manifest") or run_dir / "reports/promotion-manager/agent-run/workflow-manifest.json")
     publish_queue = str((cycle.get("publishQueue") or {}).get("queue") or "")
     metrics_recovery = str((cycle.get("metricsRecovery") or {}).get("metricsRecovery") or "")
+    next_round_optimization = summarize_next_round_optimization(cycle, run_dir)
     return {
         "id": record.get("id", ""),
         "url": record.get("url", ""),
-        "status": "ready" if step["exitCode"] == 0 and cycle_path.exists() else "error",
+        "status": cycle_run_status(step, cycle_path, cycle),
         "sourceMode": source["sourceMode"],
         "outputDir": str(run_dir),
         "cycleReport": str(cycle_path) if cycle_path.exists() else "",
         "workflowManifest": workflow_manifest if Path(workflow_manifest).exists() else "",
         "publishQueue": publish_queue if publish_queue and Path(publish_queue).exists() else "",
         "metricsRecovery": metrics_recovery if metrics_recovery and Path(metrics_recovery).exists() else "",
+        "nextRoundOptimization": next_round_optimization,
         "automationStatus": cycle.get("automationStatus", ""),
         "product": record.get("product", {}),
         "command": step["command"],
@@ -267,7 +306,30 @@ def blocked_run(record: dict[str, Any], run_dir: Path, reason: str) -> dict[str,
         "reason": reason,
         "command": [],
         "exitCode": None,
+        "nextRoundOptimization": {"status": "skipped", "reason": "Promotion cycle was blocked."},
         "multiQueryViralDiscovery": {"status": "skipped", "reason": "Promotion cycle was blocked."},
+    }
+
+
+def cycle_run_status(step: dict[str, Any], cycle_path: Path, cycle: dict[str, Any]) -> str:
+    if step["exitCode"] != 0 or not cycle_path.exists():
+        return "error"
+    automation_status = str(cycle.get("automationStatus", ""))
+    if automation_status.endswith("_failed"):
+        return "error"
+    return "ready"
+
+
+def summarize_next_round_optimization(cycle: dict[str, Any], run_dir: Path) -> dict[str, Any]:
+    item = cycle.get("nextRoundOptimization") if isinstance(cycle.get("nextRoundOptimization"), dict) else {}
+    status = item.get("status", "skipped") if item else "skipped"
+    report = str(item.get("report") or run_dir / "reports/promotion-manager/optimization/next-round-optimization.json")
+    return {
+        "status": status,
+        "report": report if Path(report).exists() else "",
+        "summary": item.get("summary", {}) if isinstance(item.get("summary"), dict) else {},
+        "exitCode": item.get("exitCode"),
+        "reason": item.get("reason", ""),
     }
 
 
@@ -365,6 +427,11 @@ def build_report(
         "readyMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "ready"),
         "plannedMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "planned"),
         "failedMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "error"),
+        "nextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") not in {"", "skipped", None}),
+        "readyNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") == "ready"),
+        "partialReadyNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") == "partial_ready"),
+        "waitingRealDataNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") == "waiting_real_data"),
+        "failedNextRoundOptimizationRuns": sum(1 for item in runs if item.get("nextRoundOptimization", {}).get("status") in {"blocked", "error"}),
     }
     return {
         "generatedAt": TODAY,
@@ -397,8 +464,11 @@ def batch_status(runs: list[dict[str, Any]]) -> str:
         return "blocked"
     cycle_statuses = [item.get("status") for item in runs]
     multi_statuses = [item.get("multiQueryViralDiscovery", {}).get("status") for item in runs]
+    next_statuses = [item.get("nextRoundOptimization", {}).get("status") for item in runs]
     failed_multi = any(status in {"blocked", "error"} for status in multi_statuses)
-    if all(status == "ready" for status in cycle_statuses) and not failed_multi:
+    failed_next = any(status in {"blocked", "error"} for status in next_statuses)
+    partial_next = any(status in {"partial_ready", "waiting_real_data"} for status in next_statuses)
+    if all(status == "ready" for status in cycle_statuses) and not failed_multi and not failed_next and not partial_next:
         return "ready"
     if any(status == "ready" for status in cycle_statuses):
         return "partial_ready"
@@ -438,6 +508,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Cycle: {run.get('cycleReport', '')}",
                 f"- Workflow manifest: {run.get('workflowManifest', '')}",
                 f"- Automation status: `{run.get('automationStatus', '')}`",
+                f"- Next-round optimization: `{run.get('nextRoundOptimization', {}).get('status', 'skipped')}` {run.get('nextRoundOptimization', {}).get('report', '')}",
                 f"- Multi-query discovery: `{run.get('multiQueryViralDiscovery', {}).get('status', 'skipped')}` {run.get('multiQueryViralDiscovery', {}).get('report', '')}",
             ]
         )

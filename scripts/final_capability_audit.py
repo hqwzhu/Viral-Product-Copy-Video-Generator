@@ -647,6 +647,15 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             ),
         },
         {
+            "purpose": "batch_product_url_closed_loop_with_next_round_optimization",
+            "command": (
+                f"python scripts/product_batch_runner.py --urls-file \"./product-urls.txt\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --run-post-publish-metrics-capture "
+                f"--run-comment-evidence-capture --run-business-attribution --run-next-round-optimization "
+                f"--business-csv \"./orders-and-revenue.csv\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
             "purpose": "multi_query_viral_discovery",
             "command": (
                 f"python scripts/multi_query_viral_discovery.py --workflow-manifest "

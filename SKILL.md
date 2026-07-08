@@ -103,6 +103,20 @@ python scripts/product_batch_runner.py \
   --out-dir "./promotion-output"
 ```
 
+To batch-run product URLs through the closed loop with real evidence recovery and next-round optimization:
+
+```bash
+python scripts/product_batch_runner.py \
+  --urls-file "./product-urls.txt" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-post-publish-metrics-capture \
+  --run-comment-evidence-capture \
+  --run-business-attribution \
+  --run-next-round-optimization \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
 To parse a rendered page snapshot captured by Codex/browser tooling:
 
 ```bash
@@ -550,7 +564,7 @@ The command writes:
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` and `product-url-reader/<id>/structured-product-page.json` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots and product profiles.
-- `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `product-batch-runs/<id>/...` when `scripts/product_batch_runner.py` reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery per product.
+- `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `product-batch-runs/<id>/...` when `scripts/product_batch_runner.py` reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization per product.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, and optional follow-up queues as one standalone discovery pass.
 - `reports/promotion-manager/competitors/multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}` when `scripts/multi_query_viral_discovery.py` runs product-driven multi-query discovery and merges ranked materials and creators.
@@ -589,7 +603,7 @@ The command writes:
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
 - Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
-- Use `scripts/product_batch_runner.py` when the user sends multiple product URLs and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle.
+- Use `scripts/product_batch_runner.py` when the user sends multiple product URLs and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
 - Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path.
 - Use `scripts/self_evolution_audit.py` when the Skill needs to inspect local tool gaps, repo/installed-Skill drift, safe runtime install candidates, or approved local Skill sync actions.
 - Prefer `scripts/run_promotion_workflow.py` for a full run. It calls product intake first and writes an agent workflow manifest.
@@ -719,7 +733,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
 - `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading.
-- `scripts/product_batch_runner.py`: batch URL runner that invokes Codex-first reading, one promotion cycle per ready product, and optional per-product multi-query viral discovery.
+- `scripts/product_batch_runner.py`: batch URL runner that invokes Codex-first reading, one promotion cycle per ready product, optional per-product multi-query viral discovery, and optional next-round optimization from recovered evidence.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
 - `scripts/competitor_collector.py`: official/public competitor evidence collector for YouTube and GitHub.
