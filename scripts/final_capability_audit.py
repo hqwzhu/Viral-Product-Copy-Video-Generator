@@ -54,6 +54,7 @@ SCRIPT_REQUIREMENTS = {
     "next_round_optimizer": "next_round_optimizer.py",
     "automation_scheduler": "automation_scheduler.py",
     "promotion_cycle_runner": "promotion_cycle_runner.py",
+    "final_capability_runner": "final_capability_runner.py",
     "self_evolution_audit": "self_evolution_audit.py",
 }
 
@@ -368,7 +369,7 @@ def requirement_status(
         ],
     )
     optimization_ready = scripts_ready(scripts, ["next_round_optimizer"])
-    cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"])
+    cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler", "final_capability_runner", "next_round_optimizer"])
     full_platform_publish_ready = all(
         platforms[p]["directPublish"] == "ready" for p in ["youtube", "github", "zhihu", "xiaohongshu", "douyin"]
     )
@@ -483,8 +484,8 @@ def requirement_status(
             "id": "periodic_codex_operation",
             "label": "Run the whole promotion loop periodically in Codex/local automation",
             "status": "ready" if cycle_ready else "not_ready",
-            "evidence": scripts_present(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"]),
-            "missing": [] if cycle_ready else missing_for_scripts(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"]),
+            "evidence": scripts_present(scripts, ["promotion_cycle_runner", "automation_scheduler", "final_capability_runner", "next_round_optimizer"]),
+            "missing": [] if cycle_ready else missing_for_scripts(scripts, ["promotion_cycle_runner", "automation_scheduler", "final_capability_runner", "next_round_optimizer"]),
         },
         {
             "id": "fully_autonomous_self_evolution",
@@ -629,6 +630,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "final_capability_runner",
+            "command": (
+                f"python scripts/final_capability_runner.py --url \"https://example.com/product\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --business-csv \"./orders-and-revenue.csv\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {

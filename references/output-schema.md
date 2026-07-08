@@ -69,6 +69,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
+- `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -124,6 +125,21 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `selfEvolution`: controlled learning/upgrade capability status
 - `guardrails`: safety rules for the run
 - `steps`: command ledger with sanitized command arguments and output tails
+
+## Final Capability Run
+
+`final-capability-run.json` includes:
+
+- `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
+- `input`: product URLs, URL file, platform targets, and `codexReadFirst`
+- `summary`: product batch status, promotion run count, publish readiness runs, browser publish assistant runs, multi-query discovery runs, and next-round optimization runs
+- `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
+- `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
+- `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
+- `audits`: platform access, final capability, and self-evolution audit report paths when enabled
+- `externalGates[]`: explicit approval, credential, app-review, manual publish, metrics export, and Skill-sync requirements that cannot be bypassed safely
+- `recommendedNextCommands[]`: review and next-action commands
+- `guardrails`: no final publish click, no credential storage, no captcha/risk-control bypass, and no fabricated metrics
 
 ## Viral Content Library
 

@@ -129,6 +129,18 @@ python scripts/product_batch_runner.py \
 
 The batch report records `nextRoundOptimization` per product cycle. It may be `waiting_real_data` when no real metrics, comments, or business attribution exist.
 
+Use the final capability runner when Codex should execute the highest-automation safe path in one command:
+
+```bash
+python scripts/final_capability_runner.py \
+  --url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
+
 Then pass the structured snapshot into the same workflow:
 
 ```bash

@@ -50,6 +50,7 @@ COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
+FINAL_CAPABILITY_RUNNER = ROOT / "scripts" / "final_capability_runner.py"
 SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
@@ -634,6 +635,117 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--run-next-round-optimization", " ".join(run["command"]))
         self.assertIn("--post-publish-metrics-allow-localhost", " ".join(run["command"]))
         self.assertIn("--comment-evidence-allow-localhost", " ".join(run["command"]))
+
+    def test_final_capability_runner_orchestrates_safe_full_flow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-runner-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content.</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>views: 4,200 likes: 360 comments: 41</p>
+    <section class="comments">
+      <p>Comment by Alice: How does pricing work? likes: 9</p>
+      <p>Bob: Need Zapier integration replies: 2</p>
+      <p>Carol: This solved our content workflow</p>
+    </section>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        published_url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        business_csv = out_dir / "orders.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "orderId,utm_source,referrer,revenue,status",
+                    f"order-1,xiaohongshu,{published_url},99.00,paid",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_RUNNER),
+                "--url",
+                product_page.as_uri(),
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--multi-query-dry-run",
+                "--multi-query-query-count",
+                "2",
+                "--published-url",
+                f"xiaohongshu={published_url}",
+                "--post-publish-metrics-allow-localhost",
+                "--comment-evidence-allow-localhost",
+                "--business-csv",
+                str(business_csv),
+                "--skip-platform-access-audit",
+                "--skip-final-capability-audit",
+                "--skip-self-evolution-audit",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/final-run/final-capability-run.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "partial_ready")
+        self.assertEqual(report["summary"]["promotionRuns"], 1)
+        self.assertEqual(report["summary"]["publishReadinessRuns"], 1)
+        self.assertEqual(report["summary"]["browserPublishAssistantRuns"], 1)
+        self.assertEqual(report["summary"]["nextRoundOptimizationRuns"], 1)
+        self.assertEqual(report["summary"]["multiQueryDiscoveryRuns"], 1)
+        self.assertTrue(Path(report["productBatch"]["report"]).exists())
+        self.assertEqual(report["publishReadiness"][0]["status"], "partial_ready")
+        self.assertEqual(report["browserPublishAssistant"][0]["status"], "ready")
+        self.assertTrue(Path(report["browserPublishAssistant"][0]["report"]).exists())
+        self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
+        self.assertTrue((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.md").exists())
 
     def test_agent_workflow_runs_from_structured_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-agent-workflow-test-"))
@@ -3484,6 +3596,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
+        self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
@@ -3508,6 +3621,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 for item in report["recommendedCommands"]
             )
         )
+        self.assertTrue(any(item["purpose"] == "final_capability_runner" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
