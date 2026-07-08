@@ -34,7 +34,8 @@ def main() -> None:
     publish_readiness = run_publish_readiness(args, batch, steps)
     browser_publish = run_browser_publish_assistant(args, batch, steps)
     audits = run_audits(args, out_dir, steps)
-    report = build_report(args, out_dir, batch, publish_readiness, browser_publish, audits, steps)
+    cycle_evidence = collect_cycle_evidence(batch)
+    report = build_report(args, out_dir, batch, publish_readiness, browser_publish, cycle_evidence, audits, steps)
     write_report(out_dir, report)
     print(f"Final capability run written to: {(report_dir(out_dir) / 'final-capability-run.json').resolve()}")
 
@@ -301,6 +302,7 @@ def build_report(
     batch: dict[str, Any],
     publish_readiness: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
+    cycle_evidence: list[dict[str, Any]],
     audits: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -312,6 +314,7 @@ def build_report(
         "nextRoundOptimizationRuns": int((batch.get("summary") or {}).get("nextRoundOptimizationRuns") or 0),
         "multiQueryDiscoveryRuns": int((batch.get("summary") or {}).get("multiQueryDiscoveryRuns") or 0),
     }
+    summary.update(cycle_evidence_summary(cycle_evidence))
     return {
         "generatedAt": TODAY,
         "status": final_status(batch, publish_readiness, browser_publish, audits),
@@ -324,6 +327,7 @@ def build_report(
         },
         "summary": summary,
         "productBatch": batch,
+        "cycleEvidence": cycle_evidence,
         "publishReadiness": publish_readiness,
         "browserPublishAssistant": browser_publish,
         "audits": audits,
@@ -332,6 +336,141 @@ def build_report(
         "guardrails": guardrails(),
         "steps": steps,
     }
+
+
+def collect_cycle_evidence(batch: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for run in batch.get("promotionRuns", []):
+        run_dir = existing_dir(run.get("outputDir", ""))
+        cycle_path = existing_path(run.get("cycleReport", "")) or (
+            run_dir / "reports/promotion-manager/cycle/promotion-cycle.json" if run_dir else None
+        )
+        manifest_path = existing_path(run.get("workflowManifest", ""))
+        cycle = read_json(cycle_path) if cycle_path else {}
+        manifest = read_json(manifest_path) if manifest_path else {}
+        artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
+        videos = manifest.get("videoGeneration") if isinstance(manifest.get("videoGeneration"), list) else []
+        item = {
+            "productRunId": run.get("id", ""),
+            "url": run.get("url", ""),
+            "status": run.get("status", ""),
+            "automationStatus": cycle.get("automationStatus") or run.get("automationStatus", ""),
+            "outputDir": str(run_dir) if run_dir else str(run.get("outputDir", "")),
+            "cycleReport": str(cycle_path) if cycle_path and cycle_path.exists() else "",
+            "workflowManifest": str(manifest_path) if manifest_path and manifest_path.exists() else "",
+            "product": run.get("product") or manifest.get("product") or {},
+            "content": {
+                "contentJson": artifact_path(artifacts.get("contentJson", "")),
+                "publishPack": artifact_path(artifacts.get("publishPack", "")),
+                "competitorInformedContent": artifact_path(artifacts.get("competitorInformedContent", "")),
+                "competitorInformedStrategy": artifact_path(artifacts.get("competitorInformedStrategy", "")),
+            },
+            "competitorResearch": {
+                "viralContentLibrary": artifact_path(artifacts.get("viralContentLibrary", "")),
+                "creatorLeaderboard": artifact_path(artifacts.get("creatorLeaderboard", "")),
+                "creatorFollowUpResults": artifact_path(artifacts.get("creatorFollowUpResults", "")),
+                "deepCompetitorLibrary": artifact_path(artifacts.get("deepCompetitorLibrary", "")),
+                "multiQueryViralDiscovery": run.get("multiQueryViralDiscovery", {}),
+            },
+            "videoGeneration": summarize_videos(videos),
+            "publishQueue": summarize_section(cycle.get("publishQueue"), "queue"),
+            "publishedItems": summarize_section(cycle.get("publishedItems"), "publishedItems"),
+            "postPublishMetricsCapture": summarize_section(cycle.get("postPublishMetricsCapture"), "report", ["metricExport"]),
+            "commentEvidenceCapture": summarize_section(cycle.get("commentEvidenceCapture"), "report", ["commentEvidenceExport"]),
+            "businessAttribution": summarize_section(cycle.get("businessAttribution"), "report", ["businessAttributionExport"]),
+            "metricsRecovery": summarize_section(cycle.get("metricsRecovery"), "metricsRecovery"),
+            "nextRoundOptimization": summarize_section(cycle.get("nextRoundOptimization"), "report"),
+        }
+        item["evidenceCounts"] = evidence_counts(item)
+        evidence.append(item)
+    return evidence
+
+
+def summarize_videos(videos: list[dict[str, Any]]) -> dict[str, Any]:
+    generated = []
+    for item in videos:
+        video = str(item.get("video") or "").strip()
+        if video and Path(video).exists():
+            generated.append(video)
+    return {
+        "items": videos,
+        "generatedFiles": generated,
+        "generatedCount": len(generated),
+        "statusCounts": count_statuses(videos),
+    }
+
+
+def summarize_section(value: Any, path_key: str, extra_path_keys: list[str] | None = None) -> dict[str, Any]:
+    section = value if isinstance(value, dict) else {}
+    report_path = artifact_path(section.get(path_key, ""))
+    result = {
+        "status": section.get("status", "missing" if not section else ""),
+        "report": report_path,
+        "exists": bool(report_path and Path(report_path).exists()),
+        "summary": section.get("summary", {}) if isinstance(section.get("summary"), dict) else {},
+    }
+    for key in extra_path_keys or []:
+        result[key] = artifact_path(section.get(key, ""))
+    if section.get("reason"):
+        result["reason"] = section.get("reason")
+    return result
+
+
+def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
+    post_metrics = item.get("postPublishMetricsCapture", {}).get("summary", {})
+    comments = item.get("commentEvidenceCapture", {}).get("summary", {})
+    business = item.get("businessAttribution", {}).get("summary", {})
+    metrics = item.get("metricsRecovery", {}).get("summary", {})
+    optimization = item.get("nextRoundOptimization", {}).get("summary", {})
+    return {
+        "capturedMetricRecords": int_value(post_metrics.get("capturedMetricRecords")),
+        "commentCount": int_value(comments.get("commentCount") or optimization.get("commentCount")),
+        "matchedBusinessRows": int_value(business.get("matchedRows") or optimization.get("businessAttributions")),
+        "recordsWithMetrics": int_value(metrics.get("recordsWithMetrics")),
+        "manualOrPendingRequirements": int_value(metrics.get("manualOrPendingRequirements"))
+        + int_value(optimization.get("manualOrPendingRequirements")),
+        "nextRoundContent": int_value(optimization.get("nextRoundContent")),
+    }
+
+
+def cycle_evidence_summary(cycle_evidence: list[dict[str, Any]]) -> dict[str, int]:
+    counts = [item.get("evidenceCounts", {}) for item in cycle_evidence]
+    return {
+        "contentArtifacts": sum(1 for item in cycle_evidence if item.get("content", {}).get("contentJson")),
+        "videoFilesGenerated": sum(int_value(item.get("videoGeneration", {}).get("generatedCount")) for item in cycle_evidence),
+        "publishQueues": sum(1 for item in cycle_evidence if item.get("publishQueue", {}).get("exists")),
+        "publishedItemsReports": sum(1 for item in cycle_evidence if item.get("publishedItems", {}).get("exists")),
+        "postPublishMetricsCaptureRuns": sum(1 for item in cycle_evidence if item.get("postPublishMetricsCapture", {}).get("status") == "ready"),
+        "commentEvidenceCaptureRuns": sum(1 for item in cycle_evidence if item.get("commentEvidenceCapture", {}).get("status") == "ready"),
+        "businessAttributionRuns": sum(1 for item in cycle_evidence if item.get("businessAttribution", {}).get("status") == "ready"),
+        "metricsRecoveryRuns": sum(1 for item in cycle_evidence if item.get("metricsRecovery", {}).get("status") == "ready"),
+        "capturedMetricRecords": sum(int_value(item.get("capturedMetricRecords")) for item in counts),
+        "commentCount": sum(int_value(item.get("commentCount")) for item in counts),
+        "matchedBusinessRows": sum(int_value(item.get("matchedBusinessRows")) for item in counts),
+        "recordsWithMetrics": sum(int_value(item.get("recordsWithMetrics")) for item in counts),
+        "manualOrPendingRequirements": sum(int_value(item.get("manualOrPendingRequirements")) for item in counts),
+        "nextRoundContent": sum(int_value(item.get("nextRoundContent")) for item in counts),
+    }
+
+
+def count_statuses(items: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        status = str(item.get("status") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def artifact_path(value: Any) -> str:
+    text = "" if value is None else str(value).strip()
+    return text if text and Path(text).exists() else ""
+
+
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def final_status(
@@ -404,6 +543,21 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(f"- {item['area']}: {item['gate']}" for item in report["externalGates"])
     lines.extend(["", "## Reports"])
     lines.append(f"- Product batch: {report['productBatch'].get('report', '')}")
+    lines.extend(["", "## Cycle Evidence"])
+    for item in report["cycleEvidence"]:
+        counts = item.get("evidenceCounts", {})
+        product = item.get("product") or {}
+        lines.append(f"- {item.get('productRunId', '')}: {product.get('productName') or product.get('name') or 'unknown'}")
+        lines.append(f"  Content: {item.get('content', {}).get('contentJson', '')}")
+        lines.append(f"  Videos: {item.get('videoGeneration', {}).get('generatedCount', 0)} generated")
+        lines.append(f"  Publish queue: `{item.get('publishQueue', {}).get('status', '')}` {item.get('publishQueue', {}).get('report', '')}")
+        lines.append(
+            "  Evidence: "
+            f"metrics={counts.get('capturedMetricRecords', 0)}, "
+            f"comments={counts.get('commentCount', 0)}, "
+            f"businessRows={counts.get('matchedBusinessRows', 0)}, "
+            f"nextRound={counts.get('nextRoundContent', 0)}"
+        )
     for item in report["publishReadiness"]:
         lines.append(f"- Publish readiness ({item['productRunId']}): `{item['status']}` {item['report']}")
     for item in report["browserPublishAssistant"]:

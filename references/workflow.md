@@ -139,7 +139,7 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
+This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
 Then pass the structured snapshot into the same workflow:
 

@@ -132,8 +132,9 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
 - `input`: product URLs, URL file, platform targets, and `codexReadFirst`
-- `summary`: product batch status, promotion run count, publish readiness runs, browser publish assistant runs, multi-query discovery runs, and next-round optimization runs
+- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish queue count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
+- `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
