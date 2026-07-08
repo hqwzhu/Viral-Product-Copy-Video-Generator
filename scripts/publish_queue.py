@@ -127,6 +127,7 @@ def build_queue(
             "contentDraft": str(draft_path),
             "scheduleSuggestion": pack.get("scheduleSuggestion", ""),
             "trackingFields": pack.get("trackingFields", []),
+            "trackingPlan": pack.get("trackingPlan", {}),
             "warnings": pack.get("warnings", []),
         }
         if (platform in OFFICIAL_PLATFORMS or official_douyin_requested) and mode == "official_api_publish":
@@ -332,6 +333,10 @@ def render_platform_draft(platform: str, content: dict[str, Any], pack: dict[str
         f"- Publish mode: `{pack.get('publishMode', '')}`",
         f"- Approval required: {pack.get('approvalRequired', True)}",
         "",
+        "## Tracking Plan",
+        "",
+        render_tracking_plan(pack.get("trackingPlan", {})),
+        "",
         "## Description",
         "",
         str(content.get("description") or ""),
@@ -349,6 +354,21 @@ def render_platform_draft(platform: str, content: dict[str, Any], pack: dict[str
     lines.extend(f"- {step}" for step in pack.get("publishSteps", []))
     lines.extend(["", "## Warnings"])
     lines.extend(f"- {warning}" for warning in pack.get("warnings", []))
+    return "\n".join(lines)
+
+
+def render_tracking_plan(tracking: Any) -> str:
+    if not isinstance(tracking, dict) or not tracking:
+        return "- Tracking plan: not generated"
+    utm = tracking.get("utm") if isinstance(tracking.get("utm"), dict) else {}
+    lines = [
+        f"- Campaign ID: {tracking.get('campaignId', '')}",
+        f"- Content ID: {tracking.get('contentId', '')}",
+        f"- Tracked URL: {tracking.get('trackedUrl', '')}",
+    ]
+    for key in ["utm_source", "utm_medium", "utm_campaign", "utm_content"]:
+        lines.append(f"- {key}: {utm.get(key, '')}")
+    lines.append("- Business export match keys: " + ", ".join(str(item) for item in tracking.get("businessExportMatchKeys", [])))
     return "\n".join(lines)
 
 

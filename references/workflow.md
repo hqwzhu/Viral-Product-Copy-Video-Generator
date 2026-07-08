@@ -532,7 +532,7 @@ Use the bundled scorecard first. If `cheat-on-content` is installed, run it as a
 
 ## Stage 5: Publish Pack
 
-Create publish packs. Every pack requires human approval before execution. Browser-assisted publishing may fill forms, but the user must click the final publish button.
+Create publish packs. Every pack requires human approval before execution. Each pack also carries a pre-publish attribution plan with a tracked product URL, campaign/content IDs, UTM fields, and business-export match keys so later orders and revenue can be matched to real published items instead of inferred from engagement. Browser-assisted publishing may fill forms, but the user must click the final publish button.
 
 Convert a completed workflow into a publish queue before doing any real write:
 
@@ -695,7 +695,7 @@ python scripts/comment_evidence_capture.py \
 
 This writes `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json`. It captures visible comments, visible likes/replies per comment, and recurring demand signals such as questions, pricing concerns, integrations, feature requests, pain points, objections, and CTA intent. If comments are behind login, captcha, risk checks, or private analytics, it writes a manual evidence request instead of bypassing the platform.
 
-When the business export contains UTM/source/referrer/order rows instead of direct published URLs, attribute it before recovery:
+When the business export contains UTM/source/referrer/order rows instead of direct published URLs, attribute it before recovery. Prefer the `trackingPlan` fields created in the publish pack and copied into the publish queue drafts: `trackedUrl`, `utm_campaign`, and especially `utm_content`/`contentId`.
 
 ```bash
 python scripts/business_attribution.py \

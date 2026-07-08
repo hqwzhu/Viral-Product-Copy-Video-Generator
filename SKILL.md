@@ -829,7 +829,8 @@ Every publish pack must include:
 - `approvalRequired: true`
 - manual steps
 - warnings
-- tracking fields
+- `trackingPlan` with `campaignId`, `contentId`, `trackedUrl`, UTM fields, business-export match keys, recommended export columns, and the no-inferred-revenue guardrail
+- tracking fields for published URL, tracked URL, UTM fields, real engagement, orders, revenue, and evidence
 - schedule suggestion
 
 YouTube, GitHub, and Douyin have official API executor paths, but execution still requires platform credentials, user authorization, and explicit approval. Zhihu and Xiaohongshu remain manual or browser-assisted unless current official creator-publishing evidence proves otherwise.

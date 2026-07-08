@@ -182,6 +182,9 @@ class PromotionManagerScriptTest(unittest.TestCase):
         publish_pack = self.load_json(out_dir, "reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json")
         self.assertTrue(all(item["approvalRequired"] for item in publish_pack))
         self.assertTrue(all(item["publishSteps"] for item in publish_pack))
+        self.assertTrue(all(item["trackingPlan"]["utm"]["utm_content"] for item in publish_pack))
+        self.assertTrue(all("utm_campaign=" in item["trackingPlan"]["trackedUrl"] for item in publish_pack))
+        self.assertIn("utm_content", publish_pack[0]["trackingFields"])
         warnings = " ".join(" ".join(item["warnings"]) for item in publish_pack)
         self.assertIn("No cookie/token/password storage", warnings)
         self.assertIn("No captcha bypass", warnings)
@@ -5976,6 +5979,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["xiaohongshu"]["status"], "queued_manual")
         self.assertEqual(by_platform["zhihu"]["status"], "queued_manual")
         self.assertEqual(by_platform["douyin"]["status"], "queued_browser_assisted")
+        self.assertIn("utm_content", by_platform["xiaohongshu"]["trackingPlan"]["utm"])
+        draft_text = Path(by_platform["xiaohongshu"]["contentDraft"]).read_text(encoding="utf-8")
+        self.assertIn("## Tracking Plan", draft_text)
+        self.assertIn("utm_content", draft_text)
         self.assertTrue(Path(by_platform["github"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["youtube"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["xiaohongshu"]["contentDraft"]).exists())
@@ -6101,6 +6108,15 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "status": "queued_manual",
                             "publishMode": "manual_publish_required",
                             "contentDraft": str(xhs_draft),
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/product?utm_source=xiaohongshu&utm_medium=social&utm_campaign=launch&utm_content=launch-xhs",
+                                "utm": {
+                                    "utm_source": "xiaohongshu",
+                                    "utm_medium": "social",
+                                    "utm_campaign": "launch",
+                                    "utm_content": "launch-xhs",
+                                },
+                            },
                         },
                         {
                             "platform": "douyin",
@@ -6145,6 +6161,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         by_platform = {item["platform"]: item for item in report["records"]}
         self.assertEqual(by_platform["xiaohongshu"]["publisherUrl"], "https://creator.example.test/publish")
         self.assertTrue(Path(by_platform["xiaohongshu"]["payloadFiles"]["clipboard"]).exists())
+        self.assertEqual(
+            by_platform["xiaohongshu"]["payload"]["trackedUrl"],
+            "https://example.com/product?utm_source=xiaohongshu&utm_medium=social&utm_campaign=launch&utm_content=launch-xhs",
+        )
+        clipboard = Path(by_platform["xiaohongshu"]["payloadFiles"]["clipboard"]).read_text(encoding="utf-8")
+        self.assertIn("Tracked URL:", clipboard)
         self.assertTrue(Path(by_platform["douyin"]["payloadFiles"]["formFillScript"]).exists())
         self.assertIn("browser_publish_form_fill.py", by_platform["douyin"]["browserFormFill"]["command"])
         self.assertTrue(Path(by_platform["douyin"]["browserFormFill"]["payloadJson"]).exists())

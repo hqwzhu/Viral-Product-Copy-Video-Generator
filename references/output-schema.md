@@ -361,6 +361,15 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `manual_publish_required`
 - `unsupported`
 
+## Publish Pack
+
+`<product>-publish-pack.json` includes one record per platform:
+
+- `publishMode`, `approvalRequired`, `publishSteps`, `warnings`, and `scheduleSuggestion`
+- `content`: platform-native generated content used by queue builders and browser/manual payloads
+- `trackingPlan`: pre-publish attribution plan with `campaignId`, `contentId`, `trackedUrl`, UTM fields, business-export match keys, recommended export columns, and a guardrail against inferred revenue
+- `trackingFields`: post-publish fields to recover, including `trackedUrl`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, real social metrics, orders, revenue, and evidence
+
 ## Publish Queue
 
 `publish-queue.json` includes:
@@ -370,6 +379,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `records[]`: one platform task per selected publish pack
 - `records[].status`: `dry_run`, `published`, `blocked`, `queued_manual`, `queued_browser_assisted`, `unsupported`, or `error`
 - `records[].contentDraft`: copy-ready Markdown draft path
+- `records[].trackingPlan`: attribution plan copied from the publish pack; platform drafts include the tracked URL and UTM fields so business exports can later match `utm_content`, campaign, referrer, or landing page
 - `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube/Douyin official tasks
 - `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
 - `guardrails`: publishing safety rules used for the queue run
@@ -400,7 +410,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `input`: publish queue path and whether publisher URLs were opened in the user's default browser
 - `records[]`: one prepared browser/manual task per queued platform
 - `records[].platform`, `queueStatus`, `publishMode`, `contentDraft`, `publisherUrl`, and `publisherUrlSource`
-- `records[].payload`: normalized title, body, tags, cover text, CTA, and preparation date
+- `records[].payload`: normalized title, body, tags, cover text, CTA, tracked URL, tracking plan, and preparation date
 - `records[].payloadFiles`: payload JSON, clipboard text, generic form-fill helper script, and checklist path
 - `records[].browserFormFill`: copy-ready `browser_publish_form_fill.py` command, payload JSON path, expected report path, screenshot path, and final-user-action guardrail
 - `records[].finalPublishUserActionRequired`: always true for browser/manual platforms

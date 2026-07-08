@@ -173,12 +173,15 @@ def payload_from_draft(platform: str, draft: str, item: dict[str, Any]) -> dict[
     body = body_from_draft(draft)
     cover_text = first_labeled_value(draft, "Cover text")
     cta = first_labeled_value(draft, "CTA")
+    tracking = item.get("trackingPlan") if isinstance(item.get("trackingPlan"), dict) else {}
     return {
         "title": title,
         "body": body,
         "tags": tags,
         "coverText": cover_text,
         "cta": cta,
+        "trackedUrl": tracking.get("trackedUrl", ""),
+        "trackingPlan": tracking,
         "preparedAt": TODAY,
     }
 
@@ -243,6 +246,8 @@ def render_clipboard(payload: dict[str, Any]) -> str:
         lines.extend(["", "Tags: " + " ".join(payload["tags"])])
     if payload["coverText"]:
         lines.extend(["", "Cover: " + payload["coverText"]])
+    if payload.get("trackedUrl"):
+        lines.extend(["", "Tracked URL: " + payload["trackedUrl"]])
     return "\n".join(lines).strip()
 
 
@@ -276,6 +281,7 @@ def render_checklist(platform: str, payload: dict[str, Any], queue_item: dict[st
         "",
         f"- Publisher entry: {publisher_url or 'configure with --platform-publish-url platform=url'}",
         f"- Title: {payload['title']}",
+        f"- Tracked URL: {payload.get('trackedUrl') or 'not generated'}",
         f"- Draft status: `{queue_item.get('status', '')}`",
         f"- Publish mode: `{queue_item.get('publishMode', '')}`",
         "",

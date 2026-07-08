@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.parse
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -815,9 +816,15 @@ def build_publish_pack(content: dict[str, Any]) -> list[dict[str, Any]]:
                 "assets": [],
                 "publishSteps": publish_steps_for(platform, capability["recommendedMode"]),
                 "scheduleSuggestion": schedule_suggestion_for(platform),
+                "trackingPlan": tracking_plan_for(platform, item),
                 "trackingFields": [
                     "publishedUrl",
                     "publishedAt",
+                    "trackedUrl",
+                    "utm_source",
+                    "utm_medium",
+                    "utm_campaign",
+                    "utm_content",
                     "views",
                     "likes",
                     "favorites",
@@ -840,6 +847,65 @@ def build_publish_pack(content: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return packs
+
+
+def tracking_plan_for(platform: str, content: dict[str, Any]) -> dict[str, Any]:
+    product = content.get("sourceProduct") if isinstance(content.get("sourceProduct"), dict) else {}
+    product_name = str(product.get("name") or content.get("title") or "product")
+    product_url = str(product.get("url") or "")
+    campaign_id = f"{slugify(product_name)}-{TODAY}"
+    content_id = f"{campaign_id}-{platform}"
+    utm = {
+        "utm_source": platform,
+        "utm_medium": tracking_medium_for(platform),
+        "utm_campaign": campaign_id,
+        "utm_content": content_id,
+    }
+    return {
+        "status": "ready" if product_url else "missing_product_url",
+        "campaignId": campaign_id,
+        "contentId": content_id,
+        "trackedUrl": tracked_url(product_url, utm) if product_url else "",
+        "utm": utm,
+        "businessExportMatchKeys": [
+            "publishedUrl",
+            "referrer",
+            "landingPage",
+            "utm_content",
+            "utm_campaign",
+            "contentId",
+            "title",
+        ],
+        "recommendedBusinessExportColumns": [
+            "orderId",
+            "utm_source",
+            "utm_campaign",
+            "utm_content",
+            "referrer",
+            "landingPage",
+            "revenue",
+            "orders",
+            "status",
+        ],
+        "guardrail": "Use only real business exports and proven published URLs; never infer orders or revenue from engagement.",
+    }
+
+
+def tracking_medium_for(platform: str) -> str:
+    if platform in {"youtube", "douyin", "tiktok"}:
+        return "video"
+    if platform in {"zhihu", "xiaohongshu"}:
+        return "social"
+    if platform == "github":
+        return "repository"
+    return "promotion"
+
+
+def tracked_url(product_url: str, utm: dict[str, str]) -> str:
+    parsed = urllib.parse.urlparse(product_url)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    query.update(utm)
+    return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))
 
 
 def publish_steps_for(platform: str, mode: str) -> list[str]:
@@ -1075,6 +1141,8 @@ def render_publish_pack(packs: list[dict[str, Any]]) -> str:
                 f"- Mode: `{pack['publishMode']}`",
                 f"- Approval required: {pack['approvalRequired']}",
                 f"- Schedule: {pack['scheduleSuggestion']}",
+                f"- Tracked URL: {pack.get('trackingPlan', {}).get('trackedUrl', '')}",
+                f"- UTM content: {pack.get('trackingPlan', {}).get('utm', {}).get('utm_content', '')}",
                 "- Steps:",
             ]
         )
