@@ -57,6 +57,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` converts readiness into credential names, target gaps, official setup references, approval gates, and next commands
+- `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, `templates/*`, and `commands/import-real-evidence.ps1` when `scripts/real_evidence_setup.py` creates fillable platform metrics, comment, published URL, and business attribution evidence templates
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads, browser form-fill commands, and registers supplied real published URLs
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from a prepared payload and stops before final publish
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, manual/browser-assisted access boundaries, and official documentation gap research
@@ -157,11 +158,12 @@ Discovered URLs are not treated as product facts. They must still pass through `
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
 - `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
-- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish execution request/approval flags, publish queue count, publish setup count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, multi-query deep/video evidence counters, and next-round optimization runs
+- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish execution request/approval flags, publish queue count, publish setup count, real evidence setup count/targets, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, multi-query deep/video evidence counters, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
 - `publishSetup[]`: per-product publish setup report path, env-template path, checklist path, platform setup guide path, summary, and exit code
+- `realEvidenceSetup[]`: per-product real evidence setup report path, checklist path, platform metrics/comment/business/published URL template paths, summary, and exit code
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
 - `browserFormFill[]`: optional per-platform result when `--run-browser-form-fill` is supplied; includes payload path, report path, screenshot, filled field count, missing fields, submitted flag, and final-user-action requirement
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
@@ -188,9 +190,9 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `final-capability-readiness.json` includes:
 
 - `status`: `full_ready`, `partial_ready`, `partial_ready_waiting_external_evidence`, or `partial_ready_blocked_by_platform_or_safety_limits`
-- `sourceReports`: final-run, final-audit, platform-access, self-evolution, publish-readiness, and publish-setup report paths used as evidence
+- `sourceReports`: final-run, final-audit, platform-access, self-evolution, publish-readiness, publish-setup, and real-evidence-setup report paths used as evidence
 - `summary`: requirement count, satisfied count, blocked/waiting count, partial count, action count, and approval-gated action count
-- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, and revenue, with statuses such as `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`. Controlled self-evolution reports installed Skill drift, platform-learning freshness, and official documentation gap-research status from the latest platform-access audit.
+- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics. Viral research can report `partial_ready_search_capture_only`, `partial_ready_deep_content_evidence`, or `ready_with_video_evidence` depending on final-run evidence. Real metrics recovery reports field-level evidence for views, likes, comments, orders, revenue, and real evidence template targets, with statuses such as `waiting_real_data_with_evidence_templates`, `ready_with_full_funnel_evidence`, `partial_ready_social_metrics_only`, `partial_ready_business_attribution_only`, and `partial_ready_evidence_incomplete`. Controlled self-evolution reports installed Skill drift, platform-learning freshness, and official documentation gap-research status from the latest platform-access audit.
 - `platformMatrix`: per-platform search, publish, metrics, and publish-readiness status merged from the final audit and publish-readiness reports
 - `externalGates[]`: requirements still blocked by credentials, app review, manual/browser-assisted publishing, real data, or Skill sync approval
 - `actionQueue[]`: prioritized next commands, with `approvalRequired` set for gated actions such as `I_APPROVE_PUBLISH` or `I_APPROVE_SKILL_SYNC`
@@ -210,6 +212,23 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `artifacts.platformSetupGuide`: markdown platform setup guide with official references, required capabilities, target inputs, setup steps, verification commands, and constraints
 - `artifacts.platformSetupGuideJson`: machine-readable platform setup guide with the same data and no secret values
 - `guardrails`: no stored credential values, no final publish click, and no fabricated published URL or metrics
+
+## Real Evidence Setup
+
+`real-evidence-setup.json` includes:
+
+- `status`: `ready` when publish targets were found, or `waiting_publish_queue_or_published_items`
+- `input`: source publish queue, publish readiness report, published items reports, and platform filter
+- `summary`: target count, published target count, waiting published URL count, tracked URL count, and template file count
+- `records[]`: one evidence target per queued/published item with platform, title, content ID, published URL, publish status, publish mode, evidence status, tracking plan, required evidence, collection plan, safe import commands, and guardrail
+- `artifacts.checklist`: `real-evidence-checklist.md`
+- `artifacts.platformMetricsTemplate`: fillable CSV for views, likes, comments, shares, clicks, leads, orders, revenue, evidence, and notes
+- `artifacts.commentEvidenceTemplate`: fillable CSV for visible/exported comments and comment-level engagement
+- `artifacts.businessAttributionTemplate`: fillable CSV for UTM/referrer/order/revenue attribution to proven published content
+- `artifacts.publishedUrlTemplate`: fillable CSV for final public URLs, not draft/editor/preview URLs
+- `artifacts.structuredMetricsSnapshotExample`: JSON example for Codex/browser-visible metric snapshots
+- `artifacts.importCommands`: PowerShell command file for importing filled real evidence
+- `guardrails`: no secrets, no blank-as-zero metrics, no fabricated engagement, comments, orders, or revenue
 
 ## Real Run Playbook
 

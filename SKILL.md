@@ -600,6 +600,15 @@ python scripts/publish_setup_assistant.py \
   --out-dir "./promotion-output"
 ```
 
+To generate fillable real-evidence templates for platform metrics, comments, published URLs, orders, and revenue:
+
+```bash
+python scripts/real_evidence_setup.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --publish-readiness "./promotion-output/reports/promotion-manager/publish-readiness/publish-readiness.json" \
+  --out-dir "./promotion-output"
+```
+
 To prepare browser-assisted publishing payloads for Zhihu, Xiaohongshu, Douyin, TikTok, or other non-official direct-publish platforms:
 
 ```bash
@@ -730,6 +739,7 @@ The command writes:
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` turns readiness into credential names, target requirements, official setup references, approval gates, and next commands without storing secret values.
+- `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, `templates/*`, and `commands/import-real-evidence.ps1` when `scripts/real_evidence_setup.py` creates fillable platform metrics, comment, published URL, and business attribution evidence templates.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries. With `--check-live`, it also records official documentation reachability, UTC check time, `learningFreshness`, and `officialDocGapResearch` so missing official sources stay on safe manual/browser/export fallbacks instead of being treated as automation-ready.
@@ -928,6 +938,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, Douyin official dry-runs when a video file is supplied, and manual/browser-assisted publish tasks.
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
 - `scripts/publish_setup_assistant.py`: readiness-to-setup-kit generator that writes credential variable names, target gaps, official setup references, approval commands, an env template, checklist, and platform setup guide without storing secret values.
+- `scripts/real_evidence_setup.py`: publish-queue-to-evidence-kit generator that writes platform metric, comment, published URL, business attribution, structured snapshot templates, and safe import commands without storing secrets or fabricating data.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
 - `scripts/browser_publish_form_fill.py`: controlled Playwright helper that fills visible publisher fields from a prepared payload, screenshots the result, and stops before final publish.
 - `scripts/platform_access_audit.py`: official access boundary auditor for platform publishing, metrics recovery, app-review requirements, and manual/browser-assisted fallback rules.

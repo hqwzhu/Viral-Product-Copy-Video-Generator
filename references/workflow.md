@@ -572,6 +572,17 @@ python scripts/publish_setup_assistant.py \
 
 This writes `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}`. The env file is a template with variable names only; do not put real secrets in the repository. The platform guide lists official setup references, required capabilities, target inputs, verification commands, and constraints for each queued platform.
 
+Generate fillable evidence templates before asking for post-publish data:
+
+```bash
+python scripts/real_evidence_setup.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --publish-readiness "./promotion-output/reports/promotion-manager/publish-readiness/publish-readiness.json" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, fillable CSV templates for platform metrics, comments, business attribution, published URLs, a structured snapshot example, and `commands/import-real-evidence.ps1`. The final capability runner invokes this automatically after publish readiness when a publish queue exists. Templates must be filled only with real public, official, screenshot/OCR, structured browser snapshot, or business export evidence.
+
 Prepare browser-assisted publishing materials for non-official direct-publish platforms:
 
 ```bash

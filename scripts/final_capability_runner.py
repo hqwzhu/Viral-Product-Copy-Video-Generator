@@ -17,6 +17,7 @@ SCRIPTS = ROOT / "scripts"
 PRODUCT_BATCH_RUNNER = SCRIPTS / "product_batch_runner.py"
 PUBLISH_READINESS = SCRIPTS / "publish_readiness_runner.py"
 PUBLISH_SETUP_ASSISTANT = SCRIPTS / "publish_setup_assistant.py"
+REAL_EVIDENCE_SETUP = SCRIPTS / "real_evidence_setup.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 PLATFORM_ACCESS_AUDIT = SCRIPTS / "platform_access_audit.py"
@@ -37,11 +38,24 @@ def main() -> None:
     batch = run_product_batch(args, out_dir, steps)
     publish_readiness = run_publish_readiness(args, batch, steps)
     publish_setup = run_publish_setup_assistant(args, publish_readiness, steps)
+    real_evidence_setup = run_real_evidence_setup(args, batch, publish_readiness, steps)
     browser_publish = run_browser_publish_assistant(args, batch, steps)
     browser_form_fill = run_browser_form_fill(args, browser_publish, steps)
     audits = run_audits(args, out_dir, steps)
     cycle_evidence = collect_cycle_evidence(batch)
-    report = build_report(args, out_dir, batch, publish_readiness, publish_setup, browser_publish, browser_form_fill, cycle_evidence, audits, steps)
+    report = build_report(
+        args,
+        out_dir,
+        batch,
+        publish_readiness,
+        publish_setup,
+        real_evidence_setup,
+        browser_publish,
+        browser_form_fill,
+        cycle_evidence,
+        audits,
+        steps,
+    )
     write_report(out_dir, report)
     readiness_matrix = run_final_readiness_matrix(args, out_dir, steps)
     report["finalReadinessMatrix"] = readiness_matrix
@@ -154,6 +168,7 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
     metrics.add_argument("--skip-business-attribution", action="store_true")
     metrics.add_argument("--skip-next-round-optimization", action="store_true")
+    metrics.add_argument("--skip-real-evidence-setup", action="store_true")
 
     audits = parser.add_argument_group("Audits")
     audits.add_argument("--skip-platform-access-audit", action="store_true")
@@ -358,6 +373,61 @@ def run_publish_setup_assistant(args: argparse.Namespace, publish_readiness: lis
     return results
 
 
+def run_real_evidence_setup(
+    args: argparse.Namespace,
+    batch: dict[str, Any],
+    publish_readiness: list[dict[str, Any]],
+    steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if args.skip_real_evidence_setup:
+        return []
+    readiness_by_run = {item.get("productRunId", ""): item for item in publish_readiness}
+    results = []
+    for run in batch.get("promotionRuns", []):
+        run_dir = existing_dir(run.get("outputDir", ""))
+        queue_path = existing_path(run.get("publishQueue", "")) or (
+            run_dir / "reports/promotion-manager/publish-queue/publish-queue.json" if run_dir else None
+        )
+        if not run_dir or not queue_path or not queue_path.exists():
+            continue
+        readiness_path = existing_path((readiness_by_run.get(run.get("id", "")) or {}).get("report", ""))
+        published_items_path = run_dir / "reports/promotion-manager/published-items/published-items.json"
+        command = [
+            sys.executable,
+            str(REAL_EVIDENCE_SETUP),
+            "--publish-queue",
+            str(queue_path),
+            "--platforms",
+            args.publish_platforms or args.platforms,
+            "--out-dir",
+            str(run_dir),
+        ]
+        if readiness_path:
+            command.extend(["--publish-readiness", str(readiness_path)])
+        if published_items_path.exists():
+            command.extend(["--published-items-json", str(published_items_path)])
+        step = run_command(f"real_evidence_setup_{run.get('id', 'product')}", command, check=False)
+        steps.append(step)
+        report_path = run_dir / "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json"
+        report = read_json(report_path)
+        artifacts = report.get("artifacts") if isinstance(report.get("artifacts"), dict) else {}
+        results.append(
+            {
+                "productRunId": run.get("id", ""),
+                "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+                "report": str(report_path) if report_path.exists() else "",
+                "checklist": str(artifacts.get("checklist", "")),
+                "platformMetricsTemplate": str(artifacts.get("platformMetricsTemplate", "")),
+                "commentEvidenceTemplate": str(artifacts.get("commentEvidenceTemplate", "")),
+                "businessAttributionTemplate": str(artifacts.get("businessAttributionTemplate", "")),
+                "publishedUrlTemplate": str(artifacts.get("publishedUrlTemplate", "")),
+                "summary": report.get("summary", {}) if isinstance(report.get("summary"), dict) else {},
+                "exitCode": step["exitCode"],
+            }
+        )
+    return results
+
+
 def run_browser_publish_assistant(args: argparse.Namespace, batch: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if args.skip_browser_publish_assistant:
         return []
@@ -520,6 +590,7 @@ def build_report(
     batch: dict[str, Any],
     publish_readiness: list[dict[str, Any]],
     publish_setup: list[dict[str, Any]],
+    real_evidence_setup: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
     browser_form_fill: list[dict[str, Any]],
     cycle_evidence: list[dict[str, Any]],
@@ -534,6 +605,8 @@ def build_report(
         "publishReadinessRuns": len(publish_readiness),
         "publishSetupRuns": len(publish_setup),
         "publishSetupEnvVars": sum(int_value((item.get("summary") or {}).get("credentialEnvNames")) for item in publish_setup),
+        "realEvidenceSetupRuns": len(real_evidence_setup),
+        "realEvidenceSetupTargets": sum(int_value((item.get("summary") or {}).get("targets")) for item in real_evidence_setup),
         "browserPublishAssistantRuns": len(browser_publish),
         "browserFormFillRuns": len(browser_form_fill),
         "browserFormFillReady": sum(1 for item in browser_form_fill if item.get("status") == "ready"),
@@ -546,7 +619,7 @@ def build_report(
     summary.update(cycle_evidence_summary(cycle_evidence))
     return {
         "generatedAt": TODAY,
-        "status": final_status(batch, publish_readiness, publish_setup, browser_publish, browser_form_fill, audits),
+        "status": final_status(batch, publish_readiness, publish_setup, real_evidence_setup, browser_publish, browser_form_fill, audits),
         "outDir": str(out_dir),
         "input": {
             "urls": args.url,
@@ -565,6 +638,7 @@ def build_report(
         "cycleEvidence": cycle_evidence,
         "publishReadiness": publish_readiness,
         "publishSetup": publish_setup,
+        "realEvidenceSetup": real_evidence_setup,
         "browserPublishAssistant": browser_publish,
         "browserFormFill": browser_form_fill,
         "audits": audits,
@@ -803,6 +877,7 @@ def final_status(
     batch: dict[str, Any],
     publish_readiness: list[dict[str, Any]],
     publish_setup: list[dict[str, Any]],
+    real_evidence_setup: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
     browser_form_fill: list[dict[str, Any]],
     audits: dict[str, Any],
@@ -811,10 +886,11 @@ def final_status(
         return "blocked"
     failed_readiness = any(item.get("status") == "error" for item in publish_readiness)
     failed_setup = any(item.get("status") == "error" for item in publish_setup)
+    failed_real_evidence = any(item.get("status") == "error" for item in real_evidence_setup)
     failed_browser = any(item.get("status") == "error" for item in browser_publish)
     failed_form_fill = any(item.get("status") == "error" for item in browser_form_fill)
     failed_audit = any(item.get("exitCode") not in {0, None} for item in audits.values())
-    if failed_readiness or failed_setup or failed_browser or failed_form_fill or failed_audit:
+    if failed_readiness or failed_setup or failed_real_evidence or failed_browser or failed_form_fill or failed_audit:
         return "partial_ready_with_errors"
     if batch.get("status") == "ready" and publish_readiness:
         return "partial_ready"
@@ -846,6 +922,10 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "prepare_browser_assisted_publish",
             "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+        },
+        {
+            "purpose": "prepare_real_evidence_templates",
+            "command": f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
         },
         {
             "purpose": "fill_browser_publish_fields_without_submit",
@@ -904,6 +984,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- Publish readiness ({item['productRunId']}): `{item['status']}` {item['report']}")
     for item in report["publishSetup"]:
         lines.append(f"- Publish setup ({item['productRunId']}): `{item['status']}` {item['report']}")
+    for item in report["realEvidenceSetup"]:
+        lines.append(f"- Real evidence setup ({item['productRunId']}): `{item['status']}` {item['report']}")
     for item in report["browserPublishAssistant"]:
         lines.append(f"- Browser publish ({item['productRunId']}): `{item['status']}` {item['report']}")
     for item in report["browserFormFill"]:

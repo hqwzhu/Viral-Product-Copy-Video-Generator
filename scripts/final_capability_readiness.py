@@ -61,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--self-evolution-audit", default="", help="Path to self-evolution-audit.json.")
     parser.add_argument("--publish-readiness", action="append", default=[], help="Path to a publish-readiness.json file. Can repeat.")
     parser.add_argument("--publish-setup", action="append", default=[], help="Path to a publish-setup.json file. Can repeat.")
+    parser.add_argument("--real-evidence-setup", action="append", default=[], help="Path to a real-evidence-setup.json file. Can repeat.")
     return parser.parse_args()
 
 
@@ -87,6 +88,11 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         + glob_existing(out_dir, "reports/promotion-manager/publish-setup/publish-setup.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/publish-setup/publish-setup.json")
     )
+    real_evidence_setup_paths = unique_paths(
+        explicit_existing(args.real_evidence_setup)
+        + glob_existing(out_dir, "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
+        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
+    )
     return {
         "finalRunPath": final_run_path,
         "finalAuditPath": final_audit_path,
@@ -94,12 +100,14 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "selfEvolutionPath": self_evolution_path,
         "publishReadinessPaths": publish_readiness_paths,
         "publishSetupPaths": publish_setup_paths,
+        "realEvidenceSetupPaths": real_evidence_setup_paths,
         "finalRun": read_json(final_run_path),
         "finalAudit": read_json(final_audit_path),
         "platformAccess": read_json(platform_access_path),
         "selfEvolution": read_json(self_evolution_path),
         "publishReadiness": [read_json(path) for path in publish_readiness_paths],
         "publishSetup": [read_json(path) for path in publish_setup_paths],
+        "realEvidenceSetup": [read_json(path) for path in real_evidence_setup_paths],
     }
 
 
@@ -110,16 +118,17 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
     self_evolution = sources["selfEvolution"]
     readiness = sources["publishReadiness"]
     setup = sources["publishSetup"]
+    real_evidence_setup = sources["realEvidenceSetup"]
     rows = [
         product_intake_row(final_run, final_audit),
         viral_research_row(final_run, final_audit),
         copy_video_row(final_run, final_audit),
         publish_row(final_run, final_audit, readiness, setup),
-        metrics_row(final_run, final_audit),
+        metrics_row(final_run, final_audit, real_evidence_setup),
         optimization_row(final_run, final_audit),
         self_evolution_row(self_evolution, final_audit, platform_access),
     ]
-    action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, self_evolution, platform_access)
+    action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, real_evidence_setup, self_evolution, platform_access)
     summary = summarize(rows, action_queue)
     return {
         "generatedAt": TODAY,
@@ -268,15 +277,20 @@ def publish_row(
     )
 
 
-def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
+def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any], evidence_setup_reports: list[dict[str, Any]]) -> dict[str, Any]:
     audit_item = requirement(final_audit, "real_metrics_orders_revenue_recovery")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     metrics = real_evidence_metrics(summary)
+    setup_targets = max(
+        int_value(summary.get("realEvidenceSetupTargets")),
+        sum(int_value((report.get("summary") or {}).get("targets")) for report in evidence_setup_reports if isinstance(report, dict)),
+    )
+    metrics["realEvidenceSetupTargets"] = setup_targets
     status = audit_item.get("status") or "unknown"
     missing = list(audit_item.get("missing") or [])
     if final_run and metrics["evidenceCount"] == 0:
-        status = "waiting_real_data"
-        missing.append("no real metrics, comments, business rows, or recovered metric records in final run")
+        status = "waiting_real_data_with_evidence_templates" if setup_targets else "waiting_real_data"
+        missing.append("real evidence templates are ready but no filled real data has been imported" if setup_targets else "no real metrics, comments, business rows, or recovered metric records in final run")
     elif final_run and metrics["hasFullFunnelEvidence"]:
         status = "ready_with_full_funnel_evidence"
         missing = []
@@ -369,7 +383,7 @@ def row(
     metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     definition = next(item for item in OBJECTIVE_REQUIREMENTS if item["id"] == requirement_id)
-    blocked = status.startswith("blocked") or status in {"waiting_real_data", "needs_real_run_evidence"}
+    blocked = status.startswith("blocked") or status.startswith("waiting_") or status in {"needs_real_run_evidence"}
     return {
         "id": requirement_id,
         "label": definition["label"],
@@ -390,6 +404,7 @@ def build_action_queue(
     final_audit: dict[str, Any],
     readiness_reports: list[dict[str, Any]],
     setup_reports: list[dict[str, Any]],
+    evidence_setup_reports: list[dict[str, Any]],
     self_evolution: dict[str, Any],
     platform_access: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -438,7 +453,19 @@ def build_action_queue(
             )
         )
     metrics_status = by_id["real_metrics_comments_orders_revenue"]["status"]
-    if metrics_status == "waiting_real_data":
+    if metrics_status.startswith("waiting_real_data"):
+        evidence_setup_targets = sum(
+            int_value((report.get("summary") or {}).get("targets")) for report in evidence_setup_reports if isinstance(report, dict)
+        )
+        if not evidence_setup_targets:
+            actions.append(
+                action(
+                    59,
+                    "build_real_evidence_setup",
+                    "Generate platform metrics, comment, published URL, and business attribution templates before collecting real data.",
+                    f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\"",
+                )
+            )
         actions.append(
             action(
                 60,
@@ -570,7 +597,7 @@ def final_status(rows: list[dict[str, Any]]) -> str:
         return "full_ready"
     if any(status.startswith("blocked") for status in statuses):
         return "partial_ready_blocked_by_platform_or_safety_limits"
-    if any(status in {"waiting_real_data", "needs_real_run_evidence"} for status in statuses):
+    if any(status.startswith("waiting_") or status == "needs_real_run_evidence" for status in statuses):
         return "partial_ready_waiting_external_evidence"
     return "partial_ready"
 
@@ -656,6 +683,7 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
         "selfEvolution": report_source(sources.get("selfEvolutionPath")),
         "publishReadiness": [report_source(path) for path in sources.get("publishReadinessPaths", [])],
         "publishSetup": [report_source(path) for path in sources.get("publishSetupPaths", [])],
+        "realEvidenceSetup": [report_source(path) for path in sources.get("realEvidenceSetupPaths", [])],
     }
 
 
@@ -866,7 +894,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"likes={metrics.get('likesEvidenceRecords', 0)}, "
                 f"comments={metrics.get('commentsEvidenceRecords', 0)}, "
                 f"orders={metrics.get('ordersEvidenceRecords', 0)}, "
-                f"revenue={metrics.get('revenueEvidenceRecords', 0)}"
+                f"revenue={metrics.get('revenueEvidenceRecords', 0)}, "
+                f"evidenceTemplates={metrics.get('realEvidenceSetupTargets', 0)}"
             )
         if item["id"] == "controlled_self_evolution" and item.get("metrics"):
             metrics = item["metrics"]

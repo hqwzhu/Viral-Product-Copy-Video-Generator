@@ -181,6 +181,24 @@ def build_phases(args: argparse.Namespace, out_dir: Path, run_root: Path) -> lis
                     proves=["copy-ready browser/manual payloads for Zhihu, Xiaohongshu, Douyin fallback, TikTok, and similar platforms"],
                     outputs=[str(run_root / "reports/promotion-manager/browser-publish/browser-publish-assistant.json")],
                 ),
+                command(
+                    "build_real_evidence_setup",
+                    [
+                        "python",
+                        "scripts/real_evidence_setup.py",
+                        "--publish-queue",
+                        str(run_root / "reports/promotion-manager/publish-queue/publish-queue.json"),
+                        "--publish-readiness",
+                        str(run_root / "reports/promotion-manager/publish-readiness/publish-readiness.json"),
+                        "--out-dir",
+                        str(run_root),
+                    ],
+                    proves=["platform metric templates, comment templates, business attribution template, published URL template, and import commands for real evidence recovery"],
+                    outputs=[
+                        str(run_root / "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json"),
+                        str(run_root / "reports/promotion-manager/real-evidence-setup/real-evidence-checklist.md"),
+                    ],
+                ),
             ],
         ),
         phase(

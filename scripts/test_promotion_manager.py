@@ -38,6 +38,7 @@ PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 PUBLISH_SETUP_ASSISTANT = ROOT / "scripts" / "publish_setup_assistant.py"
+REAL_EVIDENCE_SETUP = ROOT / "scripts" / "real_evidence_setup.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
@@ -1250,6 +1251,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["summary"]["contentArtifacts"], 1)
         self.assertEqual(report["summary"]["videoFilesGenerated"], 0)
         self.assertEqual(report["summary"]["publishQueues"], 1)
+        self.assertEqual(report["summary"]["realEvidenceSetupRuns"], 1)
+        self.assertGreaterEqual(report["summary"]["realEvidenceSetupTargets"], 1)
         self.assertEqual(report["summary"]["publishedItemsReports"], 1)
         self.assertEqual(report["summary"]["postPublishMetricsCaptureRuns"], 1)
         self.assertEqual(report["summary"]["commentEvidenceCaptureRuns"], 1)
@@ -1274,6 +1277,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["publishSetup"][0]["status"], "ready")
         self.assertTrue(Path(report["publishSetup"][0]["report"]).exists())
         self.assertTrue(Path(report["publishSetup"][0]["envTemplate"]).exists())
+        self.assertEqual(report["realEvidenceSetup"][0]["status"], "ready")
+        self.assertTrue(Path(report["realEvidenceSetup"][0]["report"]).exists())
+        self.assertTrue(Path(report["realEvidenceSetup"][0]["platformMetricsTemplate"]).exists())
+        self.assertTrue(Path(report["realEvidenceSetup"][0]["businessAttributionTemplate"]).exists())
         self.assertIn(report["summary"]["finalReadinessStatus"], {"partial_ready", "partial_ready_waiting_external_evidence"})
         self.assertTrue(Path(report["finalReadinessMatrix"]["report"]).exists())
         self.assertEqual(report["browserPublishAssistant"][0]["status"], "ready")
@@ -4998,7 +5005,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         root_dir = Path(tempfile.mkdtemp(prefix="final-readiness-fields-test-"))
         self.addCleanup(shutil.rmtree, root_dir, ignore_errors=True)
 
-        def write_sources(out_dir: Path, summary: dict[str, Any]) -> None:
+        def write_sources(out_dir: Path, summary: dict[str, Any], evidence_setup_targets: int = 0) -> None:
             final_run_dir = out_dir / "reports/promotion-manager/final-run"
             final_run_dir.mkdir(parents=True)
             (final_run_dir / "final-capability-run.json").write_text(
@@ -5023,6 +5030,21 @@ Prompt templates for product copy, SEO content, and video scripts.
                 ),
                 encoding="utf-8",
             )
+            if evidence_setup_targets:
+                evidence_dir = out_dir / "reports/promotion-manager/real-evidence-setup"
+                evidence_dir.mkdir(parents=True)
+                (evidence_dir / "real-evidence-setup.json").write_text(
+                    json.dumps(
+                        {
+                            "generatedAt": "2026-07-08",
+                            "status": "ready",
+                            "summary": {"targets": evidence_setup_targets},
+                            "records": [],
+                            "artifacts": {},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
             capability_dir = out_dir / "reports/promotion-manager/capability"
             capability_dir.mkdir(parents=True)
             (capability_dir / "final-capability-audit.json").write_text(
@@ -5059,6 +5081,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 },
                 "ready_with_full_funnel_evidence",
                 True,
+                0,
             ),
             (
                 "social_only",
@@ -5074,12 +5097,20 @@ Prompt templates for product copy, SEO content, and video scripts.
                 },
                 "partial_ready_social_metrics_only",
                 False,
+                0,
+            ),
+            (
+                "templates_only",
+                {},
+                "waiting_real_data_with_evidence_templates",
+                False,
+                2,
             ),
         ]
-        for name, summary, expected_status, expected_satisfied in cases:
+        for name, summary, expected_status, expected_satisfied, evidence_setup_targets in cases:
             with self.subTest(name=name):
                 out_dir = root_dir / name
-                write_sources(out_dir, summary)
+                write_sources(out_dir, summary, evidence_setup_targets)
                 subprocess.run(
                     [sys.executable, str(FINAL_CAPABILITY_READINESS), "--out-dir", str(out_dir)],
                     check=True,
@@ -5097,6 +5128,11 @@ Prompt templates for product copy, SEO content, and video scripts.
                 if name == "social_only":
                     self.assertIn("no real order evidence in final run", metrics_row["missing"])
                     self.assertIn("no real revenue evidence in final run", metrics_row["missing"])
+                if name == "templates_only":
+                    self.assertEqual(metrics_row["metrics"]["realEvidenceSetupTargets"], 2)
+                    self.assertIn("real evidence templates are ready but no filled real data has been imported", metrics_row["missing"])
+                    self.assertTrue(report["sourceReports"]["realEvidenceSetup"][0]["exists"])
+                    self.assertFalse(any(item["id"] == "build_real_evidence_setup" for item in report["actionQueue"]))
 
     def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-access-audit-test-"))
@@ -6452,6 +6488,89 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertTrue(Path(report["artifacts"]["platformSetupGuide"]).exists())
         self.assertTrue((out_dir / "reports/promotion-manager/publish-setup/publish-setup.md").exists())
+
+    def test_real_evidence_setup_builds_templates_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="real-evidence-setup-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        queue_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+        queue_path.parent.mkdir(parents=True)
+        draft_path = out_dir / "youtube-draft.md"
+        draft_path.write_text("- Title: YouTube launch draft\n", encoding="utf-8")
+        secret_value = "fake-secret-that-must-not-appear-in-evidence-templates"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "youtube",
+                            "status": "dry_run",
+                            "publishMode": "official_api_publish",
+                            "contentDraft": str(draft_path),
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/ai-prompt-kit?utm_campaign=launch&utm_content=yt-001",
+                                "campaignId": "launch",
+                                "contentId": "yt-001",
+                                "utm": {
+                                    "utm_source": "youtube",
+                                    "utm_medium": "video",
+                                    "utm_campaign": "launch",
+                                    "utm_content": "yt-001",
+                                },
+                            },
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "status": "browser_assisted_publish",
+                            "publishMode": "browser_assisted_publish",
+                            "title": "Xiaohongshu launch note",
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/ai-prompt-kit?utm_campaign=launch&utm_content=xhs-001",
+                                "campaignId": "launch",
+                                "contentId": "xhs-001",
+                                "utm": {
+                                    "utm_source": "xiaohongshu",
+                                    "utm_medium": "social",
+                                    "utm_campaign": "launch",
+                                    "utm_content": "xhs-001",
+                                },
+                            },
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(REAL_EVIDENCE_SETUP), "--publish-queue", str(queue_path), "--out-dir", str(out_dir)],
+            check=True,
+            cwd=ROOT,
+            env={**os.environ, "GITHUB_TOKEN": secret_value},
+        )
+
+        report_path = out_dir / "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["targets"], 2)
+        self.assertEqual(report["summary"]["trackedUrls"], 2)
+        by_platform = {item["platform"]: item for item in report["records"]}
+        self.assertEqual(by_platform["youtube"]["title"], "YouTube launch draft")
+        self.assertEqual(by_platform["youtube"]["trackingPlan"]["utm_content"], "yt-001")
+        self.assertEqual(by_platform["xiaohongshu"]["trackingPlan"]["utm_source"], "xiaohongshu")
+        for path in report["artifacts"].values():
+            self.assertTrue(Path(path).exists(), path)
+            self.assertNotIn(secret_value, Path(path).read_text(encoding="utf-8-sig"))
+        metrics_template = Path(report["artifacts"]["platformMetricsTemplate"]).read_text(encoding="utf-8-sig")
+        business_template = Path(report["artifacts"]["businessAttributionTemplate"]).read_text(encoding="utf-8-sig")
+        self.assertIn("views", metrics_template)
+        self.assertIn("likes", metrics_template)
+        self.assertIn("orders", metrics_template)
+        self.assertIn("revenue", metrics_template)
+        self.assertIn("utm_content", business_template)
+        self.assertIn("xhs-001", business_template)
 
     def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-douyin-test-"))
