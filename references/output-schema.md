@@ -56,7 +56,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
-- `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, and `publish-setup-checklist.md` when `scripts/publish_setup_assistant.py` converts readiness into credential names, target gaps, approval gates, and next commands
+- `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` converts readiness into credential names, target gaps, official setup references, approval gates, and next commands
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads, browser form-fill commands, and registers supplied real published URLs
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from a prepared payload and stops before final publish
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
@@ -158,7 +158,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
-- `publishSetup[]`: per-product publish setup report path, env-template path, checklist path, summary, and exit code
+- `publishSetup[]`: per-product publish setup report path, env-template path, checklist path, platform setup guide path, summary, and exit code
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
 - `browserFormFill[]`: optional per-platform result when `--run-browser-form-fill` is supplied; includes payload path, report path, screenshot, filled field count, missing fields, submitted flag, and final-user-action requirement
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
@@ -191,6 +191,8 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `records[]`: one platform setup record with readiness, setup category, credential environment variable names, missing target fields, approval gate, setup steps, safe rerun/execution/browser-assist commands, and guardrail
 - `artifacts.envTemplate`: `publish-credentials.example.env` with variable names only, never values
 - `artifacts.checklist`: `publish-setup-checklist.md`
+- `artifacts.platformSetupGuide`: markdown platform setup guide with official references, required capabilities, target inputs, setup steps, verification commands, and constraints
+- `artifacts.platformSetupGuideJson`: machine-readable platform setup guide with the same data and no secret values
 - `guardrails`: no stored credential values, no final publish click, and no fabricated published URL or metrics
 
 ## Viral Content Library

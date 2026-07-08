@@ -14,6 +14,116 @@ TODAY = date.today().isoformat()
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 OFFICIAL_READINESS = {"missing_credentials", "missing_target", "missing_approval", "dry_run_ready", "ready_to_execute"}
 BROWSER_OR_MANUAL_READINESS = {"manual_publish_required", "browser_assisted_or_official_app_required"}
+PLATFORM_SETUP_GUIDES = {
+    "github": {
+        "automationStatus": "official_executor_integrated",
+        "developerConsole": "https://github.com/settings/tokens?type=beta",
+        "officialDocs": [
+            {"label": "GitHub REST Contents API", "url": "https://docs.github.com/en/rest/repos/contents"},
+            {"label": "GitHub REST Releases API", "url": "https://docs.github.com/en/rest/releases/releases"},
+        ],
+        "requiredCapabilities": [
+            "Fine-grained personal access token or GitHub App token scoped to the target repository.",
+            "Contents repository permission set to write for file publishing.",
+            "Issues or Releases permissions only when using those GitHub actions.",
+        ],
+        "targetInputs": ["--github-repo owner/repo", "--github-path PROMOTION.md"],
+        "credentialEnvNames": ["GITHUB_TOKEN", "GH_TOKEN"],
+        "constraints": [
+            "Do not store token values in this repository.",
+            "Workflow files require additional workflow permission when editing .github/workflows.",
+        ],
+    },
+    "youtube": {
+        "automationStatus": "official_executor_integrated",
+        "developerConsole": "https://console.cloud.google.com/apis/credentials",
+        "officialDocs": [
+            {"label": "YouTube videos.insert", "url": "https://developers.google.com/youtube/v3/docs/videos/insert"},
+            {"label": "Google OAuth native apps", "url": "https://developers.google.com/identity/protocols/oauth2/native-app"},
+        ],
+        "requiredCapabilities": [
+            "Google Cloud project with YouTube Data API enabled.",
+            "OAuth consent and a user-authorized channel with youtube.upload scope.",
+            "A real MP4 video file and reviewed title, description, tags, and privacy status.",
+        ],
+        "targetInputs": ["--youtube-video-file ./promotion-output/videos/product-youtube.mp4"],
+        "credentialEnvNames": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        "constraints": [
+            "Unverified API projects may be restricted to private visibility until audit requirements are satisfied.",
+            "Uploads consume YouTube quota and require the channel owner's authorization.",
+        ],
+    },
+    "douyin": {
+        "automationStatus": "official_executor_integrated_with_platform_review",
+        "developerConsole": "https://open.douyin.com/",
+        "officialDocs": [
+            {"label": "Douyin publish solution", "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution"},
+            {"label": "Douyin upload video", "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/upload/"},
+            {"label": "Douyin create video", "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/create-video"},
+        ],
+        "requiredCapabilities": [
+            "Approved Douyin Open Platform app with video.create permission.",
+            "User OAuth authorization and an access token/open_id for the publishing account.",
+            "A real MP4/WebM video file that satisfies Douyin size, duration, review, and watermark constraints.",
+        ],
+        "targetInputs": ["--douyin-video-file ./promotion-output/videos/product-douyin.mp4"],
+        "credentialEnvNames": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
+        "constraints": [
+            "Created videos are subject to platform review and must not be treated as published until real evidence exists.",
+            "User-visible consent is required before creating content on behalf of a user.",
+        ],
+    },
+    "tiktok": {
+        "automationStatus": "official_candidate_executor_not_integrated",
+        "developerConsole": "https://developers.tiktok.com/",
+        "officialDocs": [
+            {"label": "TikTok Content Posting API", "url": "https://developers.tiktok.com/doc/content-posting-api-get-started/"},
+        ],
+        "requiredCapabilities": [
+            "Registered TikTok developer app with Content Posting API product enabled.",
+            "Approved video.publish scope and target creator authorization.",
+            "Access token and open ID for the authorized creator.",
+        ],
+        "targetInputs": ["approved TikTok app integration"],
+        "credentialEnvNames": ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "TIKTOK_ACCESS_TOKEN", "TIKTOK_OPEN_ID"],
+        "constraints": [
+            "Direct executor is not integrated in this Skill yet.",
+            "Unaudited clients may have visibility restrictions until platform audit is complete.",
+        ],
+    },
+    "zhihu": {
+        "automationStatus": "browser_or_manual_until_official_publish_access_verified",
+        "developerConsole": "",
+        "officialDocs": [],
+        "requiredCapabilities": [
+            "Use the generated article draft in a user-visible Zhihu creator/editor workflow.",
+            "Register the real published URL and evidence after manual/browser-assisted publishing.",
+        ],
+        "targetInputs": ["browser/manual editor URL", "published URL evidence after publish"],
+        "credentialEnvNames": [],
+        "constraints": [
+            "No stable official article publishing API is integrated.",
+            "Do not use private endpoints, stored cookies, captcha bypass, or hidden browser tokens.",
+        ],
+    },
+    "xiaohongshu": {
+        "automationStatus": "browser_or_manual_until_official_publish_access_verified",
+        "developerConsole": "https://open.xiaohongshu.com/",
+        "officialDocs": [
+            {"label": "Xiaohongshu open platform docs", "url": "https://open.xiaohongshu.com/document/api"},
+        ],
+        "requiredCapabilities": [
+            "Use the generated note, tags, and cover text in a user-visible Xiaohongshu creator workflow.",
+            "Register the real published URL and evidence after manual/browser-assisted publishing.",
+        ],
+        "targetInputs": ["browser/manual creator URL", "published URL evidence after publish"],
+        "credentialEnvNames": [],
+        "constraints": [
+            "No stable official note publishing API is integrated.",
+            "Do not use private endpoints, stored cookies, captcha bypass, or hidden browser tokens.",
+        ],
+    },
+}
 
 
 def main() -> None:
@@ -227,11 +337,18 @@ def write_artifacts(out_dir: Path, readiness_path: Path | None, records: list[di
     directory.mkdir(parents=True, exist_ok=True)
     env_file = directory / "publish-credentials.example.env"
     checklist_file = directory / "publish-setup-checklist.md"
+    platform_guide_json = directory / "platform-setup-guide.json"
+    platform_guide_md = directory / "platform-setup-guide.md"
+    platform_guides = build_platform_setup_guides(records)
     env_file.write_text(render_env_template(env_names), encoding="utf-8")
     checklist_file.write_text(render_checklist(readiness_path, records) + "\n", encoding="utf-8")
+    platform_guide_json.write_text(json.dumps(platform_guides, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    platform_guide_md.write_text(render_platform_setup_guide(platform_guides) + "\n", encoding="utf-8")
     return {
         "envTemplate": str(env_file),
         "checklist": str(checklist_file),
+        "platformSetupGuide": str(platform_guide_md),
+        "platformSetupGuideJson": str(platform_guide_json),
     }
 
 
@@ -291,6 +408,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Readiness source: {report['input'].get('publishReadiness', '')}",
         f"- Env template: {report['artifacts'].get('envTemplate', '')}",
         f"- Checklist: {report['artifacts'].get('checklist', '')}",
+        f"- Platform setup guide: {report['artifacts'].get('platformSetupGuide', '')}",
         "",
         "## Platforms",
     ]
@@ -344,6 +462,115 @@ def render_checklist(readiness_path: Path | None, records: list[dict[str, Any]])
         for step in record.get("setupSteps", []):
             lines.append(f"- [ ] {step}")
         lines.append("")
+    return "\n".join(lines)
+
+
+def build_platform_setup_guides(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    guides: list[dict[str, Any]] = []
+    for record in records:
+        platform = str(record.get("platform") or "").lower()
+        base = PLATFORM_SETUP_GUIDES.get(platform, {})
+        commands = record.get("commands") if isinstance(record.get("commands"), dict) else {}
+        env_names = ordered_unique(
+            list(record.get("credentialEnvNames") or [])
+            + list(base.get("credentialEnvNames") or [])
+        )
+        guides.append(
+            {
+                "platform": platform,
+                "automationStatus": base.get("automationStatus", "manual_review_required"),
+                "developerConsole": base.get("developerConsole", ""),
+                "officialDocs": base.get("officialDocs", []),
+                "requiredCapabilities": base.get("requiredCapabilities", []),
+                "credentialEnvNames": env_names,
+                "missingEnv": record.get("missingEnv") or [],
+                "targetInputs": base.get("targetInputs", []),
+                "targetStatus": record.get("target", {}),
+                "approval": record.get("approval", {}),
+                "setupCategory": record.get("setupCategory", ""),
+                "readiness": record.get("readiness", ""),
+                "verificationCommands": {
+                    "rerunReadiness": commands.get("rerunReadiness", ""),
+                    "dryRunOrExecuteWhenApproved": commands.get("executeWhenReady", ""),
+                    "prepareBrowserPublish": commands.get("prepareBrowserPublish", ""),
+                    "registerPublishedUrl": commands.get("registerPublishedUrl", ""),
+                },
+                "setupSteps": platform_setup_steps(platform, record, base),
+                "constraints": base.get("constraints", []) + [record.get("guardrail", "")],
+                "secretHandling": [
+                    "Set real credential values only in the shell, OS scheduler, or secret manager.",
+                    "Do not paste, print, or commit API keys, OAuth tokens, passwords, cookies, or hidden browser tokens.",
+                    "This guide records variable names and commands only; it must not contain credential values.",
+                ],
+            }
+        )
+    return guides
+
+
+def platform_setup_steps(platform: str, record: dict[str, Any], base: dict[str, Any]) -> list[str]:
+    category = str(record.get("setupCategory") or "")
+    steps = [
+        f"Review the official documentation and platform account requirements for {platform}.",
+        "Create or select the correct developer app/account and request the required publishing permissions.",
+    ]
+    env_names = ordered_unique(list(record.get("credentialEnvNames") or []) + list(base.get("credentialEnvNames") or []))
+    if env_names:
+        steps.append("Set these environment variable names outside the repository: " + ", ".join(env_names) + ".")
+    target_inputs = list(base.get("targetInputs") or [])
+    if target_inputs:
+        steps.append("Prepare target inputs: " + ", ".join(target_inputs) + ".")
+    if category == "browser_or_manual_publish":
+        steps.append("Use generated browser/manual payloads, stop before final publish, and let the user complete any login, captcha, or final publish action.")
+    elif category in {"credential_setup_required", "target_setup_required", "approval_required", "execution_approval_required", "ready_to_execute"}:
+        steps.append("Rerun publish readiness until the platform is dry_run_ready or ready_to_execute.")
+        steps.append(f"Execute official writes only with --execute-publish --approval {APPROVAL_PHRASE}.")
+    else:
+        steps.extend(record.get("setupSteps") or [])
+    steps.append("After publishing, register the real published URL and evidence before metrics recovery.")
+    return ordered_unique(steps)
+
+
+def render_platform_setup_guide(guides: list[dict[str, Any]]) -> str:
+    lines = [
+        "# Platform Setup Guide",
+        "",
+        "This guide contains setup instructions and environment variable names only. It must not contain real secrets.",
+    ]
+    if not guides:
+        lines.append("")
+        lines.append("No platform readiness records were available. Run publish readiness first.")
+        return "\n".join(lines)
+    for guide in guides:
+        lines.extend(
+            [
+                "",
+                f"## {guide['platform']}",
+                f"- Automation status: `{guide.get('automationStatus', '')}`",
+                f"- Readiness: `{guide.get('readiness', '')}`",
+                f"- Setup category: `{guide.get('setupCategory', '')}`",
+                f"- Developer console: {guide.get('developerConsole') or 'manual/browser workflow'}",
+                f"- Credential env names: {', '.join(guide.get('credentialEnvNames') or []) or 'none'}",
+                f"- Missing env: {', '.join(guide.get('missingEnv') or []) or 'none'}",
+                "",
+                "### Official Docs",
+            ]
+        )
+        docs = guide.get("officialDocs") or []
+        if docs:
+            for doc in docs:
+                lines.append(f"- [{doc.get('label', doc.get('url', 'doc'))}]({doc.get('url', '')})")
+        else:
+            lines.append("- No verified official direct-publish API is integrated for this platform.")
+        lines.extend(["", "### Required Capabilities"])
+        lines.extend(f"- {item}" for item in guide.get("requiredCapabilities", []))
+        lines.extend(["", "### Setup Steps"])
+        lines.extend(f"- [ ] {item}" for item in guide.get("setupSteps", []))
+        lines.extend(["", "### Verification Commands"])
+        for name, command in (guide.get("verificationCommands") or {}).items():
+            if command:
+                lines.append(f"- {name}: `{command}`")
+        lines.extend(["", "### Constraints"])
+        lines.extend(f"- {item}" for item in guide.get("constraints", []) if item)
     return "\n".join(lines)
 
 

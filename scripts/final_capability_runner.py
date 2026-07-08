@@ -339,6 +339,8 @@ def run_publish_setup_assistant(args: argparse.Namespace, publish_readiness: lis
                 "report": str(report_path) if report_path.exists() else "",
                 "envTemplate": str(artifacts.get("envTemplate", "")),
                 "checklist": str(artifacts.get("checklist", "")),
+                "platformSetupGuide": str(artifacts.get("platformSetupGuide", "")),
+                "platformSetupGuideJson": str(artifacts.get("platformSetupGuideJson", "")),
                 "summary": report.get("summary", {}) if isinstance(report.get("summary"), dict) else {},
                 "exitCode": step["exitCode"],
             }

@@ -5930,6 +5930,19 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("GOOGLE_OAUTH_CLIENT_ID=", env_text)
         self.assertNotIn(secret_value, env_text)
         self.assertTrue(Path(report["artifacts"]["checklist"]).exists())
+        platform_guide_json = Path(report["artifacts"]["platformSetupGuideJson"])
+        platform_guide_text = platform_guide_json.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, platform_guide_text)
+        platform_guides = json.loads(platform_guide_text)
+        guide_by_platform = {item["platform"]: item for item in platform_guides}
+        self.assertEqual(guide_by_platform["youtube"]["automationStatus"], "official_executor_integrated")
+        self.assertIn("YouTube videos.insert", json.dumps(guide_by_platform["youtube"], ensure_ascii=False))
+        self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN", guide_by_platform["youtube"]["credentialEnvNames"])
+        self.assertEqual(
+            guide_by_platform["xiaohongshu"]["automationStatus"],
+            "browser_or_manual_until_official_publish_access_verified",
+        )
+        self.assertTrue(Path(report["artifacts"]["platformSetupGuide"]).exists())
         self.assertTrue((out_dir / "reports/promotion-manager/publish-setup/publish-setup.md").exists())
 
     def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:

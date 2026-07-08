@@ -527,7 +527,7 @@ python scripts/publish_setup_assistant.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, and `publish-setup-checklist.md`. The env file is a template with variable names only; do not put real secrets in the repository.
+This writes `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}`. The env file is a template with variable names only; do not put real secrets in the repository. The platform guide lists official setup references, required capabilities, target inputs, verification commands, and constraints for each queued platform.
 
 Prepare browser-assisted publishing materials for non-official direct-publish platforms:
 
