@@ -5212,12 +5212,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["learningFreshness"]["status"], "stale_not_live_checked")
         self.assertTrue(any(item["gap"] == "verified_official_creator_publish_api_missing" for item in report["implementationGaps"]))
         gap_research = report["officialDocGapResearch"]
-        self.assertEqual(gap_research["status"], "unresolved_missing_official_docs")
+        self.assertEqual(gap_research["status"], "official_app_or_executor_gaps_documented")
         self.assertGreaterEqual(gap_research["summary"]["records"], 1)
         zhihu_research = [
             item for item in gap_research["records"] if item["platform"] == "zhihu" and item["area"] == "publish"
         ]
         self.assertTrue(zhihu_research)
+        self.assertEqual(zhihu_research[0]["docEvidenceStatus"], "configured_not_live_checked")
         self.assertEqual(zhihu_research[0]["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertTrue(zhihu_research[0]["searchedOfficialSources"])
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
@@ -5237,22 +5238,23 @@ Prompt templates for product copy, SEO content, and video scripts.
         zhihu = records[1]
         self.assertEqual(youtube["publish"]["officialDocEvidenceStatus"], "all_reachable")
         self.assertEqual(youtube["publish"]["officialDocs"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
-        self.assertEqual(zhihu["publish"]["officialDocEvidenceStatus"], "missing_official_docs")
+        self.assertEqual(zhihu["publish"]["officialDocEvidenceStatus"], "all_reachable")
 
         summary = module.official_doc_summary(records)
-        self.assertEqual(summary["reachableDocs"], 2)
-        self.assertEqual(summary["missingDocCapabilities"], 2)
+        self.assertEqual(summary["reachableDocs"], 6)
+        self.assertEqual(summary["missingDocCapabilities"], 0)
         self.assertIn("all_reachable", summary["capabilityEvidenceStatus"])
         self.assertEqual(module.learning_freshness(True, module.official_doc_summary([youtube]))["status"], "fresh_live_checked")
         self.assertEqual(module.learning_freshness(False, summary)["status"], "stale_not_live_checked")
         gaps = module.implementation_gaps(records)
-        self.assertTrue(any(item["gap"] == "official_doc_evidence_missing" for item in gaps))
+        self.assertFalse(any(item["gap"] == "official_doc_evidence_missing" for item in gaps))
         gap_research = module.official_doc_gap_research(records, True)
-        self.assertEqual(gap_research["status"], "unresolved_missing_official_docs")
-        self.assertEqual(gap_research["summary"]["missingOfficialDocCapabilities"], 2)
+        self.assertEqual(gap_research["status"], "manual_or_evidence_fallbacks_documented")
+        self.assertEqual(gap_research["summary"]["missingOfficialDocCapabilities"], 0)
         zhihu_publish = [
             item for item in gap_research["records"] if item["platform"] == "zhihu" and item["area"] == "publish"
         ][0]
+        self.assertEqual(zhihu_publish["docEvidenceStatus"], "all_reachable")
         self.assertEqual(zhihu_publish["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertEqual(zhihu_publish["searchedOfficialSources"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
 
@@ -5985,6 +5987,18 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["status"], "blocked")
         self.assertIn("DOUYIN_ACCESS_TOKEN", report["reason"])
         self.assertIn("DOUYIN_OPEN_ID", report["reason"])
+
+    def test_publish_executor_douyin_parses_nested_official_response_ids(self) -> None:
+        module = load_script_module(PUBLISH_EXECUTOR)
+        upload_payload = {"data": {"error_code": 0, "video": {"video_id": "video-123"}}}
+        create_payload = {"data": {"error_code": 0, "item": {"item_id": "item-456"}, "share_id": "share-789"}}
+
+        upload = module.douyin_result_from_payload(upload_payload, 200, ("video_id",))
+        create = module.douyin_result_from_payload(create_payload, 200, ("item_id", "share_id"))
+
+        self.assertEqual(upload["videoId"], "video-123")
+        self.assertEqual(create["itemId"], "item-456")
+        self.assertEqual(create["shareId"], "share-789")
 
     def test_publish_queue_builds_official_dry_runs_and_manual_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-queue-test-"))

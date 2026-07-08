@@ -99,11 +99,15 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
             "officialDocs": [
                 {
                     "title": "Douyin Open Platform publishing solution",
-                    "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
+                    "url": "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/video-management/douyin/create-video/ability-introduction",
                 },
                 {
                     "title": "Douyin upload/create video APIs",
-                    "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/upload/",
+                    "url": "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/video-management/douyin/create-video/upload-video",
+                },
+                {
+                    "title": "Douyin create video API",
+                    "url": "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/video-management/douyin/create-video/video-create",
                 }
             ],
         },
@@ -189,16 +193,34 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
             "implementedBy": [],
             "requiredEnvAll": [],
             "approvalRequired": True,
-            "notes": "No stable public article publishing API is integrated; publish packs remain manual/browser-assisted until official access is verified.",
-            "officialDocs": [],
+            "notes": "Official Zhihu entry points are documented, but no stable public creator article publishing API is integrated; publish packs remain manual/browser-assisted until official access is verified.",
+            "officialDocs": [
+                {
+                    "title": "Zhihu developer portal",
+                    "url": "https://developer.zhihu.com/",
+                },
+                {
+                    "title": "Zhihu creator entry",
+                    "url": "https://www.zhihu.com/creator",
+                },
+            ],
         },
         "metrics": {
             "access": "manual_export_or_structured_snapshot_required",
             "mode": "manual_structured_snapshot_or_export",
             "implementedBy": ["metrics_intake.py", "metrics_recovery.py"],
             "requiredEnvAll": [],
-            "notes": "Use public page evidence, exported analytics, screenshots, or browser-visible structured snapshots.",
-            "officialDocs": [],
+            "notes": "Use public page evidence, exported analytics, screenshots, or browser-visible structured snapshots; no public creator analytics API is integrated.",
+            "officialDocs": [
+                {
+                    "title": "Zhihu developer portal",
+                    "url": "https://developer.zhihu.com/",
+                },
+                {
+                    "title": "Zhihu creator entry",
+                    "url": "https://www.zhihu.com/creator",
+                },
+            ],
         },
     },
 }
@@ -211,7 +233,7 @@ OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "title": "Zhihu developer portal",
                     "url": "https://developer.zhihu.com/",
-                    "purpose": "Candidate official developer entry; not configured as verified creator article publishing documentation.",
+                    "purpose": "Official developer entry; no verified creator article publishing API is integrated.",
                 },
                 {
                     "title": "Zhihu creator entry",
@@ -232,7 +254,7 @@ OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "title": "Zhihu developer portal",
                     "url": "https://developer.zhihu.com/",
-                    "purpose": "Candidate official developer entry; not configured as verified creator analytics documentation.",
+                    "purpose": "Official developer entry; no verified creator analytics API is integrated.",
                 },
                 {
                     "title": "Zhihu creator entry",

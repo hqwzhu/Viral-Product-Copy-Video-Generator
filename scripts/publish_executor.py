@@ -406,16 +406,20 @@ def douyin_api(
     except Exception as exc:  # noqa: BLE001 - CLI reports connector errors compactly.
         return {"status": "error", "reason": str(exc)}
 
+    return douyin_result_from_payload(payload, response.status, expected_id_keys)
+
+
+def douyin_result_from_payload(payload: Any, http_status: int, expected_id_keys: tuple[str, ...]) -> dict[str, Any]:
     payload_obj = payload if isinstance(payload, dict) else {}
     data = payload_obj.get("data")
     data = data if isinstance(data, dict) else {}
     error_code = data.get("error_code", payload_obj.get("error_code"))
     if error_code not in (None, 0, "0"):
         description = data.get("description") or payload_obj.get("description") or payload_obj.get("message") or "Douyin API returned an error."
-        return {"status": "error", "httpStatus": response.status, "reason": str(description)[:500]}
-    result: dict[str, Any] = {"status": "ready", "httpStatus": response.status}
+        return {"status": "error", "httpStatus": http_status, "reason": str(description)[:500]}
+    result: dict[str, Any] = {"status": "ready", "httpStatus": http_status}
     for key in expected_id_keys:
-        value = data.get(key) or payload_obj.get(key)
+        value = nested_value(data, key) or nested_value(payload_obj, key)
         if value:
             if key == "video_id":
                 result["videoId"] = value
@@ -424,6 +428,22 @@ def douyin_api(
             elif key == "share_id":
                 result["shareId"] = value
     return result
+
+
+def nested_value(value: Any, key: str) -> Any:
+    if isinstance(value, dict):
+        if value.get(key):
+            return value[key]
+        for child in value.values():
+            found = nested_value(child, key)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = nested_value(child, key)
+            if found:
+                return found
+    return ""
 
 
 def build_multipart_body(boundary: str, metadata: dict[str, Any], video_path: Path, media_type: str) -> bytes:
