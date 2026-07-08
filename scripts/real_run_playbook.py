@@ -375,6 +375,7 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
             "--auto-search-competitors",
             "--run-creator-follow-up",
             "--run-follow-up-captures",
+            "--capture-browser-assisted-follow-ups",
             "--sample-video-frames",
             "--multi-query-run-creator-follow-up",
             "--multi-query-run-follow-up-captures",

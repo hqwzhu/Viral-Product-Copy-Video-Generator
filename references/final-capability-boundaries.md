@@ -9,6 +9,7 @@ Use this reference when the user asks for full automation.
 - Discover likely product URLs from a public website/homepage using public HTML links, then pass those candidates into Codex-first product reading before promotion.
 - Run `scripts/product_url_reader.py` to read one or more product URLs into per-URL structured browser snapshots, normalized product profiles, and correct next workflow commands.
 - Run `scripts/product_batch_runner.py` to discover or read multiple product URLs first, execute one guarded local promotion cycle per ready product using structured snapshots when available, and optionally run product-driven multi-query viral discovery for every ready product.
+- Run `scripts/skill_entry.py` from a single product or website link. It generates the real-run playbook, runs the final capability runner with safe high-automation defaults, and refreshes the final readiness matrix while preserving publish, credential, and evidence gates.
 - Run an end-to-end local workflow from one product source through `scripts/run_promotion_workflow.py`, producing intake, competitor discovery, generated content, video status, publish automation status, metrics recovery status, and a workflow manifest.
 - Run due promotion jobs from a local JSON schedule through `scripts/automation_scheduler.py`, including state tracking and Windows Task Scheduler script generation.
 - Generate platform-native copy, articles, voiceover scripts, storyboards, publish packs, result templates, and retrospective templates.

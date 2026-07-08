@@ -90,6 +90,7 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--creator-follow-up-dry-run", action="store_true")
     workflow.add_argument("--run-follow-up-captures", action="store_true")
     workflow.add_argument("--follow-up-dry-run", action="store_true")
+    workflow.add_argument("--capture-browser-assisted-follow-ups", action="store_true", help="Attempt browser-visible snapshots for queued Zhihu/Xiaohongshu/Douyin/TikTok follow-up capture tasks.")
     workflow.add_argument("--sample-video-frames", action="store_true", help="Sample browser-visible video evidence during follow-up captures.")
     workflow.add_argument("--video-sample-count", type=int, default=5)
     workflow.add_argument("--skip-video", action="store_true")
@@ -190,6 +191,8 @@ def build_workflow_command(args: argparse.Namespace, out_dir: Path) -> list[str]
         command.append("--run-follow-up-captures")
     if args.follow_up_dry_run:
         command.append("--follow-up-dry-run")
+    if args.capture_browser_assisted_follow_ups:
+        command.append("--capture-browser-assisted-follow-ups")
     if args.sample_video_frames:
         command.append("--sample-video-frames")
         command.extend(["--video-sample-count", str(args.video_sample_count)])

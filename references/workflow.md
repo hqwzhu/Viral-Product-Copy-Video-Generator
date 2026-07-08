@@ -171,6 +171,19 @@ python scripts/product_batch_runner.py \
 
 The batch report records `nextRoundOptimization` per product cycle. It may be `waiting_real_data` when no real metrics, comments, or business attribution exist.
 
+Use the Codex-facing Skill entry when the user sends one product or website link and wants the Skill executed without choosing lower-level commands:
+
+```bash
+python scripts/skill_entry.py \
+  --link "https://example.com/product-or-site" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --github-repo owner/repo \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/skill-entry/skill-entry.{json,md}` after generating the real-run playbook, running the final capability runner, and refreshing the final readiness matrix. The default `--link-mode auto` treats the link as both a product candidate and a public product-discovery seed.
+
 Use the final capability runner when Codex should execute the highest-automation safe path in one command:
 
 ```bash
@@ -178,6 +191,7 @@ python scripts/final_capability_runner.py \
   --url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --run-follow-up-captures \
+  --capture-browser-assisted-follow-ups \
   --sample-video-frames \
   --business-csv "./orders-and-revenue.csv" \
   --out-dir "./promotion-output"

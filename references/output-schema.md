@@ -73,6 +73,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
 - `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1` when `scripts/real_run_playbook.py` generates a live-run command pack, evidence checklist, platform gates, and approval gates before a real product cycle
+- `reports/promotion-manager/skill-entry/skill-entry.{json,md}` when `scripts/skill_entry.py` runs the Codex-facing one-link entry through real-run playbook generation, final capability execution, and final readiness refresh
 - `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, publish setup kits, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
 - `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` turns final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into an end-state acceptance matrix and action queue
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
@@ -167,6 +168,19 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `externalGates[]`: explicit approval, credential, app-review, manual publish, metrics export, and Skill-sync requirements that cannot be bypassed safely
 - `recommendedNextCommands[]`: review and next-action commands
 - `guardrails`: no final publish click, no credential storage, no captcha/risk-control bypass, and no fabricated metrics
+
+## Skill Entry Run
+
+`skill-entry.json` includes:
+
+- `status`: the final readiness status when available, or `blocked` when the playbook/final runner failed
+- `input`: links, optional links file, link mode, platforms, goal, language, and `codexReadFirst`
+- `summary`: playbook, final run, and readiness statuses plus promotion runs, content artifacts, video files, publish queues, public metric records, comments, and matched business rows
+- `playbook`: real-run playbook report path and generated artifact paths
+- `finalRun`: final capability run report path and summary
+- `readiness`: final readiness report path, requirement matrix, and action queue
+- `steps[]`: sanitized command ledger for `real_run_playbook.py`, `final_capability_runner.py`, and `final_capability_readiness.py`
+- `guardrails`: one-link auto mode, Codex-first product reading, public/official/user evidence only, no unapproved official writes, no final browser publish clicks, and no fabricated metrics or revenue
 
 ## Final Capability Readiness
 

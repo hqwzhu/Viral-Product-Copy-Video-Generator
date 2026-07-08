@@ -59,6 +59,7 @@ SCRIPT_REQUIREMENTS = {
     "automation_scheduler": "automation_scheduler.py",
     "promotion_cycle_runner": "promotion_cycle_runner.py",
     "real_run_playbook": "real_run_playbook.py",
+    "skill_entry": "skill_entry.py",
     "final_capability_runner": "final_capability_runner.py",
     "final_capability_readiness": "final_capability_readiness.py",
     "self_evolution_audit": "self_evolution_audit.py",
@@ -379,7 +380,7 @@ def requirement_status(
     optimization_ready = scripts_ready(scripts, ["next_round_optimizer"])
     cycle_ready = scripts_ready(
         scripts,
-        ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "final_capability_runner", "next_round_optimizer"],
+        ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "skill_entry", "final_capability_runner", "next_round_optimizer"],
     )
     full_platform_publish_ready = all(
         platforms[p]["directPublish"] == "ready" for p in ["youtube", "github", "zhihu", "xiaohongshu", "douyin"]
@@ -501,13 +502,13 @@ def requirement_status(
             "status": "ready" if cycle_ready else "not_ready",
             "evidence": scripts_present(
                 scripts,
-                ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "final_capability_runner", "next_round_optimizer"],
+                ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "skill_entry", "final_capability_runner", "next_round_optimizer"],
             ),
             "missing": []
             if cycle_ready
             else missing_for_scripts(
                 scripts,
-                ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "final_capability_runner", "next_round_optimizer"],
+                ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "skill_entry", "final_capability_runner", "next_round_optimizer"],
             ),
         },
         {
@@ -653,6 +654,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/promotion_cycle_runner.py --browser-url \"https://example.com/product\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "one_link_skill_entry",
+            "command": (
+                f"python scripts/skill_entry.py --link \"https://example.com/product\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --github-repo owner/repo "
+                f"--business-csv \"./orders-and-revenue.csv\" --out-dir \"{out_dir}\""
             ),
         },
         {

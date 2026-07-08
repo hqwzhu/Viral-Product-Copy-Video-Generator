@@ -90,6 +90,7 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--creator-follow-up-dry-run", action="store_true")
     workflow.add_argument("--run-follow-up-captures", action="store_true")
     workflow.add_argument("--follow-up-dry-run", action="store_true")
+    workflow.add_argument("--capture-browser-assisted-follow-ups", action="store_true", help="Attempt browser-visible snapshots for queued browser-assisted platform follow-up tasks in product cycles.")
     workflow.add_argument("--sample-video-frames", action="store_true", help="Sample browser-visible video evidence during product-cycle follow-up captures.")
     workflow.add_argument("--video-sample-count", type=int, default=5)
     workflow.add_argument("--skip-video", action="store_true")
@@ -212,6 +213,7 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
         ("--creator-follow-up-dry-run", args.creator_follow_up_dry_run),
         ("--run-follow-up-captures", args.run_follow_up_captures),
         ("--follow-up-dry-run", args.follow_up_dry_run),
+        ("--capture-browser-assisted-follow-ups", args.capture_browser_assisted_follow_ups),
         ("--sample-video-frames", args.sample_video_frames),
         ("--skip-video", args.skip_video),
         ("--generate-voiceover", args.generate_voiceover),

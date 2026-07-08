@@ -398,6 +398,11 @@ def learning_and_upgrade_loop(out_dir: Path) -> list[dict[str, Any]]:
             "purpose": "detect runtime gaps, Skill drift, and reviewed upgrade actions",
         },
         {
+            "step": "one_link_skill_entry",
+            "command": f"python scripts/skill_entry.py --link \"https://example.com/product\" --out-dir \"{out_dir}\"",
+            "purpose": "run the Codex-facing one-link Skill entry through playbook, final runner, and readiness matrix",
+        },
+        {
             "step": "real_run_playbook",
             "command": f"python scripts/real_run_playbook.py --url \"https://example.com/product\" --out-dir \"{out_dir}\"",
             "purpose": "generate the live-run command pack and evidence checklist before a real product cycle",

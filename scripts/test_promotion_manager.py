@@ -46,6 +46,7 @@ YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
 REAL_RUN_PLAYBOOK = ROOT / "scripts" / "real_run_playbook.py"
+SKILL_ENTRY = ROOT / "scripts" / "skill_entry.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
@@ -1169,6 +1170,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--skip-video",
                 "--run-follow-up-captures",
                 "--follow-up-dry-run",
+                "--capture-browser-assisted-follow-ups",
                 "--sample-video-frames",
                 "--video-sample-count",
                 "3",
@@ -1201,6 +1203,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         batch_command = report["steps"][0]["command"]
         self.assertIn("--sample-video-frames", batch_command)
         self.assertIn("--video-sample-count", batch_command)
+        self.assertIn("--capture-browser-assisted-follow-ups", batch_command)
         self.assertIn("--multi-query-sample-video-frames", batch_command)
         self.assertIn("--multi-query-video-sample-count", batch_command)
         self.assertEqual(report["summary"]["promotionRuns"], 1)
@@ -1243,6 +1246,66 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
         self.assertTrue((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.md").exists())
 
+    def test_skill_entry_runs_one_link_safe_flow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="skill-entry-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit</title><meta name="description" content="Prompt templates for launch copy."></head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into launch content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SKILL_ENTRY),
+                "--link",
+                product_page.as_uri(),
+                "--link-mode",
+                "auto",
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-auto-search-competitors",
+                "--skip-creator-follow-up",
+                "--skip-follow-up-captures",
+                "--skip-video-sampling",
+                "--skip-video",
+                "--multi-query-dry-run",
+                "--multi-query-query-count",
+                "1",
+                "--skip-platform-access-audit",
+                "--skip-final-capability-audit",
+                "--skip-self-evolution-audit",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertIn(report["status"], {"partial_ready", "partial_ready_blocked_by_platform_or_safety_limits", "partial_ready_waiting_external_evidence"})
+        self.assertEqual(report["input"]["linkMode"], "auto")
+        self.assertTrue(report["input"]["codexReadFirst"])
+        self.assertEqual(report["summary"]["promotionRuns"], 1)
+        self.assertEqual(report["summary"]["contentArtifacts"], 1)
+        self.assertTrue(Path(report["playbook"]["report"]).exists())
+        self.assertTrue(Path(report["finalRun"]["report"]).exists())
+        self.assertTrue(Path(report["readiness"]["report"]).exists())
+        step_names = [item["name"] for item in report["steps"]]
+        self.assertEqual(step_names, ["real_run_playbook", "final_capability_runner", "final_capability_readiness"])
+        final_command = report["steps"][1]["command"]
+        self.assertIn("--url", final_command)
+        self.assertIn("--discover-from-url", final_command)
+        self.assertIn("--capture-browser-assisted-follow-ups", final_command)
+        self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())
+
     def test_real_run_playbook_generates_end_to_end_command_pack_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="real-run-playbook-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1282,6 +1345,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("scripts/final_capability_runner.py", commands)
         self.assertIn("--auto-search-competitors", commands)
         self.assertIn("--run-follow-up-captures", commands)
+        self.assertIn("--capture-browser-assisted-follow-ups", commands)
         self.assertIn("--multi-query-run-follow-up-captures", commands)
         self.assertIn("scripts/publish_setup_assistant.py", commands)
         self.assertIn("scripts/metrics_recovery.py", commands)
@@ -4594,6 +4658,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["real_run_playbook"]["exists"])
+        self.assertTrue(report["scripts"]["skill_entry"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_readiness"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
@@ -4623,6 +4688,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             )
         )
         self.assertTrue(any(item["purpose"] == "final_capability_runner" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "one_link_skill_entry" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_final_readiness_matrix" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
