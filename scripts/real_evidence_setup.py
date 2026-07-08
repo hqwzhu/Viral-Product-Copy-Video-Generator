@@ -212,7 +212,7 @@ def write_artifacts(out_dir: Path, records: list[dict[str, Any]], sources: dict[
     write_csv(comments_csv, comment_header(), comment_rows(records))
     write_csv(business_csv, business_header(), business_rows(records))
     write_csv(published_csv, published_header(), published_rows(records))
-    structured_json.write_text(json.dumps(structured_example(records), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    structured_json.write_text(json.dumps(structured_example(records), ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     checklist.write_text(render_checklist(records, sources) + "\n", encoding="utf-8")
     command_file.write_text(render_commands(records) + "\n", encoding="utf-8")
     return {
@@ -269,7 +269,7 @@ def next_commands(artifacts: dict[str, str]) -> list[str]:
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:
     directory = report_dir(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "real-evidence-setup.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (directory / "real-evidence-setup.json").write_text(json.dumps(report, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     (directory / "real-evidence-setup.md").write_text(render_markdown(report) + "\n", encoding="utf-8")
 
 

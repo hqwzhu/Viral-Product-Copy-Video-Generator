@@ -6547,7 +6547,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "platform": "xiaohongshu",
                             "status": "browser_assisted_publish",
                             "publishMode": "browser_assisted_publish",
-                            "title": "Xiaohongshu launch note",
+                            "title": "\u5c0f\u7ea2\u4e66\u53d1\u5e03\u7b14\u8bb0",
                             "trackingPlan": {
                                 "trackedUrl": "https://example.com/ai-prompt-kit?utm_campaign=launch&utm_content=xhs-001",
                                 "campaignId": "launch",
@@ -6577,6 +6577,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         report_path = out_dir / "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json"
         report_text = report_path.read_text(encoding="utf-8")
         self.assertNotIn(secret_value, report_text)
+        self.assertTrue(report_text.isascii())
         report = json.loads(report_text)
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["summary"]["targets"], 2)
@@ -6584,6 +6585,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         by_platform = {item["platform"]: item for item in report["records"]}
         self.assertEqual(by_platform["youtube"]["title"], "YouTube launch draft")
         self.assertEqual(by_platform["youtube"]["trackingPlan"]["utm_content"], "yt-001")
+        self.assertEqual(by_platform["xiaohongshu"]["title"], "\u5c0f\u7ea2\u4e66\u53d1\u5e03\u7b14\u8bb0")
         self.assertEqual(by_platform["xiaohongshu"]["trackingPlan"]["utm_source"], "xiaohongshu")
         for path in report["artifacts"].values():
             self.assertTrue(Path(path).exists(), path)
