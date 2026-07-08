@@ -3885,6 +3885,84 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["aggregates"]["totals"]["revenue"], 99.0)
         self.assertEqual(report["metricSources"][0]["type"], "metrics_csv")
 
+    def test_metrics_recovery_imports_chinese_platform_export_headers(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-chinese-export-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_items = out_dir / "published-items.json"
+        published_items.write_text(
+            json.dumps(
+                [
+                    {
+                        "platform": "xiaohongshu",
+                        "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        "title": "Launch Note",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        metrics_csv = out_dir / "metrics-export.csv"
+        header = ",".join(
+            [
+                "\u5e73\u53f0",
+                "\u53d1\u5e03\u94fe\u63a5",
+                "\u6807\u9898",
+                "\u64ad\u653e\u91cf(\u6b21)",
+                "\u70b9\u8d5e\u6570",
+                "\u8bc4\u8bba\u6570",
+                "\u5206\u4eab\u6570",
+                "\u5b98\u7f51\u70b9\u51fb",
+                "\u7ebf\u7d22\u6570",
+                "\u8ba2\u5355\u6570",
+                "\u6210\u4ea4\u91d1\u989d(\u5143)",
+                "\u8bc1\u636e",
+            ]
+        )
+        row = ",".join(
+            [
+                "\u5c0f\u7ea2\u4e66",
+                "https://www.xiaohongshu.com/explore/note123",
+                "Launch Note",
+                "1.2\u4e07",
+                "840",
+                "66",
+                "18",
+                "144",
+                "21",
+                "3",
+                "188.50",
+                "xhs-export.csv",
+            ]
+        )
+        metrics_csv.write_text("\n".join([header, row]), encoding="utf-8")
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--published-items-json",
+                str(published_items),
+                "--metrics-csv",
+                str(metrics_csv),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "ready")
+        self.assertEqual(report["coverage"]["manualOrPendingRequirements"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["views"], 12000.0)
+        self.assertEqual(report["aggregates"]["totals"]["likes"], 840.0)
+        self.assertEqual(report["aggregates"]["totals"]["comments"], 66.0)
+        self.assertEqual(report["aggregates"]["totals"]["shares"], 18.0)
+        self.assertEqual(report["aggregates"]["totals"]["clicks"], 144.0)
+        self.assertEqual(report["aggregates"]["totals"]["leads"], 21.0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 3.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 188.5)
+        self.assertEqual(report["records"][0]["platform"], "xiaohongshu")
+        self.assertIn("xhs-export.csv", report["records"][0]["evidence"])
+
     def test_metrics_recovery_imports_structured_metrics_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-structured-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

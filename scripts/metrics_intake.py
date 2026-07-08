@@ -34,6 +34,45 @@ METRIC_EXPORT_ALIASES = {
     "watchers": ["watcherCount", "watcher_count", "watchersCount", "watchers_count", "subscriberCount", "subscriber_count", "followers", "followerCount", "follower_count"],
     "openIssues": ["openIssueCount", "open_issue_count", "openIssuesCount", "open_issues_count"],
 }
+CHINESE_METRIC_EXPORT_ALIASES = {
+    "views": ["\u64ad\u653e\u91cf", "\u64ad\u653e\u6b21\u6570", "\u89c2\u770b\u91cf", "\u89c2\u770b\u6b21\u6570", "\u6d4f\u89c8\u91cf", "\u9605\u8bfb\u91cf", "\u66dd\u5149\u91cf", "\u5c55\u73b0\u91cf", "\u5c55\u793a\u91cf"],
+    "likes": ["\u70b9\u8d5e", "\u70b9\u8d5e\u6570", "\u70b9\u8d5e\u91cf", "\u83b7\u8d5e\u6570", "\u559c\u6b22\u6570"],
+    "favorites": ["\u6536\u85cf", "\u6536\u85cf\u6570", "\u6536\u85cf\u91cf", "\u4fdd\u5b58\u6570"],
+    "comments": ["\u8bc4\u8bba", "\u8bc4\u8bba\u6570", "\u7559\u8a00\u6570", "\u56de\u590d\u6570"],
+    "shares": ["\u5206\u4eab", "\u5206\u4eab\u6570", "\u8f6c\u53d1", "\u8f6c\u53d1\u6570"],
+    "clicks": ["\u70b9\u51fb", "\u70b9\u51fb\u6570", "\u5b98\u7f51\u70b9\u51fb", "\u94fe\u63a5\u70b9\u51fb", "\u8bbf\u95ee\u91cf"],
+    "messages": ["\u79c1\u4fe1\u6570", "\u54a8\u8be2\u6570", "\u4f1a\u8bdd\u6570"],
+    "leads": ["\u7ebf\u7d22\u6570", "\u7559\u8d44\u6570", "\u6ce8\u518c\u6570"],
+    "orders": ["\u8ba2\u5355\u6570", "\u6210\u4ea4\u8ba2\u5355", "\u6210\u4ea4\u8ba2\u5355\u6570", "\u652f\u4ed8\u8ba2\u5355", "\u652f\u4ed8\u8ba2\u5355\u6570"],
+    "revenue": ["\u6210\u4ea4\u91d1\u989d", "\u6210\u4ea4\u989d", "\u4ea4\u6613\u989d", "\u9500\u552e\u989d", "\u9500\u552e\u91d1\u989d", "\u6536\u5165", "\u8425\u6536"],
+    "stars": ["\u661f\u6807\u6570"],
+    "forks": ["fork\u6570", "\u590d\u523b\u6570"],
+    "watchers": ["\u5173\u6ce8\u8005\u6570", "\u8ba2\u9605\u6570", "\u7c89\u4e1d\u6570"],
+    "openIssues": ["\u5f85\u5904\u7406\u95ee\u9898\u6570", "\u95ee\u9898\u6570"],
+}
+for field, aliases in CHINESE_METRIC_EXPORT_ALIASES.items():
+    METRIC_EXPORT_ALIASES.setdefault(field, []).extend(aliases)
+
+PLATFORM_ALIASES = ("platform", "\u5e73\u53f0", "\u6e20\u9053", "\u6765\u6e90")
+URL_ALIASES = ("publishedUrl", "url", "canonicalUrl", "link", "sourceUrl", "\u53d1\u5e03\u94fe\u63a5", "\u5185\u5bb9\u94fe\u63a5", "\u94fe\u63a5", "\u5730\u5740")
+CONTENT_ID_ALIASES = ("contentId", "videoId", "repo", "id", "noteId", "\u5185\u5bb9id", "\u5185\u5bb9ID", "\u89c6\u9891id", "\u89c6\u9891ID", "\u7b14\u8bb0id", "\u7b14\u8bb0ID")
+TITLE_ALIASES = ("title", "name", "headline", "\u6807\u9898", "\u5185\u5bb9\u6807\u9898", "\u4f5c\u54c1\u6807\u9898")
+DATE_ALIASES = ("publishedAt", "date", "createdAt", "capturedAt", "\u53d1\u5e03\u65f6\u95f4", "\u53d1\u5e03\u65e5\u671f", "\u65e5\u671f", "\u65f6\u95f4")
+EVIDENCE_ALIASES = ("evidence", "evidenceUrl", "screenshot", "screenshotPath", "export", "\u8bc1\u636e", "\u622a\u56fe", "\u622a\u56fe\u94fe\u63a5", "\u5bfc\u51fa\u6587\u4ef6", "\u6570\u636e\u6765\u6e90")
+PLATFORM_VALUE_ALIASES = {
+    "youtube": "youtube",
+    "yt": "youtube",
+    "\u6cb9\u7ba1": "youtube",
+    "github": "github",
+    "zhihu": "zhihu",
+    "\u77e5\u4e4e": "zhihu",
+    "xiaohongshu": "xiaohongshu",
+    "xhs": "xiaohongshu",
+    "\u5c0f\u7ea2\u4e66": "xiaohongshu",
+    "douyin": "douyin",
+    "\u6296\u97f3": "douyin",
+    "tiktok": "tiktok",
+}
 
 
 def main() -> None:
@@ -150,23 +189,23 @@ def records_from_structured_json(path: Path, platform: str = "auto") -> list[dic
 
 
 def record_from_structured_mapping(item: dict[str, Any], source: str, platform: str) -> dict[str, Any]:
-    url = get_alias(item, "publishedUrl", "url", "canonicalUrl", "link", "sourceUrl")
-    detected = choose_platform(first_non_empty(get_alias(item, "platform"), platform), url or source)
+    url = get_alias(item, *URL_ALIASES)
+    detected = choose_platform(first_non_empty(get_alias(item, *PLATFORM_ALIASES), platform), url or source)
     text = structured_text(item)
     metrics = extract_metrics(text)
     for key in ("metrics", "visibleMetrics", "analytics", "stats", "statistics"):
         value = item.get(key)
         if isinstance(value, dict):
             metrics.update(metrics_from_mapping(value))
-    evidence = split_evidence(get_alias(item, "evidence", "evidenceUrl", "screenshot", "screenshotPath", "export"))
+    evidence = split_evidence(get_alias(item, *EVIDENCE_ALIASES))
     if source and source not in evidence:
         evidence.append(source)
     return {
         "platform": detected,
         "publishedUrl": url,
-        "contentId": get_alias(item, "contentId", "videoId", "repo", "id", "noteId"),
-        "title": get_alias(item, "title", "name", "headline") or first_content_line(text),
-        "publishedAt": get_alias(item, "publishedAt", "date", "createdAt", "capturedAt"),
+        "contentId": get_alias(item, *CONTENT_ID_ALIASES),
+        "title": get_alias(item, *TITLE_ALIASES) or first_content_line(text),
+        "publishedAt": get_alias(item, *DATE_ALIASES),
         "metrics": metrics,
         "evidence": evidence,
         "source": {"type": "structured_snapshot", "value": source, "capturedAt": get_alias(item, "capturedAt") or TODAY},
@@ -201,22 +240,22 @@ def metrics_from_mapping(item: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def normalize_mapping(item: dict[str, Any], source: str) -> dict[str, Any]:
-    url = get_alias(item, "publishedUrl", "url", "link", "sourceUrl")
-    platform = choose_platform(get_alias(item, "platform"), url or source)
+    url = get_alias(item, *URL_ALIASES)
+    platform = choose_platform(get_alias(item, *PLATFORM_ALIASES), url or source)
     metrics = {}
     for field in METRIC_FIELDS:
         value = metric_field_value(item, field)
         if value:
             metrics[field] = metric_value(value)
-    evidence = split_evidence(get_alias(item, "evidence", "evidenceUrl", "screenshot", "export"))
+    evidence = split_evidence(get_alias(item, *EVIDENCE_ALIASES))
     if source and source not in evidence:
         evidence.append(source)
     return {
         "platform": platform,
         "publishedUrl": url,
-        "contentId": get_alias(item, "contentId", "videoId", "repo", "id"),
-        "title": get_alias(item, "title", "name", "headline"),
-        "publishedAt": get_alias(item, "publishedAt", "date", "createdAt"),
+        "contentId": get_alias(item, *CONTENT_ID_ALIASES),
+        "title": get_alias(item, *TITLE_ALIASES),
+        "publishedAt": get_alias(item, *DATE_ALIASES),
         "metrics": metrics,
         "evidence": evidence,
         "source": {"type": "user_export", "value": source, "capturedAt": TODAY},
@@ -612,8 +651,9 @@ def confidence_for_record(metrics: dict[str, Any], evidence: list[str]) -> str:
 
 
 def choose_platform(value: str, source: str) -> str:
-    if value and value != "auto":
-        return value.lower()
+    normalized_value = normalize_header_key(value)
+    if value and normalized_value != "auto":
+        return PLATFORM_VALUE_ALIASES.get(normalized_value, value.lower())
     host = urllib.parse.urlparse(source).netloc.lower()
     if "youtube.com" in host or "youtu.be" in host:
         return "youtube"
@@ -695,20 +735,43 @@ def metric_field_value(item: dict[str, Any], field: str) -> Any:
         if key in item and item[key] not in (None, ""):
             return item[key]
     normalized = {normalize_header_key(key): value for key, value in item.items()}
-    for key in aliases:
-        value = normalized.get(normalize_header_key(key))
+    normalized_aliases = [(key, normalize_header_key(key)) for key in aliases]
+    for _, normalized_key in normalized_aliases:
+        value = normalized.get(normalized_key)
         if value not in (None, ""):
             return value
+    for header_key, value in normalized.items():
+        if value in (None, ""):
+            continue
+        for _, alias_key in normalized_aliases:
+            if cjk_header_alias_match(header_key, alias_key):
+                return value
     return ""
 
 
+def cjk_header_alias_match(header_key: str, alias_key: str) -> bool:
+    if not alias_key or not contains_cjk(alias_key) or not header_key.startswith(alias_key):
+        return False
+    remainder = header_key[len(alias_key) :]
+    return not any(token in remainder for token in ("\u7387", "\u6bd4", "\u5360\u6bd4", "\u767e\u5206\u6bd4"))
+
+
+def contains_cjk(value: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in value)
+
+
 def normalize_header_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+    return "".join(char for char in str(value).lower() if char.isalnum())
 
 
 def get_alias(item: dict[str, Any], *keys: str) -> str:
     for key in keys:
         value = item.get(key)
+        if value not in (None, ""):
+            return str(value)
+    normalized = {normalize_header_key(key): value for key, value in item.items()}
+    for key in keys:
+        value = normalized.get(normalize_header_key(key))
         if value not in (None, ""):
             return str(value)
     return ""
