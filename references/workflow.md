@@ -585,7 +585,7 @@ python scripts/post_publish_metrics_capture.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, a structured snapshot, and `post-publish-metrics-export.json`. It captures visible public metrics only. If the page requires login, captcha, account verification, private analytics, or a business system, it writes a manual evidence request instead of bypassing the platform.
+This writes `reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.{json,md}`, a structured snapshot, and `post-publish-metrics-export.json`. It captures visible public metrics only and parses English/Chinese labels with common units/currency such as `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`. If the page requires login, captcha, account verification, private analytics, or a business system, it writes a manual evidence request instead of bypassing the platform.
 
 After real published URLs or visible comment exports exist, capture public/browser-visible comment evidence and demand signals:
 
@@ -654,7 +654,7 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
-Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--structured-json`, `--published-url`, `--github-repo`, and `--youtube-video-id`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
+Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--structured-json`, `--published-url`, `--github-repo`, and `--youtube-video-id`. Text and structured snapshots can contain English/Chinese metric labels with common units/currency such as `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
 
 The workflow runner can call metrics intake in the same run with `--metrics-csv`, `--metrics-json`, `--metrics-text`, `--published-url`, `--github-repo`, or `--youtube-video-id`. If no real evidence is supplied, its manifest must report `waiting_real_data`.
 

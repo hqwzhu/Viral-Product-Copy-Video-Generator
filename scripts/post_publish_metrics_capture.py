@@ -15,6 +15,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+import metric_parsing
 import metrics_intake
 import published_items
 
@@ -406,6 +407,18 @@ def parse_metric_number(value: str) -> float | None:
         return float(text) * multiplier
     except ValueError:
         return None
+
+
+def extract_visible_metrics(text: str) -> dict[str, dict[str, Any]]:
+    return metric_parsing.extract_metrics(text, metrics_intake.METRIC_FIELDS)
+
+
+def metric_value(value: Any) -> dict[str, Any]:
+    return metric_parsing.metric_value(value)
+
+
+def parse_metric_number(value: str) -> float | None:
+    return metric_parsing.parse_metric_number(value)
 
 
 def fetch_public_html(url: str, timeout: float) -> str:

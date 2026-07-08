@@ -393,7 +393,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `artifacts.structuredSnapshot`: path to `post-publish-metrics-snapshot.json`
 - `guardrails`: public/browser-visible capture only, no auto-login, no captcha bypass, no private endpoints, no hidden token storage, and no fabricated metrics
 
-`post-publish-metrics-export.json` is the preferred input for `metrics_recovery.py --metrics-json`. `post-publish-metrics-snapshot.json` preserves richer evidence for review.
+`post-publish-metrics-export.json` is the preferred input for `metrics_recovery.py --metrics-json`. `post-publish-metrics-snapshot.json` preserves richer evidence for review. Metric parsing supports visible English/Chinese labels and common units/currency such as `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`.
 
 ## Comment Evidence Capture
 
@@ -425,6 +425,8 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `connectorStatus[]`: official connector status for GitHub/YouTube/Douyin where implemented, or unsupported/manual platform reasons
 - `retrospective`: `ready` only when real metric evidence exists, otherwise `waiting_real_data`
 - `guardrails`: no fabricated metrics, no secret values, no cookies, and no browser tokens
+
+Text and structured-snapshot metric parsing accepts visible English/Chinese labels and common units/currency such as `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`; parsed values are still treated as real evidence only when the source is a public page, official API/export, screenshot OCR/text, or business export.
 
 ## Business Attribution
 

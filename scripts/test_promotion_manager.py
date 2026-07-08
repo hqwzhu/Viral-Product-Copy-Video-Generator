@@ -3435,6 +3435,154 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["coverage"]["recordsWithMetrics"], 1)
         self.assertEqual(recovery["aggregates"]["totals"]["views"], 12000.0)
 
+    def test_metrics_intake_parses_chinese_units_and_currency(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-chinese-units-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        metrics_text = out_dir / "visible-metrics.txt"
+        metrics_text.write_text(
+            "\n".join(
+                [
+                    "Title: AI Prompt Kit launch note",
+                    "URL: https://www.xiaohongshu.com/explore/note123",
+                    "播放量 1.2万",
+                    "点赞 3.4k",
+                    "评论 256",
+                    "收藏 5,600",
+                    "订单 12",
+                    "收入 ￥88.50",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--text-file",
+                str(metrics_text),
+                "--platform",
+                "xiaohongshu",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics/imported-metrics.json").read_text(encoding="utf-8"))
+        metrics = report["records"][0]["metrics"]
+        self.assertEqual(metrics["views"]["normalized"], 12000.0)
+        self.assertEqual(metrics["likes"]["normalized"], 3400.0)
+        self.assertEqual(metrics["favorites"]["normalized"], 5600.0)
+        self.assertEqual(metrics["orders"]["normalized"], 12.0)
+        self.assertEqual(metrics["revenue"]["normalized"], 88.5)
+
+    def test_metrics_intake_pairs_numbers_before_labels_without_cross_field_bleed(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-number-before-label-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        metrics_text = out_dir / "visible-metrics.txt"
+        metrics_text.write_text(
+            "\n".join(
+                [
+                    "Title: AI Prompt Kit launch note",
+                    "1.2万 播放",
+                    "2.4k likes",
+                    "320 comments",
+                    "$88.50 revenue",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--text-file",
+                str(metrics_text),
+                "--platform",
+                "youtube",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics/imported-metrics.json").read_text(encoding="utf-8"))
+        metrics = report["records"][0]["metrics"]
+        self.assertEqual(metrics["views"]["normalized"], 12000.0)
+        self.assertEqual(metrics["likes"]["normalized"], 2400.0)
+        self.assertEqual(metrics["comments"]["normalized"], 320.0)
+        self.assertEqual(metrics["revenue"]["normalized"], 88.5)
+
+    def test_post_publish_metrics_capture_extracts_chinese_units_from_public_page(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="post-publish-chinese-metrics-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>播放量 2.5万 点赞 1.1万 评论 320 收藏 4,800 分享 900</p>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "douyin",
+                            "publishedUrl": url,
+                            "title": "AI Prompt Kit launch note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(POST_PUBLISH_METRICS_CAPTURE),
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        capture = json.loads((out_dir / "reports/promotion-manager/post-publish-capture/post-publish-metrics-capture.json").read_text(encoding="utf-8"))
+        metrics = capture["structuredRecords"][0]["metrics"]
+        self.assertEqual(metrics["views"]["normalized"], 25000.0)
+        self.assertEqual(metrics["likes"]["normalized"], 11000.0)
+        self.assertEqual(metrics["favorites"]["normalized"], 4800.0)
+        self.assertEqual(metrics["shares"]["normalized"], 900.0)
+
     def test_post_publish_metrics_capture_queues_unsafe_pages_for_manual_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="post-publish-metrics-capture-unsafe-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -14,9 +14,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import metric_parsing
 
 TODAY = date.today().isoformat()
-METRIC_FIELDS = ["views", "likes", "favorites", "comments", "shares", "clicks", "messages", "leads", "orders", "revenue", "stars", "forks", "watchers", "openIssues"]
+METRIC_FIELDS = metric_parsing.METRIC_FIELDS
 
 
 def main() -> None:
@@ -570,6 +571,18 @@ def parse_metric_number(value: str) -> float | None:
         return float(text.strip()) * multiplier
     except ValueError:
         return None
+
+
+def extract_metrics(text: str) -> dict[str, dict[str, Any]]:
+    return metric_parsing.extract_metrics(text, METRIC_FIELDS)
+
+
+def metric_value(value: Any) -> dict[str, Any]:
+    return metric_parsing.metric_value(value)
+
+
+def parse_metric_number(value: str) -> float | None:
+    return metric_parsing.parse_metric_number(value)
 
 
 def confidence_for_record(metrics: dict[str, Any], evidence: list[str]) -> str:

@@ -351,6 +351,8 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+Metric parsing supports visible English and Chinese labels plus common units/currency, including `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`. Treat parsed values as evidence only when the source is a public page, official API/export, screenshot OCR/text, or business export.
+
 To import real metrics from a Codex/browser structured snapshot of a published page or analytics page:
 
 ```bash
@@ -741,7 +743,7 @@ Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when 
 Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted. Add `--check-live` when the decision depends on current official documentation; live reachability is evidence for documentation existence, not account authorization.
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
 Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
-Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.
+Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, including English and Chinese labels with `k/m/b`, `万/亿/千/百`, and common currency symbols, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.
 Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, optional public metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and next-round optimization. Add `--run-next-round-optimization` to write `next-round-optimization.json` after recovery. Official GitHub/YouTube/Douyin writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
 
 ### 6. Retrospective
@@ -761,7 +763,7 @@ Use only real data supplied by the user or exported from platforms:
 - evidence URLs/screenshots/exports
 
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
-Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
+Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. It parses visible English/Chinese metric labels and common units/currency (`12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, `￥88.00`) from text and structured snapshots. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
 Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.
 Run `scripts/comment_evidence_capture.py` after real published URLs or visible comment exports exist. It extracts public/browser-visible comments, likes/replies per comment when visible, and demand signals such as questions, pricing objections, integrations, feature requests, pain points, and CTA intent. Treat its manual evidence requests as missing evidence, not recovered comments.
@@ -810,6 +812,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/follow_up_capture_runner.py`: safe public and browser-visible follow-up capture executor and deep competitor library builder.
 - `scripts/competitor_content_enhancer.py`: rewrites generated platform content and publish packs using observed viral/deep competitor patterns before videos are rendered.
 - `scripts/competitor_intake.py`: competitor evidence importer for public pages and user-provided exports.
+- `scripts/metric_parsing.py`: shared visible metric label and number parser for English/Chinese labels, `k/m/b`, `万/亿/千/百`, and common currency symbols.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
