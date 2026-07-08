@@ -446,12 +446,16 @@ def build_recovery_report(
 
 def coverage_summary(published_items: list[dict[str, Any]], report: dict[str, Any], manual_required: list[dict[str, Any]]) -> dict[str, Any]:
     published_count = sum(1 for item in published_items if item.get("publishStatus") == "published")
+    aggregates = report.get("aggregates", {}) if isinstance(report.get("aggregates"), dict) else {}
     return {
         "publishedItemsDiscovered": published_count,
         "plannedOrQueuedItems": len(published_items) - published_count,
         "metricRecords": len(report.get("records", [])),
-        "recordsWithMetrics": report.get("aggregates", {}).get("recordsWithMetrics", 0),
+        "recordsWithMetrics": aggregates.get("recordsWithMetrics", 0),
         "manualOrPendingRequirements": len(manual_required),
+        "metricFields": aggregates.get("metricFields", []),
+        "metricFieldCounts": aggregates.get("metricFieldCounts", {}),
+        "totals": aggregates.get("totals", {}),
         "platforms": sorted({item.get("platform", "unknown") for item in published_items if item.get("platform")}),
     }
 

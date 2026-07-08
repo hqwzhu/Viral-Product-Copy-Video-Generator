@@ -387,16 +387,20 @@ def derived_metrics(metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 def aggregate_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     totals: dict[str, float] = {}
+    field_counts: dict[str, int] = {}
     for field in METRIC_FIELDS:
         values = [metric_number(record["metrics"], field) for record in records]
         values = [value for value in values if value is not None]
         if values:
             totals[field] = sum(values)
+            field_counts[field] = len(values)
     return {
         "recordCount": len(records),
         "recordsWithMetrics": sum(1 for record in records if record["metrics"]),
         "recordsWithEvidence": sum(1 for record in records if record["evidence"]),
         "totals": totals,
+        "metricFields": sorted(field_counts),
+        "metricFieldCounts": field_counts,
         "bestByViews": best_record(records, "views"),
         "bestByRevenue": best_record(records, "revenue"),
         "platforms": sorted({record["platform"] for record in records}),

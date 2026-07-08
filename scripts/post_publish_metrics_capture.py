@@ -531,7 +531,12 @@ def summarize(results: list[dict[str, Any]], metric_records: list[dict[str, Any]
         statuses[str(result.get("status") or "unknown")] = statuses.get(str(result.get("status") or "unknown"), 0) + 1
         platform = str(result.get("platform") or "unknown")
         platforms[platform] = platforms.get(platform, 0) + 1
-    metric_fields = sorted({key for record in metric_records for key in record.keys() if key in metrics_intake.METRIC_FIELDS})
+    metric_field_counts = {
+        field: sum(1 for record in metric_records if field in record)
+        for field in metrics_intake.METRIC_FIELDS
+        if any(field in record for record in metric_records)
+    }
+    metric_fields = sorted(metric_field_counts)
     return {
         "publishedItems": len(results),
         "capturedMetricRecords": len(metric_records),
@@ -539,6 +544,7 @@ def summarize(results: list[dict[str, Any]], metric_records: list[dict[str, Any]
         "statuses": dict(sorted(statuses.items())),
         "platforms": dict(sorted(platforms.items())),
         "metricFields": metric_fields,
+        "metricFieldCounts": metric_field_counts,
     }
 
 

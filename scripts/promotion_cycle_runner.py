@@ -655,11 +655,15 @@ def metrics_summary(path: Path) -> dict[str, Any]:
         report = json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
         return {}
+    coverage = report.get("coverage") or {}
     return {
         "recoveryStatus": report.get("recoveryStatus", ""),
         "retrospectiveStatus": (report.get("retrospective") or {}).get("status", ""),
-        "recordsWithMetrics": (report.get("coverage") or {}).get("recordsWithMetrics", 0),
-        "manualOrPendingRequirements": (report.get("coverage") or {}).get("manualOrPendingRequirements", 0),
+        "recordsWithMetrics": coverage.get("recordsWithMetrics", 0),
+        "manualOrPendingRequirements": coverage.get("manualOrPendingRequirements", 0),
+        "metricFields": coverage.get("metricFields", []),
+        "metricFieldCounts": coverage.get("metricFieldCounts", {}),
+        "totals": coverage.get("totals", {}),
     }
 
 

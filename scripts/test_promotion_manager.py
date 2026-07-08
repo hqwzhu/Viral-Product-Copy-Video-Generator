@@ -14,6 +14,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -4934,6 +4935,110 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
+
+    def test_final_capability_readiness_distinguishes_field_level_real_evidence(self) -> None:
+        root_dir = Path(tempfile.mkdtemp(prefix="final-readiness-fields-test-"))
+        self.addCleanup(shutil.rmtree, root_dir, ignore_errors=True)
+
+        def write_sources(out_dir: Path, summary: dict[str, Any]) -> None:
+            final_run_dir = out_dir / "reports/promotion-manager/final-run"
+            final_run_dir.mkdir(parents=True)
+            (final_run_dir / "final-capability-run.json").write_text(
+                json.dumps(
+                    {
+                        "generatedAt": "2026-07-08",
+                        "status": "partial_ready",
+                        "input": {"codexReadFirst": True},
+                        "summary": {
+                            "promotionRuns": 1,
+                            "multiQueryDiscoveryRuns": 1,
+                            "multiQueryMergedMaterials": 2,
+                            "multiQueryMergedCreators": 1,
+                            "multiQueryVideoSampleFrames": 1,
+                            "contentArtifacts": 1,
+                            "videoFilesGenerated": 1,
+                            "nextRoundContent": 1,
+                            **summary,
+                        },
+                        "productBatch": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            capability_dir = out_dir / "reports/promotion-manager/capability"
+            capability_dir.mkdir(parents=True)
+            (capability_dir / "final-capability-audit.json").write_text(
+                json.dumps(
+                    {
+                        "requirements": [
+                            {"id": "product_url_structured_intake", "status": "ready", "evidence": [], "missing": []},
+                            {"id": "viral_creator_content_research", "status": "partial_ready", "evidence": [], "missing": []},
+                            {"id": "copy_and_real_video_generation", "status": "ready", "evidence": [], "missing": []},
+                            {"id": "all_platform_auto_publish", "status": "blocked_by_authorization_or_platform_limits", "evidence": [], "missing": []},
+                            {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
+                            {"id": "retrospective_next_round_optimization", "status": "ready", "evidence": [], "missing": []},
+                            {"id": "fully_autonomous_self_evolution", "status": "blocked_by_safety_boundary", "evidence": [], "missing": []},
+                        ],
+                        "platforms": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        cases = [
+            (
+                "full_funnel",
+                {
+                    "capturedMetricRecords": 1,
+                    "recordsWithMetrics": 1,
+                    "commentCount": 2,
+                    "matchedBusinessRows": 1,
+                    "viewsEvidenceRecords": 1,
+                    "likesEvidenceRecords": 1,
+                    "commentsEvidenceRecords": 2,
+                    "ordersEvidenceRecords": 1,
+                    "revenueEvidenceRecords": 1,
+                },
+                "ready_with_full_funnel_evidence",
+                True,
+            ),
+            (
+                "social_only",
+                {
+                    "capturedMetricRecords": 1,
+                    "recordsWithMetrics": 1,
+                    "commentCount": 2,
+                    "viewsEvidenceRecords": 1,
+                    "likesEvidenceRecords": 1,
+                    "commentsEvidenceRecords": 2,
+                    "ordersEvidenceRecords": 0,
+                    "revenueEvidenceRecords": 0,
+                },
+                "partial_ready_social_metrics_only",
+                False,
+            ),
+        ]
+        for name, summary, expected_status, expected_satisfied in cases:
+            with self.subTest(name=name):
+                out_dir = root_dir / name
+                write_sources(out_dir, summary)
+                subprocess.run(
+                    [sys.executable, str(FINAL_CAPABILITY_READINESS), "--out-dir", str(out_dir)],
+                    check=True,
+                    cwd=ROOT,
+                )
+                report = json.loads(
+                    (out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                metrics_row = {item["id"]: item for item in report["requirements"]}["real_metrics_comments_orders_revenue"]
+                self.assertEqual(metrics_row["status"], expected_status)
+                self.assertEqual(metrics_row["satisfied"], expected_satisfied)
+                self.assertEqual(metrics_row["metrics"]["hasFullFunnelEvidence"], expected_satisfied)
+                if name == "social_only":
+                    self.assertIn("no real order evidence in final run", metrics_row["missing"])
+                    self.assertIn("no real revenue evidence in final run", metrics_row["missing"])
 
     def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-access-audit-test-"))

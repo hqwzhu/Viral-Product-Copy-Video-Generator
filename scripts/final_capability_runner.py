@@ -659,6 +659,15 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
     business = item.get("businessAttribution", {}).get("summary", {})
     metrics = item.get("metricsRecovery", {}).get("summary", {})
     optimization = item.get("nextRoundOptimization", {}).get("summary", {})
+    field_counts = metric_field_counts(post_metrics, metrics)
+    comment_count = int_value(comments.get("commentCount") or optimization.get("commentCount"))
+    matched_business_rows = int_value(business.get("matchedRows") or optimization.get("businessAttributions"))
+    if comment_count:
+        field_counts["comments"] = max(int_value(field_counts.get("comments")), comment_count)
+    if has_positive_number(business.get("attributedOrders")) or has_positive_number(business.get("totalOrders")):
+        field_counts["orders"] = max(int_value(field_counts.get("orders")), matched_business_rows or 1)
+    if has_positive_number(business.get("attributedRevenue")) or has_positive_number(business.get("totalRevenue")):
+        field_counts["revenue"] = max(int_value(field_counts.get("revenue")), matched_business_rows or 1)
     multi_query = (
         item.get("competitorResearch", {})
         .get("multiQueryViralDiscovery", {})
@@ -666,9 +675,21 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
     )
     return {
         "capturedMetricRecords": int_value(post_metrics.get("capturedMetricRecords")),
-        "commentCount": int_value(comments.get("commentCount") or optimization.get("commentCount")),
-        "matchedBusinessRows": int_value(business.get("matchedRows") or optimization.get("businessAttributions")),
+        "commentCount": comment_count,
+        "matchedBusinessRows": matched_business_rows,
         "recordsWithMetrics": int_value(metrics.get("recordsWithMetrics")),
+        "viewsEvidenceRecords": int_value(field_counts.get("views")),
+        "likesEvidenceRecords": int_value(field_counts.get("likes")),
+        "favoritesEvidenceRecords": int_value(field_counts.get("favorites")),
+        "commentsEvidenceRecords": int_value(field_counts.get("comments")),
+        "sharesEvidenceRecords": int_value(field_counts.get("shares")),
+        "clicksEvidenceRecords": int_value(field_counts.get("clicks")),
+        "messagesEvidenceRecords": int_value(field_counts.get("messages")),
+        "leadsEvidenceRecords": int_value(field_counts.get("leads")),
+        "ordersEvidenceRecords": int_value(field_counts.get("orders")),
+        "revenueEvidenceRecords": int_value(field_counts.get("revenue")),
+        "socialMetricEvidenceFields": sum(1 for field in ("views", "likes", "comments", "favorites", "shares") if int_value(field_counts.get(field)) > 0),
+        "fullFunnelEvidenceFields": sum(1 for field in ("views", "likes", "comments", "orders", "revenue") if int_value(field_counts.get(field)) > 0),
         "manualOrPendingRequirements": int_value(metrics.get("manualOrPendingRequirements"))
         + int_value(optimization.get("manualOrPendingRequirements")),
         "nextRoundContent": int_value(optimization.get("nextRoundContent")),
@@ -701,6 +722,18 @@ def cycle_evidence_summary(cycle_evidence: list[dict[str, Any]]) -> dict[str, in
         "commentCount": sum(int_value(item.get("commentCount")) for item in counts),
         "matchedBusinessRows": sum(int_value(item.get("matchedBusinessRows")) for item in counts),
         "recordsWithMetrics": sum(int_value(item.get("recordsWithMetrics")) for item in counts),
+        "viewsEvidenceRecords": sum(int_value(item.get("viewsEvidenceRecords")) for item in counts),
+        "likesEvidenceRecords": sum(int_value(item.get("likesEvidenceRecords")) for item in counts),
+        "favoritesEvidenceRecords": sum(int_value(item.get("favoritesEvidenceRecords")) for item in counts),
+        "commentsEvidenceRecords": sum(int_value(item.get("commentsEvidenceRecords")) for item in counts),
+        "sharesEvidenceRecords": sum(int_value(item.get("sharesEvidenceRecords")) for item in counts),
+        "clicksEvidenceRecords": sum(int_value(item.get("clicksEvidenceRecords")) for item in counts),
+        "messagesEvidenceRecords": sum(int_value(item.get("messagesEvidenceRecords")) for item in counts),
+        "leadsEvidenceRecords": sum(int_value(item.get("leadsEvidenceRecords")) for item in counts),
+        "ordersEvidenceRecords": sum(int_value(item.get("ordersEvidenceRecords")) for item in counts),
+        "revenueEvidenceRecords": sum(int_value(item.get("revenueEvidenceRecords")) for item in counts),
+        "socialMetricEvidenceFields": sum(int_value(item.get("socialMetricEvidenceFields")) for item in counts),
+        "fullFunnelEvidenceFields": sum(int_value(item.get("fullFunnelEvidenceFields")) for item in counts),
         "manualOrPendingRequirements": sum(int_value(item.get("manualOrPendingRequirements")) for item in counts),
         "nextRoundContent": sum(int_value(item.get("nextRoundContent")) for item in counts),
         "multiQuerySearchCapturesReady": sum(int_value(item.get("multiQuerySearchCapturesReady")) for item in counts),
@@ -725,9 +758,38 @@ def count_statuses(items: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def metric_field_counts(*summaries: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for summary in summaries:
+        if not isinstance(summary, dict):
+            continue
+        raw_counts = summary.get("metricFieldCounts")
+        if isinstance(raw_counts, dict):
+            for field, value in raw_counts.items():
+                counts[str(field)] = counts.get(str(field), 0) + int_value(value)
+        fields = summary.get("metricFields")
+        if isinstance(fields, list):
+            for field in fields:
+                text = str(field)
+                counts[text] = max(counts.get(text, 0), 1)
+        totals = summary.get("totals")
+        if isinstance(totals, dict):
+            for field, value in totals.items():
+                if has_positive_number(value):
+                    counts[str(field)] = max(counts.get(str(field), 0), 1)
+    return counts
+
+
 def artifact_path(value: Any) -> str:
     text = "" if value is None else str(value).strip()
     return text if text and Path(text).exists() else ""
+
+
+def has_positive_number(value: Any) -> bool:
+    try:
+        return float(value or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def int_value(value: Any) -> int:

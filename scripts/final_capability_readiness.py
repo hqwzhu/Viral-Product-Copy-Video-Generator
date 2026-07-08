@@ -270,18 +270,40 @@ def publish_row(
 def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
     audit_item = requirement(final_audit, "real_metrics_orders_revenue_recovery")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
-    evidence_count = (
-        int_value(summary.get("capturedMetricRecords"))
-        + int_value(summary.get("commentCount"))
-        + int_value(summary.get("matchedBusinessRows"))
-        + int_value(summary.get("recordsWithMetrics"))
-    )
+    metrics = real_evidence_metrics(summary)
     status = audit_item.get("status") or "unknown"
     missing = list(audit_item.get("missing") or [])
-    if final_run and evidence_count == 0:
+    if final_run and metrics["evidenceCount"] == 0:
         status = "waiting_real_data"
         missing.append("no real metrics, comments, business rows, or recovered metric records in final run")
-    return row("real_metrics_comments_orders_revenue", status, audit_item.get("evidence") or [], ordered_unique(missing), audit_item.get("limits") or [])
+    elif final_run and metrics["hasFullFunnelEvidence"]:
+        status = "ready_with_full_funnel_evidence"
+        missing = []
+    elif final_run and metrics["hasAnySocialOrCommentEvidence"] and not metrics["hasAnyBusinessEvidence"]:
+        status = "partial_ready_social_metrics_only"
+        missing.extend(["no real order evidence in final run", "no real revenue evidence in final run"])
+    elif final_run and metrics["hasAnyBusinessEvidence"] and not metrics["hasAnySocialOrCommentEvidence"]:
+        status = "partial_ready_business_attribution_only"
+        missing.extend(["no real view evidence in final run", "no real like evidence in final run", "no real comment evidence in final run"])
+    elif final_run:
+        status = "partial_ready_evidence_incomplete"
+        for label, key in [
+            ("view", "hasViewsEvidence"),
+            ("like", "hasLikesEvidence"),
+            ("comment", "hasCommentsEvidence"),
+            ("order", "hasOrdersEvidence"),
+            ("revenue", "hasRevenueEvidence"),
+        ]:
+            if not metrics[key]:
+                missing.append(f"no real {label} evidence in final run")
+    return row(
+        "real_metrics_comments_orders_revenue",
+        status,
+        audit_item.get("evidence") or [],
+        ordered_unique(missing),
+        audit_item.get("limits") or [],
+        metrics,
+    )
 
 
 def optimization_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
@@ -331,7 +353,7 @@ def row(
         "id": requirement_id,
         "label": definition["label"],
         "status": status or "unknown",
-        "satisfied": status in {"ready", "full_ready", "ready_with_video_evidence"},
+        "satisfied": status in {"ready", "full_ready", "ready_with_video_evidence", "ready_with_full_funnel_evidence"},
         "blocked": blocked,
         "evidence": [str(item) for item in evidence if item],
         "missing": [str(item) for item in missing if item],
@@ -393,7 +415,8 @@ def build_action_queue(
                 ),
             )
         )
-    if by_id["real_metrics_comments_orders_revenue"]["status"] == "waiting_real_data":
+    metrics_status = by_id["real_metrics_comments_orders_revenue"]["status"]
+    if metrics_status == "waiting_real_data":
         actions.append(
             action(
                 60,
@@ -410,6 +433,34 @@ def build_action_queue(
                 f"python scripts/business_attribution.py --business-csv \"./orders-and-revenue.csv\" --out-dir \"{out_dir}\"",
             )
         )
+    elif metrics_status.startswith("partial_ready"):
+        missing_text = " ".join(by_id["real_metrics_comments_orders_revenue"]["missing"])
+        if any(word in missing_text for word in ["view", "like", "comment"]):
+            actions.append(
+                action(
+                    60,
+                    "capture_missing_social_evidence",
+                    "Capture public/browser-visible published page metrics and comments for the missing social evidence fields.",
+                    f"python scripts/post_publish_metrics_capture.py --out-dir \"{out_dir}\"",
+                )
+            )
+            actions.append(
+                action(
+                    61,
+                    "capture_missing_comment_evidence",
+                    "Capture public/browser-visible comments or queue manual comment evidence.",
+                    f"python scripts/comment_evidence_capture.py --out-dir \"{out_dir}\"",
+                )
+            )
+        if any(word in missing_text for word in ["order", "revenue"]):
+            actions.append(
+                action(
+                    62,
+                    "import_missing_business_evidence",
+                    "Import business exports with orders and revenue matched to published URLs, UTM content, or campaign/title evidence.",
+                    f"python scripts/business_attribution.py --business-csv \"./orders-and-revenue.csv\" --out-dir \"{out_dir}\"",
+                )
+            )
     if by_id["next_round_optimization"]["status"] == "waiting_real_data":
         actions.append(
             action(
@@ -586,6 +637,56 @@ def list_records(report: dict[str, Any], key: str) -> list[dict[str, Any]]:
     return [item for item in report.get(key, []) if isinstance(item, dict)] if isinstance(report, dict) else []
 
 
+def real_evidence_metrics(summary: dict[str, Any]) -> dict[str, Any]:
+    counts = {
+        "capturedMetricRecords": int_value(summary.get("capturedMetricRecords")),
+        "recordsWithMetrics": int_value(summary.get("recordsWithMetrics")),
+        "commentCount": int_value(summary.get("commentCount")),
+        "matchedBusinessRows": int_value(summary.get("matchedBusinessRows")),
+        "viewsEvidenceRecords": int_value(summary.get("viewsEvidenceRecords")),
+        "likesEvidenceRecords": int_value(summary.get("likesEvidenceRecords")),
+        "favoritesEvidenceRecords": int_value(summary.get("favoritesEvidenceRecords")),
+        "commentsEvidenceRecords": max(
+            int_value(summary.get("commentsEvidenceRecords")),
+            int_value(summary.get("commentCount")),
+        ),
+        "sharesEvidenceRecords": int_value(summary.get("sharesEvidenceRecords")),
+        "clicksEvidenceRecords": int_value(summary.get("clicksEvidenceRecords")),
+        "messagesEvidenceRecords": int_value(summary.get("messagesEvidenceRecords")),
+        "leadsEvidenceRecords": int_value(summary.get("leadsEvidenceRecords")),
+        "ordersEvidenceRecords": int_value(summary.get("ordersEvidenceRecords")),
+        "revenueEvidenceRecords": int_value(summary.get("revenueEvidenceRecords")),
+    }
+    has_views = counts["viewsEvidenceRecords"] > 0
+    has_likes = counts["likesEvidenceRecords"] > 0
+    has_comments = counts["commentsEvidenceRecords"] > 0
+    has_orders = counts["ordersEvidenceRecords"] > 0
+    has_revenue = counts["revenueEvidenceRecords"] > 0
+    evidence_count = (
+        counts["capturedMetricRecords"]
+        + counts["recordsWithMetrics"]
+        + counts["commentCount"]
+        + counts["matchedBusinessRows"]
+        + counts["viewsEvidenceRecords"]
+        + counts["likesEvidenceRecords"]
+        + counts["commentsEvidenceRecords"]
+        + counts["ordersEvidenceRecords"]
+        + counts["revenueEvidenceRecords"]
+    )
+    return {
+        **counts,
+        "evidenceCount": evidence_count,
+        "hasViewsEvidence": has_views,
+        "hasLikesEvidence": has_likes,
+        "hasCommentsEvidence": has_comments,
+        "hasOrdersEvidence": has_orders,
+        "hasRevenueEvidence": has_revenue,
+        "hasAnySocialOrCommentEvidence": has_views or has_likes or has_comments or counts["favoritesEvidenceRecords"] > 0 or counts["sharesEvidenceRecords"] > 0,
+        "hasAnyBusinessEvidence": has_orders or has_revenue,
+        "hasFullFunnelEvidence": has_views and has_likes and has_comments and has_orders and has_revenue,
+    }
+
+
 def first_existing(values: list[Any]) -> Path | None:
     for value in values:
         if not value:
@@ -678,6 +779,16 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- `{item['id']}`: `{item['status']}` - {item['label']}")
         if item.get("missing"):
             lines.append(f"  Missing: {', '.join(item['missing'])}")
+        if item["id"] == "real_metrics_comments_orders_revenue" and item.get("metrics"):
+            metrics = item["metrics"]
+            lines.append(
+                "  Evidence fields: "
+                f"views={metrics.get('viewsEvidenceRecords', 0)}, "
+                f"likes={metrics.get('likesEvidenceRecords', 0)}, "
+                f"comments={metrics.get('commentsEvidenceRecords', 0)}, "
+                f"orders={metrics.get('ordersEvidenceRecords', 0)}, "
+                f"revenue={metrics.get('revenueEvidenceRecords', 0)}"
+            )
     lines.extend(["", "## Action Queue"])
     for item in report["actionQueue"]:
         approval = f" approval=`{item['approvalRequired']}`" if item.get("approvalRequired") else ""
