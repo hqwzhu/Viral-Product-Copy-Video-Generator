@@ -36,6 +36,7 @@ PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
 PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
+PUBLISH_SETUP_ASSISTANT = ROOT / "scripts" / "publish_setup_assistant.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
@@ -1202,6 +1203,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--multi-query-video-sample-count", batch_command)
         self.assertEqual(report["summary"]["promotionRuns"], 1)
         self.assertEqual(report["summary"]["publishReadinessRuns"], 1)
+        self.assertEqual(report["summary"]["publishSetupRuns"], 1)
         self.assertEqual(report["summary"]["browserPublishAssistantRuns"], 1)
         self.assertEqual(report["summary"]["nextRoundOptimizationRuns"], 1)
         self.assertEqual(report["summary"]["multiQueryDiscoveryRuns"], 1)
@@ -1229,6 +1231,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(evidence["evidenceCounts"]["matchedBusinessRows"], 1)
         self.assertTrue(Path(report["productBatch"]["report"]).exists())
         self.assertEqual(report["publishReadiness"][0]["status"], "partial_ready")
+        self.assertEqual(report["publishSetup"][0]["status"], "ready")
+        self.assertTrue(Path(report["publishSetup"][0]["report"]).exists())
+        self.assertTrue(Path(report["publishSetup"][0]["envTemplate"]).exists())
         self.assertEqual(report["browserPublishAssistant"][0]["status"], "ready")
         self.assertTrue(Path(report["browserPublishAssistant"][0]["report"]).exists())
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
@@ -4524,6 +4529,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolutionAudit"]["ready"])
         self.assertTrue(report["selfEvolutionAudit"]["reportExists"])
+        self.assertTrue(report["scripts"]["publish_setup_assistant"]["exists"])
         self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
         self.assertTrue(report["scripts"]["browser_publish_form_fill"]["exists"])
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
@@ -4537,6 +4543,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
         publish_evidence = "\n".join(by_requirement["all_platform_auto_publish"]["evidence"])
+        self.assertIn("publish_setup_assistant.py", publish_evidence)
         self.assertIn("browser_publish_form_fill.py", publish_evidence)
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
@@ -4544,6 +4551,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("next_round_optimizer.py", optimization_evidence)
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
         self.assertTrue(
             any(
@@ -5672,6 +5680,92 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["douyin"]["readiness"], "browser_assisted_or_official_app_required")
         self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
         self.assertTrue((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.md").exists())
+
+    def test_publish_setup_assistant_builds_env_template_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-setup-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        readiness_dir = out_dir / "reports/promotion-manager/publish-readiness"
+        readiness_dir.mkdir(parents=True)
+        queue_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+        queue_path.parent.mkdir(parents=True)
+        queue_path.write_text('{"records":[]}\n', encoding="utf-8")
+        secret_value = "fake-secret-that-must-not-appear"
+        readiness_path = readiness_dir / "publish-readiness.json"
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-08",
+                    "status": "partial_ready",
+                    "inputs": {
+                        "publishQueue": str(queue_path),
+                        "githubRepo": "owner/repo",
+                        "youtubeVideoFile": "./youtube.mp4",
+                        "douyinVideoFile": "./douyin.mp4",
+                    },
+                    "records": [
+                        {
+                            "platform": "youtube",
+                            "publishMode": "official_api_publish",
+                            "readiness": "missing_credentials",
+                            "credentialStatus": {
+                                "requiredAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+                                "alternativeAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "missingEnv": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "presentEnv": [],
+                                "valuesStored": False,
+                            },
+                            "targetStatus": {"ready": True, "field": "youtubeVideoFile", "missing": ""},
+                            "approvalStatus": {"required": True, "approvalProvided": False},
+                            "nextAction": "Set required YouTube OAuth environment variables.",
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "publishMode": "manual_publish_required",
+                            "readiness": "manual_publish_required",
+                            "credentialStatus": {"missingEnv": [], "presentEnv": [], "valuesStored": False},
+                            "targetStatus": {"ready": True, "field": "", "missing": ""},
+                            "approvalStatus": {"required": True, "approvalProvided": False},
+                            "nextAction": "Use browser-assisted publishing.",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_SETUP_ASSISTANT),
+                "--publish-readiness",
+                str(readiness_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env={**os.environ, "YOUTUBE_OAUTH_ACCESS_TOKEN": secret_value},
+        )
+
+        report_path = out_dir / "reports/promotion-manager/publish-setup/publish-setup.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["credentialEnvNames"], 3)
+        by_platform = {item["platform"]: item for item in report["records"]}
+        self.assertEqual(by_platform["youtube"]["setupCategory"], "credential_setup_required")
+        self.assertEqual(by_platform["xiaohongshu"]["setupCategory"], "browser_or_manual_publish")
+        self.assertIn("executeWhenReady", by_platform["youtube"]["commands"])
+        self.assertIn("prepareBrowserPublish", by_platform["xiaohongshu"]["commands"])
+        env_template = Path(report["artifacts"]["envTemplate"])
+        env_text = env_template.read_text(encoding="utf-8")
+        self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN=", env_text)
+        self.assertIn("GOOGLE_OAUTH_CLIENT_ID=", env_text)
+        self.assertNotIn(secret_value, env_text)
+        self.assertTrue(Path(report["artifacts"]["checklist"]).exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/publish-setup/publish-setup.md").exists())
 
     def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-douyin-test-"))

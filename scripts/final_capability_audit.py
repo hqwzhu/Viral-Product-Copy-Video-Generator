@@ -41,6 +41,7 @@ SCRIPT_REQUIREMENTS = {
     "render_video": "render_video.py",
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
+    "publish_setup_assistant": "publish_setup_assistant.py",
     "browser_publish_assistant": "browser_publish_assistant.py",
     "browser_publish_form_fill": "browser_publish_form_fill.py",
     "platform_access_audit": "platform_access_audit.py",
@@ -439,6 +440,7 @@ def requirement_status(
                     "platform_access_audit",
                     "publish_queue",
                     "publish_readiness",
+                    "publish_setup_assistant",
                     "browser_publish_assistant",
                     "browser_publish_form_fill",
                     "publish_executor",
@@ -720,6 +722,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/publish_readiness_runner.py --workflow-manifest \"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
                 f"--build-queue --github-repo owner/repo --youtube-video-file \"{out_dir}/videos/product-youtube.mp4\" "
                 f"--douyin-video-file \"{out_dir}/videos/product-douyin.mp4\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "build_publish_setup_kit",
+            "command": (
+                f"python scripts/publish_setup_assistant.py --publish-readiness "
+                f"\"{out_dir}/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}\""
             ),
         },
         {

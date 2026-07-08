@@ -545,6 +545,14 @@ python scripts/publish_readiness_runner.py \
   --out-dir "./promotion-output"
 ```
 
+To turn that readiness report into a credential/target setup kit without storing secret values:
+
+```bash
+python scripts/publish_setup_assistant.py \
+  --publish-readiness "./promotion-output/reports/promotion-manager/publish-readiness/publish-readiness.json" \
+  --out-dir "./promotion-output"
+```
+
 To prepare browser-assisted publishing payloads for Zhihu, Xiaohongshu, Douyin, TikTok, or other non-official direct-publish platforms:
 
 ```bash
@@ -674,6 +682,7 @@ The command writes:
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from observed viral patterns. The workflow writes this back to `<product>-platform-content.json` before video rendering unless `--skip-competitor-informed-content` is supplied.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
+- `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, and `publish-setup-checklist.md` when `scripts/publish_setup_assistant.py` turns readiness into credential names, target requirements, approval gates, and next commands without storing secret values.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries. With `--check-live`, it also records official documentation reachability, UTC check time, and doc-evidence gaps.
@@ -777,6 +786,7 @@ For Douyin, `scripts/publish_executor.py --platform douyin` uses the official up
 Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAuth consent flow before upload. It requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for execution and does not save OAuth tokens.
 Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs, Douyin official dry-runs when `--douyin-video-file` is supplied, plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, and other unsupported direct-publish platforms.
 Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes.
+Use `scripts/publish_setup_assistant.py` after publish readiness to write a publish setup kit: platform-by-platform credential environment variable names, target gaps, approval gates, rerun/execution commands, `publish-credentials.example.env`, and a checklist. It never writes credential values.
 Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare browser-assisted payload files, platform entry URLs, generic form-fill helper scripts, browser form-fill commands, and post-publish URL registration commands for Zhihu, Xiaohongshu, Douyin, TikTok, or similar platforms. It may open publisher entry URLs in the user's default browser with `--open-browser`, but it must not auto-login, solve captcha, or click the final publish button.
 Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when the user wants Codex to fill visible publisher fields. It writes a screenshot and report, does not submit the form, and must stop for login, captcha, risk control, account verification, or final publish.
 Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted. Add `--check-live` when the decision depends on current official documentation; live reachability is evidence for documentation existence, not account authorization.
@@ -863,6 +873,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/next_round_optimizer.py`: evidence-backed next-round optimizer that turns recovered metrics, comments, and business attribution into platform actions, content angles, hooks, and next-cycle commands.
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, Douyin official dry-runs when a video file is supplied, and manual/browser-assisted publish tasks.
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
+- `scripts/publish_setup_assistant.py`: readiness-to-setup-kit generator that writes credential variable names, target gaps, approval commands, an env template, and a checklist without storing secret values.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
 - `scripts/browser_publish_form_fill.py`: controlled Playwright helper that fills visible publisher fields from a prepared payload, screenshots the result, and stops before final publish.
 - `scripts/platform_access_audit.py`: official access boundary auditor for platform publishing, metrics recovery, app-review requirements, and manual/browser-assisted fallback rules.

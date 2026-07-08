@@ -56,6 +56,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-queue/drafts/<platform>-draft.md` copy-ready platform drafts for the publish queue
 - `reports/promotion-manager/publish-queue/official-executions/<platform>/reports/promotion-manager/publish-results/publish-execution.{json,md}` per-platform official executor reports called by the queue
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, target information, credential presence, approval status, and next actions before execution
+- `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, and `publish-setup-checklist.md` when `scripts/publish_setup_assistant.py` converts readiness into credential names, target gaps, approval gates, and next commands
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `browser-publish/payloads/*` when `scripts/browser_publish_assistant.py` prepares browser-assisted/manual publishing payloads, browser form-fill commands, and registers supplied real published URLs
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from a prepared payload and stops before final publish
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official publishing, app-review, metrics, and manual/browser-assisted access boundaries
@@ -71,7 +72,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
-- `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
+- `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, publish setup kits, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -152,16 +153,29 @@ Discovered URLs are not treated as product facts. They must still pass through `
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
 - `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, and `codexReadFirst`
-- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish queue count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
+- `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish queue count, publish setup count, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
 - `publishReadiness[]`: per-product readiness report path, status, summary, and exit code
+- `publishSetup[]`: per-product publish setup report path, env-template path, checklist path, summary, and exit code
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
 - `browserFormFill[]`: optional per-platform result when `--run-browser-form-fill` is supplied; includes payload path, report path, screenshot, filled field count, missing fields, submitted flag, and final-user-action requirement
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
 - `externalGates[]`: explicit approval, credential, app-review, manual publish, metrics export, and Skill-sync requirements that cannot be bypassed safely
 - `recommendedNextCommands[]`: review and next-action commands
 - `guardrails`: no final publish click, no credential storage, no captcha/risk-control bypass, and no fabricated metrics
+
+## Publish Setup
+
+`publish-setup.json` includes:
+
+- `status`: `ready` or `blocked_missing_readiness`
+- `input`: source publish-readiness report path, platform filter, and source readiness status
+- `summary`: platform count, credential variable count, and setup-category counts
+- `records[]`: one platform setup record with readiness, setup category, credential environment variable names, missing target fields, approval gate, setup steps, safe rerun/execution/browser-assist commands, and guardrail
+- `artifacts.envTemplate`: `publish-credentials.example.env` with variable names only, never values
+- `artifacts.checklist`: `publish-setup-checklist.md`
+- `guardrails`: no stored credential values, no final publish click, and no fabricated published URL or metrics
 
 ## Viral Content Library
 

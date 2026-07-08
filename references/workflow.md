@@ -177,7 +177,7 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
+This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
 When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
 
@@ -512,6 +512,16 @@ python scripts/publish_readiness_runner.py \
 ```
 
 This writes `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}`. The report checks queue state, target information, credential presence by environment variable name, approval status, and next actions. It does not write credential values and does not execute final platform writes unless the publish queue is explicitly run with execution and the required approval phrase.
+
+Turn the readiness report into a publish setup kit:
+
+```bash
+python scripts/publish_setup_assistant.py \
+  --publish-readiness "./promotion-output/reports/promotion-manager/publish-readiness/publish-readiness.json" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, and `publish-setup-checklist.md`. The env file is a template with variable names only; do not put real secrets in the repository.
 
 Prepare browser-assisted publishing materials for non-official direct-publish platforms:
 
