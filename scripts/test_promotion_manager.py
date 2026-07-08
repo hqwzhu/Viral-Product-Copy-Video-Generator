@@ -27,6 +27,7 @@ COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
 METRICS_INTAKE = ROOT / "scripts" / "metrics_intake.py"
 METRICS_RECOVERY = ROOT / "scripts" / "metrics_recovery.py"
+NEXT_ROUND_OPTIMIZER = ROOT / "scripts" / "next_round_optimizer.py"
 BUSINESS_ATTRIBUTION = ROOT / "scripts" / "business_attribution.py"
 PUBLISHED_ITEMS = ROOT / "scripts" / "published_items.py"
 PUBLISH_EXECUTOR = ROOT / "scripts" / "publish_executor.py"
@@ -1759,6 +1760,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                                 "publishedItemsJson": "published-items.json",
                             },
                             "metricsRecovery": {"enabled": True},
+                            "nextRoundOptimization": {"enabled": True},
                         }
                     ],
                     "guardrails": ["No automatic publishing without approval."],
@@ -1786,6 +1788,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         job_state = state["jobs"]["ai-prompt-kit-attribution-weekly"]
         self.assertTrue(Path(job_state["lastBusinessAttribution"]).exists())
         self.assertTrue(Path(job_state["lastMetricsRecovery"]).exists())
+        self.assertTrue(Path(job_state["lastNextRoundOptimization"]).exists())
         run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
         attribution = run_report["records"][0]["businessAttribution"]
         self.assertEqual(attribution["status"], "ready")
@@ -1793,6 +1796,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         recovery = run_report["records"][0]["metricsRecovery"]
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
+        optimization = run_report["records"][0]["nextRoundOptimization"]
+        self.assertEqual(optimization["status"], "partial_ready")
+        self.assertTrue(Path(optimization["report"]).exists())
 
     def test_automation_scheduler_runs_post_publish_metrics_capture_before_recovery(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-post-metrics-test-"))
@@ -2557,6 +2563,178 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
         self.assertEqual(report["aggregates"]["totals"]["revenue"], 88.0)
 
+    def test_next_round_optimizer_builds_evidence_backed_plan(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="next-round-optimizer-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        workflow_dir = out_dir / "reports/promotion-manager/agent-run"
+        workflow_dir.mkdir(parents=True)
+        workflow_manifest = workflow_dir / "workflow-manifest.json"
+        workflow_manifest.write_text(
+            json.dumps(
+                {
+                    "product": {
+                        "name": "AI Prompt Kit",
+                        "url": "https://example.com/ai-prompt-kit",
+                        "audience": "AI operators",
+                        "valueProposition": "Prompt templates for launch copy and video scripts",
+                    },
+                    "platforms": ["youtube", "xiaohongshu"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        metrics_dir = out_dir / "reports/promotion-manager/metrics-recovery"
+        metrics_dir.mkdir(parents=True)
+        metrics_path = metrics_dir / "metrics-recovery.json"
+        metrics_path.write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-08",
+                    "recoveryStatus": "ready",
+                    "records": [
+                        {
+                            "id": "metric-001",
+                            "platform": "xiaohongshu",
+                            "title": "AI Prompt Kit launch note",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "metrics": {
+                                "views": {"raw": "4200", "normalized": 4200.0},
+                                "likes": {"raw": "360", "normalized": 360.0},
+                                "comments": {"raw": "41", "normalized": 41.0},
+                                "orders": {"raw": "1", "normalized": 1.0},
+                                "revenue": {"raw": "99.00", "normalized": 99.0},
+                            },
+                            "evidence": ["xhs-export.csv"],
+                        },
+                        {
+                            "id": "metric-002",
+                            "platform": "youtube",
+                            "title": "AI Prompt Kit demo",
+                            "publishedUrl": "https://www.youtube.com/watch?v=abc123",
+                            "metrics": {
+                                "views": {"raw": "12000", "normalized": 12000.0},
+                                "likes": {"raw": "840", "normalized": 840.0},
+                                "comments": {"raw": "30", "normalized": 30.0},
+                            },
+                            "evidence": ["youtube-api"],
+                        },
+                    ],
+                    "aggregates": {
+                        "recordsWithMetrics": 2,
+                        "totals": {"views": 16200.0, "likes": 1200.0, "comments": 71.0, "orders": 1.0, "revenue": 99.0},
+                    },
+                    "manualExportRequired": [],
+                    "retrospective": {"status": "ready", "nextRoundActions": ["Reuse the strongest observed hook in one new variant."]},
+                }
+            ),
+            encoding="utf-8",
+        )
+        comment_dir = out_dir / "reports/promotion-manager/comment-evidence"
+        comment_dir.mkdir(parents=True)
+        comment_path = comment_dir / "comment-evidence-export.json"
+        comment_path.write_text(
+            json.dumps(
+                {
+                    "records": [],
+                    "comments": [
+                        {
+                            "author": "Alice",
+                            "text": "How does pricing work?",
+                            "likes": 9,
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        },
+                        {
+                            "author": "Bob",
+                            "text": "Need Zapier integration",
+                            "replies": 2,
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        },
+                    ],
+                    "demandSignals": [
+                        {"type": "pricing", "excerpt": "How does pricing work?", "platform": "xiaohongshu"},
+                        {"type": "integration", "excerpt": "Need Zapier integration", "platform": "xiaohongshu"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        business_dir = out_dir / "reports/promotion-manager/business-attribution"
+        business_dir.mkdir(parents=True)
+        business_path = business_dir / "business-attribution.json"
+        business_path.write_text(
+            json.dumps(
+                {
+                    "status": "ready",
+                    "summary": {"matchedRows": 1, "attributedOrders": 1.0, "attributedRevenue": 99.0},
+                    "attributions": [
+                        {
+                            "platform": "xiaohongshu",
+                            "title": "AI Prompt Kit launch note",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "metrics": {
+                                "orders": {"raw": "1", "normalized": 1.0},
+                                "revenue": {"raw": "99", "normalized": 99.0},
+                            },
+                            "matchRules": ["referrer_url"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(NEXT_ROUND_OPTIMIZER),
+                "--metrics-recovery-json",
+                str(metrics_path),
+                "--comment-evidence-json",
+                str(comment_path),
+                "--business-attribution-json",
+                str(business_path),
+                "--workflow-manifest",
+                str(workflow_manifest),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/optimization/next-round-optimization.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["evidenceCoverage"]["metricRecords"], 2)
+        self.assertEqual(report["evidenceCoverage"]["commentCount"], 2)
+        self.assertEqual(report["evidenceCoverage"]["businessAttributions"], 1)
+        self.assertEqual(report["winners"]["byRevenue"]["platform"], "xiaohongshu")
+        self.assertEqual(report["winners"]["byViews"]["platform"], "youtube")
+        self.assertTrue(any(item["type"] == "pricing" for item in report["commentDemand"]["topSignals"]))
+        self.assertTrue(any("pricing" in item["angle"].lower() for item in report["nextRoundContent"]))
+        self.assertTrue(any(item["purpose"] == "run_next_cycle" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "refresh_viral_discovery" for item in report["recommendedCommands"]))
+        self.assertTrue((out_dir / "reports/promotion-manager/optimization/next-round-optimization.md").exists())
+
+    def test_next_round_optimizer_waits_for_real_data(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="next-round-waiting-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(NEXT_ROUND_OPTIMIZER),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/optimization/next-round-optimization.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "waiting_real_data")
+        self.assertFalse(report["nextRoundContent"])
+        self.assertTrue(any("Import real" in item for item in report["nextActions"]))
+
     def test_post_publish_metrics_capture_extracts_public_page_metrics(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="post-publish-metrics-capture-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3059,6 +3237,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--run-business-attribution",
                 "--business-csv",
                 str(business_csv),
+                "--run-next-round-optimization",
                 "--out-dir",
                 str(output_dir),
             ],
@@ -3073,10 +3252,16 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(cycle["commentEvidenceCapture"]["summary"]["commentCount"], 3)
         self.assertEqual(cycle["businessAttribution"]["status"], "ready")
         self.assertEqual(cycle["businessAttribution"]["summary"]["matchedRows"], 1)
+        self.assertEqual(cycle["nextRoundOptimization"]["status"], "partial_ready")
+        self.assertTrue(Path(cycle["nextRoundOptimization"]["report"]).exists())
         recovery = json.loads(Path(cycle["metricsRecovery"]["metricsRecovery"]).read_text(encoding="utf-8"))
         self.assertEqual(recovery["aggregates"]["totals"]["views"], 4200.0)
         self.assertEqual(recovery["aggregates"]["totals"]["orders"], 1.0)
         self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 99.0)
+        optimization = json.loads(Path(cycle["nextRoundOptimization"]["report"]).read_text(encoding="utf-8"))
+        self.assertEqual(optimization["evidenceCoverage"]["commentCount"], 3)
+        self.assertEqual(optimization["evidenceCoverage"]["businessAttributions"], 1)
+        self.assertTrue(optimization["recommendedCommands"])
         self.assertTrue(Path(cycle["postPublishMetricsCapture"]["metricExport"]).exists())
         self.assertTrue(Path(cycle["commentEvidenceCapture"]["commentEvidenceExport"]).exists())
         self.assertTrue(Path(cycle["businessAttribution"]["businessAttributionExport"]).exists())
@@ -3172,6 +3357,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             by_requirement["fully_autonomous_self_evolution"]["status"],
             "blocked_by_safety_boundary",
         )
+        self.assertEqual(by_requirement["retrospective_next_round_optimization"]["status"], "ready")
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
         self.assertTrue(report["platformAccessAudit"]["ready"])
@@ -3183,6 +3369,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
+        self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
@@ -3192,6 +3379,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser_publish_form_fill.py", publish_evidence)
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
+        optimization_evidence = "\n".join(by_requirement["retrospective_next_round_optimization"]["evidence"])
+        self.assertIn("next_round_optimizer.py", optimization_evidence)
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
@@ -3204,6 +3393,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "optimize_next_round_from_recovered_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())

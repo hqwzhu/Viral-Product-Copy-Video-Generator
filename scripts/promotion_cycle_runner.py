@@ -23,6 +23,7 @@ METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
 BUSINESS_ATTRIBUTION = SCRIPTS / "business_attribution.py"
+NEXT_ROUND_OPTIMIZER = SCRIPTS / "next_round_optimizer.py"
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
@@ -41,7 +42,20 @@ def main() -> None:
     comment_evidence = run_comment_evidence_capture(args, out_dir, published, steps)
     business_attribution = run_business_attribution(args, out_dir, published, steps)
     metrics = run_metrics_recovery(args, out_dir, workflow, publish, published, post_publish_metrics, business_attribution, steps)
-    report = build_cycle_report(args, out_dir, workflow, publish, published, post_publish_metrics, comment_evidence, business_attribution, metrics, steps)
+    next_round_optimization = run_next_round_optimization(args, out_dir, workflow, publish, comment_evidence, business_attribution, metrics, steps)
+    report = build_cycle_report(
+        args,
+        out_dir,
+        workflow,
+        publish,
+        published,
+        post_publish_metrics,
+        comment_evidence,
+        business_attribution,
+        metrics,
+        next_round_optimization,
+        steps,
+    )
     write_cycle_report(out_dir, report)
     print(f"Promotion cycle report written to: {(cycle_dir(out_dir) / 'promotion-cycle.json').resolve()}")
 
@@ -119,6 +133,7 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
     metrics.add_argument("--comment-evidence-install-browser-if-missing", action="store_true")
     metrics.add_argument("--run-business-attribution", action="store_true")
+    metrics.add_argument("--run-next-round-optimization", action="store_true")
 
     parser.add_argument("--out-dir", default="./promotion-output")
     return parser.parse_args()
@@ -396,6 +411,48 @@ def run_metrics_recovery(
     }
 
 
+def run_next_round_optimization(
+    args: argparse.Namespace,
+    out_dir: Path,
+    workflow: dict[str, Any],
+    publish: dict[str, Any],
+    comment_evidence: dict[str, Any],
+    business_attribution: dict[str, Any],
+    metrics: dict[str, Any],
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not args.run_next_round_optimization:
+        return {"status": "skipped", "reason": "--run-next-round-optimization was not supplied."}
+    command = [sys.executable, str(NEXT_ROUND_OPTIMIZER), "--out-dir", str(out_dir)]
+    manifest_path = existing_path(workflow.get("manifest", ""))
+    if manifest_path:
+        command.extend(["--workflow-manifest", str(manifest_path)])
+    queue_path = existing_path(publish.get("queue", ""))
+    if queue_path:
+        command.extend(["--publish-queue", str(queue_path)])
+    metrics_path = existing_path(metrics.get("metricsRecovery", ""))
+    if metrics_path:
+        command.extend(["--metrics-recovery-json", str(metrics_path)])
+    comment_export = existing_path(comment_evidence.get("commentEvidenceExport", ""))
+    if comment_export:
+        command.extend(["--comment-evidence-json", str(comment_export)])
+    elif existing_path(comment_evidence.get("report", "")):
+        command.extend(["--comment-evidence-json", str(comment_evidence["report"])])
+    business_report = existing_path(business_attribution.get("report", ""))
+    if business_report:
+        command.extend(["--business-attribution-json", str(business_report)])
+    step = run_command("next_round_optimizer", command)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/optimization/next-round-optimization.json"
+    summary = optimization_summary(report_path)
+    return {
+        "status": summary.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+        "report": str(report_path),
+        "exitCode": step["exitCode"],
+        "summary": summary,
+    }
+
+
 def build_cycle_report(
     args: argparse.Namespace,
     out_dir: Path,
@@ -406,6 +463,7 @@ def build_cycle_report(
     comment_evidence: dict[str, Any],
     business_attribution: dict[str, Any],
     metrics: dict[str, Any],
+    next_round_optimization: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
@@ -418,7 +476,8 @@ def build_cycle_report(
         "commentEvidenceCapture": comment_evidence,
         "businessAttribution": business_attribution,
         "metricsRecovery": metrics,
-        "automationStatus": cycle_status(workflow, publish, published, post_publish_metrics, comment_evidence, business_attribution, metrics),
+        "nextRoundOptimization": next_round_optimization,
+        "automationStatus": cycle_status(workflow, publish, published, post_publish_metrics, comment_evidence, business_attribution, metrics, next_round_optimization),
         "approval": {
             "approvalPhrase": APPROVAL_PHRASE,
             "publishExecutionRequested": args.execute_publish,
@@ -428,6 +487,7 @@ def build_cycle_report(
             "Official API writes require --execute-publish, the exact approval phrase, and environment credentials.",
             "Dry-runs, blocked writes, queued manual tasks, and browser-assisted tasks are not treated as published.",
             "Metrics recovery uses official/public connectors and user-provided exports only.",
+            "Next-round optimization uses recovered evidence only and waits when real data is missing.",
             "Do not bypass login, captcha, risk controls, platform review, or account verification.",
             "Do not fabricate views, likes, comments, orders, revenue, published URLs, or platform IDs.",
         ],
@@ -443,6 +503,7 @@ def cycle_status(
     comment_evidence: dict[str, Any],
     business_attribution: dict[str, Any],
     metrics: dict[str, Any],
+    next_round_optimization: dict[str, Any],
 ) -> str:
     if workflow.get("status") != "ready":
         return "workflow_failed"
@@ -458,6 +519,8 @@ def cycle_status(
         return "business_attribution_failed"
     if metrics.get("status") != "ready":
         return "metrics_recovery_failed"
+    if next_round_optimization.get("status") not in {"ready", "partial_ready", "waiting_real_data", "skipped"}:
+        return "next_round_optimization_failed"
     recovery_status = (metrics.get("summary") or {}).get("recoveryStatus", "")
     if recovery_status == "ready":
         return "ready_with_real_metrics"
@@ -514,6 +577,11 @@ def render_cycle_markdown(report: dict[str, Any]) -> str:
         f"- Status: `{report['metricsRecovery'].get('status', '')}`",
         f"- Report: {report['metricsRecovery'].get('metricsRecovery', '')}",
         f"- Summary: {report['metricsRecovery'].get('summary', {})}",
+        "",
+        "## Next-Round Optimization",
+        f"- Status: `{report['nextRoundOptimization'].get('status', '')}`",
+        f"- Report: {report['nextRoundOptimization'].get('report', '')}",
+        f"- Summary: {report['nextRoundOptimization'].get('summary', {})}",
         "",
         "## Guardrails",
     ]
@@ -582,6 +650,24 @@ def metrics_summary(path: Path) -> dict[str, Any]:
         "retrospectiveStatus": (report.get("retrospective") or {}).get("status", ""),
         "recordsWithMetrics": (report.get("coverage") or {}).get("recordsWithMetrics", 0),
         "manualOrPendingRequirements": (report.get("coverage") or {}).get("manualOrPendingRequirements", 0),
+    }
+
+
+def optimization_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        report = json.loads(path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError:
+        return {}
+    coverage = report.get("evidenceCoverage") or {}
+    return {
+        "status": report.get("status", ""),
+        "metricRecords": coverage.get("metricRecords", 0),
+        "commentCount": coverage.get("commentCount", 0),
+        "businessAttributions": coverage.get("businessAttributions", 0),
+        "nextRoundContent": len(report.get("nextRoundContent", [])),
+        "manualOrPendingRequirements": coverage.get("manualOrPendingRequirements", 0),
     }
 
 

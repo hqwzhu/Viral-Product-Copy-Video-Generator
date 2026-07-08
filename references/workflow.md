@@ -622,6 +622,19 @@ python scripts/metrics_recovery.py \
 
 When `scripts/comment_evidence_capture.py` has captured public comments, use `comment-evidence-export.json` as qualitative evidence for the next content round. Do not convert comment counts, likes, replies, objections, or purchase intent into performance claims unless the report includes visible evidence for them.
 
+Generate an evidence-backed next round after metrics/comment/business evidence exists:
+
+```bash
+python scripts/next_round_optimizer.py \
+  --metrics-recovery-json "./promotion-output/reports/promotion-manager/metrics-recovery/metrics-recovery.json" \
+  --comment-evidence-json "./promotion-output/reports/promotion-manager/comment-evidence/comment-evidence-export.json" \
+  --business-attribution-json "./promotion-output/reports/promotion-manager/business-attribution/business-attribution.json" \
+  --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
+  --out-dir "./promotion-output"
+```
+
+The optimizer writes `reports/promotion-manager/optimization/next-round-optimization.{json,md}`. It returns `waiting_real_data` when no recovered metrics, public/browser-visible comments, or matched business attribution exist. It returns `partial_ready` when there is usable evidence but some platforms or queue items still need real exports, screenshots, browser snapshots, or official API evidence.
+
 Zhihu, Xiaohongshu, Douyin, TikTok, and unpublished queue items must be reported as `manual_export_required` or `publish_pending` until real platform exports, screenshots, browser-visible structured snapshots, or official access are provided.
 
 ## Stage 7: Periodic Automation
@@ -663,6 +676,7 @@ Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_p
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Set `jobs[].commentEvidenceCapture.enabled` to `true` to run `scripts/comment_evidence_capture.py` after the workflow. Use `publishedItemsJson`, `publishedUrls`, `structuredJson`, `htmlFile`, `textFile`, `captureBrowserAssisted`, and `allowLocalhost` for explicit public/browser-visible comment evidence sources. The scheduler records `lastCommentEvidenceCapture` in state.
 Set `jobs[].businessAttribution.enabled` to `true` to run `scripts/business_attribution.py` before metrics recovery. Use `businessCsv`, `businessJson`, `publishedItemsJson`, and `publishedUrls` to pass order/revenue exports and content evidence. The scheduler records `lastBusinessAttribution` in state and passes the attribution export to metrics recovery when `metricsRecovery.enabled` is true.
+Set `jobs[].nextRoundOptimization.enabled` to `true` to run `scripts/next_round_optimizer.py` after metrics recovery, comment evidence capture, and business attribution. The scheduler records `lastNextRoundOptimization` in state and includes the optimization report in `automation-run.json`.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
 Scheduled jobs can set `multiQueryViralDiscovery.enabled: true` to run product-driven multi-query viral discovery after the workflow manifest is created. Useful fields include `dryRun`, `queryCount`, `queries`, `platforms`, `topN`, `htmlSnapshotRoot`, `liveOfficial`, `runCreatorFollowUp`, `runFollowUpCaptures`, and `captureBrowserAssistedFollowUps`.

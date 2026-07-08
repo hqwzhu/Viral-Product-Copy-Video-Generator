@@ -370,6 +370,16 @@ python scripts/comment_evidence_capture.py \
   --out-dir "./promotion-output"
 ```
 
+To turn recovered metrics, comment demand signals, and business attribution into the next promotion round:
+
+```bash
+python scripts/next_round_optimizer.py \
+  --metrics-recovery-json "./promotion-output/reports/promotion-manager/metrics-recovery/metrics-recovery.json" \
+  --comment-evidence-json "./promotion-output/reports/promotion-manager/comment-evidence/comment-evidence-export.json" \
+  --business-attribution-json "./promotion-output/reports/promotion-manager/business-attribution/business-attribution.json" \
+  --out-dir "./promotion-output"
+```
+
 To configure periodic local automation:
 
 ```bash
@@ -484,6 +494,7 @@ python scripts/promotion_cycle_runner.py \
   --run-post-publish-metrics-capture \
   --run-comment-evidence-capture \
   --run-business-attribution \
+  --run-next-round-optimization \
   --business-csv "./orders-and-revenue.csv" \
   --out-dir "./promotion-output"
 ```
@@ -561,7 +572,8 @@ The command writes:
 - `reports/promotion-manager/comment-evidence/comment-evidence-capture.{json,md}` and `comment-evidence-export.json` when `scripts/comment_evidence_capture.py` captures public/browser-visible comments and demand signals.
 - `reports/promotion-manager/business-attribution/business-attribution.{json,md}` and `business-attribution-export.json` when `scripts/business_attribution.py` attributes real business exports to proven published content using URL, UTM content, referrer, or title/campaign evidence.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
-- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, and metrics recovery as one local operating cycle.
+- `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` converts real metrics, comment demand signals, and business attribution into next-round content angles, platform actions, and copy-ready commands.
+- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, optional next-round optimization, and metrics recovery as one local operating cycle.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks scripts, tools, credential presence, platform limits, and final requirement gaps.
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
@@ -655,7 +667,7 @@ Use `scripts/platform_access_audit.py` when you need a machine-readable official
 Use `scripts/published_items.py` after a manual/browser-assisted publish to register the real published URL and evidence. `scripts/publish_queue.py` also writes a `published-items` report automatically; dry-runs and queued tasks remain pending, not published.
 Use `scripts/publish_url_capture.py` when Codex or the user has a post-publish browser snapshot, saved HTML, or copied page text. It extracts the real platform URL/title, blocks draft or preview URLs, and updates `published-items` for metrics recovery.
 Use `scripts/post_publish_metrics_capture.py` after real published URLs are registered. It fetches public pages or browser-visible snapshots, extracts visible views/likes/comments/saves/shares/clicks/leads/orders/revenue when present, writes a `post-publish-metrics-export.json` file for `metrics_recovery.py`, and queues manual evidence when login/captcha/private analytics are required.
-Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, optional public metrics capture, optional comment evidence capture, optional business attribution, and metrics recovery. Official GitHub/YouTube/Douyin writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
+Use `scripts/promotion_cycle_runner.py` when the user wants one command to run generation, guarded publish queue, published URL registration, optional public metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and next-round optimization. Add `--run-next-round-optimization` to write `next-round-optimization.json` after recovery. Official GitHub/YouTube/Douyin writes still require `--execute-publish --approval I_APPROVE_PUBLISH` plus credentials; dry-runs and manual/browser-assisted tasks remain pending rather than published.
 
 ### 6. Retrospective
 
@@ -679,6 +691,7 @@ Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish 
 Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.
 Run `scripts/comment_evidence_capture.py` after real published URLs or visible comment exports exist. It extracts public/browser-visible comments, likes/replies per comment when visible, and demand signals such as questions, pricing objections, integrations, feature requests, pain points, and CTA intent. Treat its manual evidence requests as missing evidence, not recovered comments.
 Run `scripts/business_attribution.py` when orders or revenue are exported from a business system with UTM fields, referrers, content IDs, or campaign/title fields. It attributes only rows that match proven published content and leaves weak platform-only rows unmatched.
+Run `scripts/next_round_optimizer.py` after `metrics_recovery.py`, `comment_evidence_capture.py`, or `business_attribution.py` has produced real evidence. It outputs `waiting_real_data` when no metrics, comments, or attribution exist; otherwise it ranks winners, summarizes demand signals, proposes next titles/hooks/script briefs, and emits copy-ready commands for the next cycle. Treat `partial_ready` as usable but incomplete when some platforms still require manual evidence.
 
 ### 7. Periodic Automation
 
@@ -692,6 +705,7 @@ If a scheduled job has `postPublishMetricsCapture.enabled: true`, the scheduler 
 If a scheduled job has `commentEvidenceCapture.enabled: true`, the scheduler runs `scripts/comment_evidence_capture.py` after the workflow and records the public/browser-visible comment evidence report path in state.
 If a scheduled job has `businessAttribution.enabled: true`, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes `business-attribution-export.json` into `scripts/metrics_recovery.py` when recovery is enabled.
 If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
+If a scheduled job has `nextRoundOptimization.enabled: true`, the scheduler runs `scripts/next_round_optimizer.py` after metrics/comment/business recovery and records `lastNextRoundOptimization` in state.
 If a scheduled job has `multiQueryViralDiscovery.enabled: true`, the scheduler runs `scripts/multi_query_viral_discovery.py` after the workflow manifest is created and records the merged discovery report path in state. Use `multiQueryViralDiscovery.dryRun: true` for planning-only recurring research.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.
 Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt public browser-visible snapshots for queued browser-assisted follow-up tasks.
@@ -726,6 +740,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/post_publish_metrics_capture.py`: public/browser-visible post-publish metrics capturer for registered URLs; writes a metrics export for recovery and manual evidence requests when metrics are hidden.
 - `scripts/comment_evidence_capture.py`: public/browser-visible comment and demand-signal capturer for post-publish retrospectives and next-round content optimization.
 - `scripts/business_attribution.py`: order/revenue export attribution to proven published content using URL, UTM content, referrer, content ID, or title/campaign evidence.
+- `scripts/next_round_optimizer.py`: evidence-backed next-round optimizer that turns recovered metrics, comments, and business attribution into platform actions, content angles, hooks, and next-cycle commands.
 - `scripts/publish_queue.py`: publish queue builder that creates platform drafts, GitHub/YouTube official dry-runs, Douyin official dry-runs when a video file is supplied, and manual/browser-assisted publish tasks.
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
@@ -733,7 +748,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/platform_access_audit.py`: official access boundary auditor for platform publishing, metrics recovery, app-review requirements, and manual/browser-assisted fallback rules.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub, YouTube, and Douyin Open Platform video upload/create.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
-- `scripts/promotion_cycle_runner.py`: one-command local operating cycle for workflow generation, guarded publish queue, published item registration, post-publish metric/comment evidence capture, business attribution, and metrics recovery.
+- `scripts/promotion_cycle_runner.py`: one-command local operating cycle for workflow generation, guarded publish queue, published item registration, post-publish metric/comment evidence capture, business attribution, metrics recovery, and next-round optimization.
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.
 - `scripts/self_evolution_audit.py`: controlled self-evolution auditor for runtime gaps, repository status, installed Skill drift, safe install candidates, and approved local Skill sync.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.

@@ -31,6 +31,7 @@ Use this reference when the user asks for full automation.
 - Capture public/browser-visible comments and demand signals from registered published URLs, saved HTML, copied text, or structured snapshots with `scripts/comment_evidence_capture.py`, then use those questions, objections, integration requests, pain points, and CTA-intent signals for the next content round.
 - Attribute user-provided order/revenue exports to proven published content with `scripts/business_attribution.py` when rows contain exact URLs, referrer URLs, landing pages, UTM content, content IDs, or title/campaign evidence.
 - Coordinate post-publish metrics recovery from workflow manifests, publish queues, published item JSON, published URLs, structured metric snapshots, GitHub repos, YouTube video IDs, and user-provided business exports without fabricating missing data.
+- Convert recovered metrics, public/browser-visible comments, and matched business attribution into next-round platform actions, content angles, hooks, script briefs, and copy-ready commands with `scripts/next_round_optimizer.py`.
 - Execute approved official publishing actions for GitHub, YouTube, and Douyin when the correct environment credentials, target files, official account authorization, and explicit approval phrase are supplied.
 - Build a publish execution queue that routes GitHub and YouTube into official dry-run/approved executor calls, routes Douyin into official dry-run/approved upload-create calls when `--douyin-video-file` is supplied, and routes Zhihu, Xiaohongshu, unconfigured Douyin, and unverified platforms into manual/browser-assisted publish tasks.
 - Audit publish readiness for a workflow or queue, including target information, queue state, credential presence by environment variable name, approval status, and next actions without storing secret values.
@@ -76,6 +77,7 @@ Use this reference when the user asks for full automation.
 - Do not treat `post_publish_metrics_capture.py` manual evidence requests as recovered data; only captured metric records, official APIs, exports, screenshots, or user-provided evidence count.
 - Do not treat `comment_evidence_capture.py` manual evidence requests as recovered comments or demand signals; only captured public/browser-visible comments, official exports, screenshots, or user-provided evidence count.
 - Do not treat `business_attribution.py` unmatched rows as recovered content performance; only matched rows in the attribution export can be merged into metrics recovery.
+- Do not treat `next_round_optimizer.py` recommendations as proof of performance; they are next-action proposals backed by the evidence files attached to the report.
 - Do not call unofficial endpoints "official APIs."
 
 ## Self-Evolution Rule

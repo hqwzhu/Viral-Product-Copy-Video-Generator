@@ -67,7 +67,8 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/publish-results/youtube-oauth-publish.{json,md}` when `scripts/youtube_oauth_publish.py` is run
 - `reports/promotion-manager/metrics/imported-metrics.{json,md}` when `scripts/metrics_intake.py` is run from CSV, JSON, text, structured browser snapshot, published URL, GitHub, or YouTube input
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
-- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, and metrics recovery as one operating cycle
+- `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
+- `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -410,6 +411,25 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `coverage`: counts for discovered published items, queued items, metric records, records with metrics, pending manual requirements, and platforms
 - `retrospective`: data-backed next-round recommendations, or `waiting_real_data` when evidence is missing
 
+## Next-Round Optimization
+
+`next-round-optimization.json` includes:
+
+- `status`: `ready`, `partial_ready`, or `waiting_real_data`
+- `product`: product name, URL, audience, and value proposition from the workflow manifest when available
+- `targetPlatforms[]`: platform list derived from the workflow, publish queue, recovered metrics, comments, and business attribution
+- `evidenceCoverage`: counts for metric records, revenue/order records, comments, demand signals, business attributions, and manual/pending requirements
+- `winners`: best observed records by views, revenue, orders, and engagement; each winner keeps metric value and evidence links
+- `commentDemand.topSignals[]`: ranked demand-signal types with counts, platforms, and example excerpts
+- `businessSummary`: matched rows, attributed orders/revenue, and attribution record count
+- `manualOrPendingRequirements[]`: missing evidence that prevents full-ready optimization
+- `nextRoundContent[]`: platform, angle, title, hook, script brief, and source evidence for the next content round
+- `platformActions[]`: per-platform next action such as scaling a commercial winner, converting reach to CTA tests, or importing missing evidence
+- `recommendedCommands[]`: copy-ready commands for running the next cycle, refreshing viral discovery, recovering metrics, and preparing publish readiness
+- `guardrails`: no fabricated metrics, no automatic publish, no secret storage, and no treating missing data as zero
+
+`waiting_real_data` means no real metrics, public/browser-visible comments, or matched business attribution were available. `partial_ready` means recommendations can be used, but some platforms or queued items still need real evidence.
+
 ## Promotion Cycle
 
 `promotion-cycle.json` includes:
@@ -421,6 +441,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `commentEvidenceCapture`: optional comment and demand-signal capture status, report path, comment evidence export path, and summary
 - `businessAttribution`: optional business attribution status, report path, attribution export path, and summary
 - `metricsRecovery`: metrics recovery report status, path, recovery status, retrospective status, real metric record count, and pending/manual requirements
+- `nextRoundOptimization`: optional next-round optimization status, report path, evidence coverage summary, and next content count
 - `automationStatus`: `ready_with_real_metrics`, `partial_ready_with_real_metrics`, `ready_waiting_real_data`, or a failure status
 - `approval`: whether publish execution was requested and whether the approval phrase matched
 - `steps[]`: subprocess commands, exit codes, and output tails for auditability
@@ -430,7 +451,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 `final-capability-audit.json` includes:
 
 - `finalStatus`: `full_ready`, `partial_ready`, `not_ready`, or `partial_ready_blocked_by_platform_or_safety_limits`
-- `requirements[]`: requirement-by-requirement status for product URL intake, viral competitor research, copy/video generation, auto-publishing, metrics/orders/revenue recovery, periodic operation, and self-evolution
+- `requirements[]`: requirement-by-requirement status for product URL intake, viral competitor research, copy/video generation, auto-publishing, metrics/orders/revenue recovery, next-round optimization, periodic operation, and self-evolution
 - `platforms`: per-platform readiness for viral search, direct publishing, metrics recovery, and orders/revenue attribution
 - `localTools`: Python, Git, `ffmpeg`, Playwright, and Playwright Chromium availability
 - `credentials`: environment variable names that are present, never secret values
@@ -503,6 +524,8 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `jobs[].businessAttribution.enabled`: optional boolean; when true, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes the attribution export into recovery
 - `jobs[].businessAttribution.businessCsv` and `businessJson`: optional order/revenue export paths with URL, UTM content, referrer, content ID, title, or campaign fields
 - `jobs[].businessAttribution.publishedItemsJson` and `publishedUrls`: optional proven published content evidence used as attribution targets
+- `jobs[].nextRoundOptimization.enabled`: optional boolean; when true, the scheduler runs `scripts/next_round_optimizer.py` after metrics/comment/business recovery
+- `jobs[].nextRoundOptimization.metricsRecoveryJson`, `commentEvidenceJson`, and `businessAttributionJson`: optional override paths when the optimizer should use external evidence files instead of the reports from the current scheduled run
 - `jobs[].publish.enabled`: defaults to false; when true, the scheduler runs `scripts/publish_queue.py` after a successful workflow
 - `jobs[].publish.platforms`: optional platform filter for queue generation
 - `jobs[].publish.github`: optional GitHub queue settings such as `repo`, `action`, `path`, `branch`, and `tagName`

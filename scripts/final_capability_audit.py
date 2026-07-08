@@ -51,6 +51,7 @@ SCRIPT_REQUIREMENTS = {
     "business_attribution": "business_attribution.py",
     "metrics_intake": "metrics_intake.py",
     "metrics_recovery": "metrics_recovery.py",
+    "next_round_optimizer": "next_round_optimizer.py",
     "automation_scheduler": "automation_scheduler.py",
     "promotion_cycle_runner": "promotion_cycle_runner.py",
     "self_evolution_audit": "self_evolution_audit.py",
@@ -363,9 +364,11 @@ def requirement_status(
             "business_attribution",
             "metrics_intake",
             "metrics_recovery",
+            "next_round_optimizer",
         ],
     )
-    cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler"])
+    optimization_ready = scripts_ready(scripts, ["next_round_optimizer"])
+    cycle_ready = scripts_ready(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"])
     full_platform_publish_ready = all(
         platforms[p]["directPublish"] == "ready" for p in ["youtube", "github", "zhihu", "xiaohongshu", "douyin"]
     )
@@ -456,6 +459,7 @@ def requirement_status(
                     "business_attribution",
                     "metrics_intake",
                     "metrics_recovery",
+                    "next_round_optimizer",
                 ],
             ),
             "missing": [] if real_metrics_ready else ["published URLs, official metrics credentials, structured metric snapshots, or business exports"],
@@ -465,11 +469,22 @@ def requirement_status(
             ],
         },
         {
+            "id": "retrospective_next_round_optimization",
+            "label": "Turn real metrics, comments, orders, and revenue into next-round content and publish actions",
+            "status": "ready" if optimization_ready else "not_ready",
+            "evidence": scripts_present(scripts, ["next_round_optimizer", "metrics_recovery", "comment_evidence_capture", "business_attribution"]),
+            "missing": [] if optimization_ready else ["next_round_optimizer.py"],
+            "limits": [
+                "The optimizer uses recovered evidence only and outputs waiting_real_data when metrics, comments, and business attribution are absent.",
+                "It prepares next-round recommendations and commands; platform publishing still follows the approval and credential gates.",
+            ],
+        },
+        {
             "id": "periodic_codex_operation",
             "label": "Run the whole promotion loop periodically in Codex/local automation",
             "status": "ready" if cycle_ready else "not_ready",
-            "evidence": scripts_present(scripts, ["promotion_cycle_runner", "automation_scheduler"]),
-            "missing": [] if cycle_ready else ["promotion_cycle_runner.py or automation_scheduler.py"],
+            "evidence": scripts_present(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"]),
+            "missing": [] if cycle_ready else missing_for_scripts(scripts, ["promotion_cycle_runner", "automation_scheduler", "next_round_optimizer"]),
         },
         {
             "id": "fully_autonomous_self_evolution",
@@ -688,6 +703,16 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "purpose": "attribute_business_results",
             "command": (
                 f"python scripts/business_attribution.py --business-csv \"./orders-and-revenue.csv\" "
+                f"--out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "optimize_next_round_from_recovered_evidence",
+            "command": (
+                f"python scripts/next_round_optimizer.py --metrics-recovery-json "
+                f"\"{out_dir}/reports/promotion-manager/metrics-recovery/metrics-recovery.json\" "
+                f"--comment-evidence-json \"{out_dir}/reports/promotion-manager/comment-evidence/comment-evidence-export.json\" "
+                f"--business-attribution-json \"{out_dir}/reports/promotion-manager/business-attribution/business-attribution.json\" "
                 f"--out-dir \"{out_dir}\""
             ),
         },

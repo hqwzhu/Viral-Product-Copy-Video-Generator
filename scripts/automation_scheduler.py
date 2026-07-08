@@ -21,6 +21,7 @@ COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
 BUSINESS_ATTRIBUTION = SCRIPTS / "business_attribution.py"
 METRICS_RECOVERY = SCRIPTS / "metrics_recovery.py"
 MULTI_QUERY_VIRAL_DISCOVERY = SCRIPTS / "multi_query_viral_discovery.py"
+NEXT_ROUND_OPTIMIZER = SCRIPTS / "next_round_optimizer.py"
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
 
 
@@ -105,6 +106,7 @@ def init_config(args: argparse.Namespace) -> None:
         "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
         "businessAttribution": {"enabled": False, "businessCsv": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
         "metricsRecovery": {"enabled": False},
+        "nextRoundOptimization": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
     }
@@ -210,6 +212,7 @@ def evaluate_job(
     if result.returncode == 0 and manifest_path.exists() and post_publish_metrics_capture_enabled(job):
         post_publish_capture_result = run_post_publish_metrics_capture(job, out_dir, base_dir)
         record["postPublishMetricsCapture"] = post_publish_capture_result
+    comment_evidence_result: dict[str, Any] = {}
     if result.returncode == 0 and manifest_path.exists() and comment_evidence_capture_enabled(job):
         comment_evidence_result = run_comment_evidence_capture(job, out_dir, base_dir)
         record["commentEvidenceCapture"] = comment_evidence_result
@@ -228,6 +231,18 @@ def evaluate_job(
             business_attribution_result,
         )
         record["metricsRecovery"] = recovery_result
+    if result.returncode == 0 and manifest_path.exists() and next_round_optimization_enabled(job):
+        optimization_result = run_next_round_optimization(
+            job,
+            out_dir,
+            base_dir,
+            manifest_path,
+            publish_result.get("report", ""),
+            record.get("metricsRecovery", {}),
+            comment_evidence_result,
+            business_attribution_result,
+        )
+        record["nextRoundOptimization"] = optimization_result
     job_state["lastRunAt"] = now.isoformat()
     job_state["lastStatus"] = record["status"]
     job_state["lastOutDir"] = str(out_dir)
@@ -246,6 +261,8 @@ def evaluate_job(
         job_state["lastBusinessAttribution"] = record["businessAttribution"]["report"]
     if record.get("metricsRecovery", {}).get("report"):
         job_state["lastMetricsRecovery"] = record["metricsRecovery"]["report"]
+    if record.get("nextRoundOptimization", {}).get("report"):
+        job_state["lastNextRoundOptimization"] = record["nextRoundOptimization"]["report"]
     job_state["nextRunAfter"] = next_run_after(job, now).isoformat()
     return record
 
@@ -276,6 +293,10 @@ def business_attribution_enabled(job: dict[str, Any]) -> bool:
 
 def multi_query_viral_discovery_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("multiQueryViralDiscovery") or {}).get("enabled"))
+
+
+def next_round_optimization_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("nextRoundOptimization") or {}).get("enabled"))
 
 
 def run_publish_queue(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> dict[str, Any]:
@@ -465,6 +486,55 @@ def run_metrics_recovery(
     }
 
 
+def run_next_round_optimization(
+    job: dict[str, Any],
+    out_dir: Path,
+    base_dir: Path,
+    manifest_path: Path,
+    publish_queue_path: str,
+    metrics_recovery_result: dict[str, Any] | None = None,
+    comment_evidence_result: dict[str, Any] | None = None,
+    business_attribution_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    command = build_next_round_optimization_command(
+        job,
+        out_dir,
+        base_dir,
+        manifest_path,
+        publish_queue_path,
+        metrics_recovery_result or {},
+        comment_evidence_result or {},
+        business_attribution_result or {},
+    )
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    report_path = out_dir / "reports/promotion-manager/optimization/next-round-optimization.json"
+    summary: dict[str, Any] = {}
+    status = "error"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            coverage = report.get("evidenceCoverage") or {}
+            summary = {
+                "status": report.get("status", ""),
+                "metricRecords": coverage.get("metricRecords", 0),
+                "commentCount": coverage.get("commentCount", 0),
+                "businessAttributions": coverage.get("businessAttributions", 0),
+                "nextRoundContent": len(report.get("nextRoundContent", [])),
+            }
+            status = report.get("status", "ready")
+        except json.JSONDecodeError:
+            summary = {}
+    return {
+        "status": status if result.returncode == 0 else "error",
+        "exitCode": result.returncode,
+        "command": display_command(command),
+        "stdoutTail": tail(result.stdout),
+        "stderrTail": tail(result.stderr),
+        "report": str(report_path) if report_path.exists() else "",
+        "summary": summary,
+    }
+
+
 def build_metrics_recovery_command(
     job: dict[str, Any],
     out_dir: Path,
@@ -498,6 +568,39 @@ def build_metrics_recovery_command(
     attribution_export = (business_attribution_result or {}).get("businessAttributionExport")
     if attribution_export:
         command.extend(["--business-json", attribution_export])
+    return command
+
+
+def build_next_round_optimization_command(
+    job: dict[str, Any],
+    out_dir: Path,
+    base_dir: Path,
+    manifest_path: Path,
+    publish_queue_path: str,
+    metrics_recovery_result: dict[str, Any] | None = None,
+    comment_evidence_result: dict[str, Any] | None = None,
+    business_attribution_result: dict[str, Any] | None = None,
+) -> list[str]:
+    optimization = job.get("nextRoundOptimization") or {}
+    command = [
+        sys.executable,
+        str(NEXT_ROUND_OPTIMIZER),
+        "--workflow-manifest",
+        str(manifest_path),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if publish_queue_path:
+        command.extend(["--publish-queue", publish_queue_path])
+    recovery_report = (metrics_recovery_result or {}).get("report") or optimization.get("metricsRecoveryJson")
+    if recovery_report:
+        command.extend(["--metrics-recovery-json", str(resolve_path(base_dir, recovery_report) if optimization.get("metricsRecoveryJson") else recovery_report)])
+    comment_report = (comment_evidence_result or {}).get("commentEvidenceExport") or (comment_evidence_result or {}).get("report") or optimization.get("commentEvidenceJson")
+    if comment_report:
+        command.extend(["--comment-evidence-json", str(resolve_path(base_dir, comment_report) if optimization.get("commentEvidenceJson") else comment_report)])
+    business_report = (business_attribution_result or {}).get("report") or optimization.get("businessAttributionJson")
+    if business_report:
+        command.extend(["--business-attribution-json", str(resolve_path(base_dir, business_report) if optimization.get("businessAttributionJson") else business_report)])
     return command
 
 
@@ -836,6 +939,8 @@ def render_run_report(report: dict[str, Any]) -> str:
             lines.append(f"- Business attribution: {record['businessAttribution'].get('report', '')}")
         if record.get("metricsRecovery"):
             lines.append(f"- Metrics recovery: {record['metricsRecovery'].get('report', '')}")
+        if record.get("nextRoundOptimization"):
+            lines.append(f"- Next-round optimization: {record['nextRoundOptimization'].get('report', '')}")
     lines.extend(["", "## Guardrails"])
     lines.extend([f"- {item}" for item in report.get("guardrails", [])])
     return "\n".join(lines)
