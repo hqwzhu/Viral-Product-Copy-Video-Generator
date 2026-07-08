@@ -21,6 +21,7 @@ BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 PLATFORM_ACCESS_AUDIT = SCRIPTS / "platform_access_audit.py"
 FINAL_CAPABILITY_AUDIT = SCRIPTS / "final_capability_audit.py"
+FINAL_CAPABILITY_READINESS = SCRIPTS / "final_capability_readiness.py"
 SELF_EVOLUTION_AUDIT = SCRIPTS / "self_evolution_audit.py"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
@@ -40,6 +41,10 @@ def main() -> None:
     audits = run_audits(args, out_dir, steps)
     cycle_evidence = collect_cycle_evidence(batch)
     report = build_report(args, out_dir, batch, publish_readiness, publish_setup, browser_publish, browser_form_fill, cycle_evidence, audits, steps)
+    write_report(out_dir, report)
+    readiness_matrix = run_final_readiness_matrix(args, out_dir, steps)
+    report["finalReadinessMatrix"] = readiness_matrix
+    report["summary"]["finalReadinessStatus"] = readiness_matrix.get("status", "")
     write_report(out_dir, report)
     print(f"Final capability run written to: {(report_dir(out_dir) / 'final-capability-run.json').resolve()}")
 
@@ -144,6 +149,7 @@ def parse_args() -> argparse.Namespace:
     audits = parser.add_argument_group("Audits")
     audits.add_argument("--skip-platform-access-audit", action="store_true")
     audits.add_argument("--skip-final-capability-audit", action="store_true")
+    audits.add_argument("--skip-final-readiness-matrix", action="store_true")
     audits.add_argument("--skip-self-evolution-audit", action="store_true")
     return parser.parse_args()
 
@@ -472,6 +478,30 @@ def run_audit(name: str, script: Path, out_dir: Path, steps: list[dict[str, Any]
     }
 
 
+def run_final_readiness_matrix(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    if args.skip_final_readiness_matrix:
+        return {}
+    final_run_path = report_dir(out_dir) / "final-capability-run.json"
+    command = [
+        sys.executable,
+        str(FINAL_CAPABILITY_READINESS),
+        "--out-dir",
+        str(out_dir),
+        "--final-run",
+        str(final_run_path),
+    ]
+    step = run_command("final_capability_readiness", command, check=False)
+    steps.append(step)
+    path = out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json"
+    report = read_json(path)
+    return {
+        "status": report.get("status") or ("ready" if step["exitCode"] == 0 else "error"),
+        "report": str(path) if path.exists() else "",
+        "summary": report.get("summary", {}) if isinstance(report.get("summary"), dict) else {},
+        "exitCode": step["exitCode"],
+    }
+
+
 def build_report(
     args: argparse.Namespace,
     out_dir: Path,
@@ -720,6 +750,10 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
             "purpose": "sync_installed_skill_when_approved",
             "command": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC --out-dir \"./promotion-output\"",
         },
+        {
+            "purpose": "build_final_readiness_matrix",
+            "command": f"python scripts/final_capability_readiness.py --out-dir \"{out_dir}\"",
+        },
     ]
 
 
@@ -774,6 +808,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         )
     for name, item in report["audits"].items():
         lines.append(f"- {name}: `{item['status']}` {item['report']}")
+    readiness = report.get("finalReadinessMatrix") or {}
+    if readiness:
+        lines.append(f"- final readiness matrix: `{readiness.get('status', '')}` {readiness.get('report', '')}")
     lines.extend(["", "## Next Commands"])
     lines.extend(f"- {item['purpose']}: `{item['command']}`" for item in report["recommendedNextCommands"])
     lines.extend(["", "## Guardrails"])

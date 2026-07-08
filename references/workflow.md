@@ -10,6 +10,12 @@ python scripts/final_capability_audit.py --out-dir "./promotion-output"
 
 The audit writes `reports/promotion-manager/capability/final-capability-audit.{json,md}` and checks the exact requested end-state: product URL parsing, viral creator/content search, copy/video generation, publishing, metrics/orders/revenue recovery, periodic Codex operation, and self-evolution. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path. It records credential presence only by environment variable name and must not write secret values.
 
+After a real final run or audit, build the final acceptance matrix when you need one report that says which end-state requirements are satisfied, which need real evidence, and which are blocked by platform authorization or approval:
+
+```bash
+python scripts/final_capability_readiness.py --out-dir "./promotion-output"
+```
+
 Run the self-evolution audit directly when the Skill needs to inspect local tool gaps, repository state, installed Skill drift, and safe upgrade actions:
 
 ```bash
@@ -177,7 +183,7 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, and self-evolution audit. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
+This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}` and then generates `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, self-evolution audit, and final readiness matrix builder. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits and `finalReadinessMatrix` pointing to the end-state acceptance matrix. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
 When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
 

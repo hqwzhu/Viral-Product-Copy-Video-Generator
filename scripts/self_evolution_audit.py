@@ -398,6 +398,11 @@ def learning_and_upgrade_loop(out_dir: Path) -> list[dict[str, Any]]:
             "purpose": "detect runtime gaps, Skill drift, and reviewed upgrade actions",
         },
         {
+            "step": "final_readiness_matrix",
+            "command": f"python scripts/final_capability_readiness.py --out-dir \"{out_dir}\"",
+            "purpose": "merge run, audit, publish, and self-evolution reports into the end-state acceptance matrix",
+        },
+        {
             "step": "verification",
             "command": "python scripts/test_promotion_manager.py && python -m compileall -q scripts",
             "purpose": "verify behavior before syncing the installed Skill or pushing changes",

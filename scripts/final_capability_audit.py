@@ -59,6 +59,7 @@ SCRIPT_REQUIREMENTS = {
     "automation_scheduler": "automation_scheduler.py",
     "promotion_cycle_runner": "promotion_cycle_runner.py",
     "final_capability_runner": "final_capability_runner.py",
+    "final_capability_readiness": "final_capability_readiness.py",
     "self_evolution_audit": "self_evolution_audit.py",
 }
 
@@ -657,6 +658,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --business-csv \"./orders-and-revenue.csv\" "
                 f"--out-dir \"{out_dir}\""
             ),
+        },
+        {
+            "purpose": "build_final_readiness_matrix",
+            "command": f"python scripts/final_capability_readiness.py --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "batch_product_url_cycles",

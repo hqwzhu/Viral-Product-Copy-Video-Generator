@@ -55,6 +55,7 @@ CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
 CREATOR_FOLLOW_UP_RUNNER = ROOT / "scripts" / "creator_follow_up_runner.py"
 FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
 FINAL_CAPABILITY_RUNNER = ROOT / "scripts" / "final_capability_runner.py"
+FINAL_CAPABILITY_READINESS = ROOT / "scripts" / "final_capability_readiness.py"
 SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
@@ -1234,6 +1235,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["publishSetup"][0]["status"], "ready")
         self.assertTrue(Path(report["publishSetup"][0]["report"]).exists())
         self.assertTrue(Path(report["publishSetup"][0]["envTemplate"]).exists())
+        self.assertIn(report["summary"]["finalReadinessStatus"], {"partial_ready", "partial_ready_waiting_external_evidence"})
+        self.assertTrue(Path(report["finalReadinessMatrix"]["report"]).exists())
         self.assertEqual(report["browserPublishAssistant"][0]["status"], "ready")
         self.assertTrue(Path(report["browserPublishAssistant"][0]["report"]).exists())
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
@@ -4539,6 +4542,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
+        self.assertTrue(report["scripts"]["final_capability_readiness"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
@@ -4566,6 +4570,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             )
         )
         self.assertTrue(any(item["purpose"] == "final_capability_runner" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "build_final_readiness_matrix" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
@@ -4575,6 +4580,166 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
+
+    def test_final_capability_readiness_builds_requirement_matrix_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        secret_value = "fake-final-readiness-secret"
+        final_run_dir = out_dir / "reports/promotion-manager/final-run"
+        final_run_dir.mkdir(parents=True)
+        (final_run_dir / "final-capability-run.json").write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-08",
+                    "status": "partial_ready",
+                    "input": {"codexReadFirst": True},
+                    "summary": {
+                        "promotionRuns": 1,
+                        "multiQueryDiscoveryRuns": 1,
+                        "contentArtifacts": 1,
+                        "videoFilesGenerated": 0,
+                        "capturedMetricRecords": 0,
+                        "commentCount": 0,
+                        "matchedBusinessRows": 0,
+                        "recordsWithMetrics": 0,
+                        "nextRoundContent": 0,
+                    },
+                    "productBatch": {"report": str(out_dir / "reports/promotion-manager/batch/product-batch-runner.json")},
+                    "debug": secret_value,
+                }
+            ),
+            encoding="utf-8",
+        )
+        capability_dir = out_dir / "reports/promotion-manager/capability"
+        capability_dir.mkdir(parents=True)
+        (capability_dir / "final-capability-audit.json").write_text(
+            json.dumps(
+                {
+                    "finalStatus": "partial_ready_blocked_by_platform_or_safety_limits",
+                    "requirements": [
+                        {
+                            "id": "product_url_structured_intake",
+                            "status": "ready",
+                            "evidence": ["scripts/product_url_reader.py"],
+                            "missing": [],
+                        },
+                        {
+                            "id": "viral_creator_content_research",
+                            "status": "partial_ready",
+                            "evidence": ["scripts/multi_query_viral_discovery.py"],
+                            "missing": [],
+                            "limits": ["browser-visible evidence only for some platforms"],
+                        },
+                        {
+                            "id": "copy_and_real_video_generation",
+                            "status": "ready",
+                            "evidence": ["scripts/render_video.py"],
+                            "missing": [],
+                        },
+                        {
+                            "id": "all_platform_auto_publish",
+                            "status": "blocked_by_authorization_or_platform_limits",
+                            "evidence": ["scripts/publish_readiness_runner.py"],
+                            "missing": ["GITHUB_TOKEN or GH_TOKEN for GitHub writes"],
+                            "limits": ["platform authorization required"],
+                        },
+                        {
+                            "id": "real_metrics_orders_revenue_recovery",
+                            "status": "partial_ready",
+                            "evidence": ["scripts/metrics_recovery.py"],
+                            "missing": ["published URLs or business exports"],
+                        },
+                        {
+                            "id": "retrospective_next_round_optimization",
+                            "status": "ready",
+                            "evidence": ["scripts/next_round_optimizer.py"],
+                            "missing": [],
+                        },
+                        {
+                            "id": "fully_autonomous_self_evolution",
+                            "status": "blocked_by_safety_boundary",
+                            "evidence": ["scripts/self_evolution_audit.py"],
+                            "missing": ["explicit review/approval"],
+                        },
+                    ],
+                    "platforms": {
+                        "youtube": {"viralSearch": "ready", "directPublish": "needs_oauth_or_access_token"},
+                        "xiaohongshu": {"viralSearch": "browser_visible_ready", "directPublish": "manual_or_browser_assisted_only"},
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        self_dir = out_dir / "reports/promotion-manager/self-evolution"
+        self_dir.mkdir(parents=True)
+        (self_dir / "self-evolution-audit.json").write_text(
+            json.dumps(
+                {
+                    "status": "partial_ready_skill_drift_detected",
+                    "repository": {"clean": True},
+                    "installedSkill": {
+                        "status": "drift_detected",
+                        "syncCommand": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        readiness_dir = out_dir / "product-batch-runs/ai-prompt-kit/reports/promotion-manager/publish-readiness"
+        readiness_dir.mkdir(parents=True)
+        (readiness_dir / "publish-readiness.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {"platform": "youtube", "publishMode": "official_api_publish", "readiness": "missing_credentials"},
+                        {"platform": "xiaohongshu", "publishMode": "manual_publish_required", "readiness": "manual_publish_required"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        setup_dir = out_dir / "product-batch-runs/ai-prompt-kit/reports/promotion-manager/publish-setup"
+        setup_dir.mkdir(parents=True)
+        (setup_dir / "publish-setup.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "youtube",
+                            "setupCategory": "credential_setup_required",
+                            "commands": {"rerunReadiness": "python scripts/publish_readiness_runner.py --platforms youtube"},
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "setupCategory": "browser_or_manual_publish",
+                            "commands": {"prepareBrowserPublish": "python scripts/browser_publish_assistant.py --platforms xiaohongshu"},
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(FINAL_CAPABILITY_READINESS), "--out-dir", str(out_dir)],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "partial_ready_blocked_by_platform_or_safety_limits")
+        by_requirement = {item["id"]: item for item in report["requirements"]}
+        self.assertEqual(by_requirement["product_url_codex_structured_intake"]["status"], "ready")
+        self.assertEqual(by_requirement["copy_and_real_video_generation"]["status"], "partial_ready")
+        self.assertEqual(by_requirement["real_metrics_comments_orders_revenue"]["status"], "waiting_real_data")
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["installedSkillStatus"], "drift_detected")
+        self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
+        self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
+        self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
     def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-access-audit-test-"))

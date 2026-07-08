@@ -73,6 +73,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
 - `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, publish setup kits, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
+- `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` turns final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into an end-state acceptance matrix and action queue
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, and approved Skill sync actions
 - `reports/promotion-manager/retrospectives/<product>-retrospective.{json,md}`
@@ -161,9 +162,24 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `browserPublishAssistant[]`: per-product browser/manual publish payload report path, status, summary, and exit code
 - `browserFormFill[]`: optional per-platform result when `--run-browser-form-fill` is supplied; includes payload path, report path, screenshot, filled field count, missing fields, submitted flag, and final-user-action requirement
 - `audits`: platform access, final capability, and self-evolution audit report paths when enabled
+- `finalReadinessMatrix`: final acceptance matrix status, report path, summary, and exit code when enabled
 - `externalGates[]`: explicit approval, credential, app-review, manual publish, metrics export, and Skill-sync requirements that cannot be bypassed safely
 - `recommendedNextCommands[]`: review and next-action commands
 - `guardrails`: no final publish click, no credential storage, no captcha/risk-control bypass, and no fabricated metrics
+
+## Final Capability Readiness
+
+`final-capability-readiness.json` includes:
+
+- `status`: `full_ready`, `partial_ready`, `partial_ready_waiting_external_evidence`, or `partial_ready_blocked_by_platform_or_safety_limits`
+- `sourceReports`: final-run, final-audit, platform-access, self-evolution, publish-readiness, and publish-setup report paths used as evidence
+- `summary`: requirement count, satisfied count, blocked/waiting count, partial count, action count, and approval-gated action count
+- `requirements[]`: the requested end-state requirements mapped to current status, evidence paths, missing evidence, platform/safety limits, and requirement-specific metrics
+- `platformMatrix`: per-platform search, publish, metrics, and publish-readiness status merged from the final audit and publish-readiness reports
+- `externalGates[]`: requirements still blocked by credentials, app review, manual/browser-assisted publishing, real data, or Skill sync approval
+- `actionQueue[]`: prioritized next commands, with `approvalRequired` set for gated actions such as `I_APPROVE_PUBLISH` or `I_APPROVE_SKILL_SYNC`
+- `operatingSequence[]`: copy-ready command sequence for final run, readiness review, publish setup, browser publish preparation, metrics recovery, and next-round optimization
+- `guardrails`: no credential storage, no final publish click, no captcha/risk-control bypass, no fabricated metrics, and no unapproved Skill self-replacement
 
 ## Publish Setup
 
