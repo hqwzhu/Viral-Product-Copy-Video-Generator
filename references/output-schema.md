@@ -317,7 +317,9 @@ Discovered URLs are not treated as product facts. They must still pass through `
 
 - `records[]`: deeper competitor records imported from successful public follow-up captures
 - `records[].sourceFollowUpTask`: original task/material reference used to trace the evidence
-- `aggregatePatterns`: platforms, titles, records with observed metrics, and reusable pattern counts
+- `records[].videoSampleEvidence`: optional browser-visible video sample summary copied from `browser-video-sampler.json`, including report path, ready frame count, frame screenshot paths, visible transcript hints, and safe next-step guidance
+- `records[].contentDeconstruction.videoEvidence`: optional lightweight video evidence object for downstream script/storyboard deconstruction; it must not be treated as an audio transcript or private media download
+- `aggregatePatterns`: platforms, titles, records with observed metrics, records with video sample evidence, video sample frame count, and reusable pattern counts
 - `guardrails`: public-only automatic fetch, no hidden tokens, no captcha bypass, no fabricated metrics
 
 ## Creator Leaderboard

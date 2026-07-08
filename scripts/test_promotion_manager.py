@@ -2245,6 +2245,15 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(sample["frameCount"], 2)
         self.assertTrue(Path(sample["report"]).exists())
         self.assertNotIn("secret-video-token", Path(sample["report"]).read_text(encoding="utf-8"))
+        deep_path = out_dir / "output/reports/promotion-manager/competitors/deep-competitor-library.json"
+        deep_text = deep_path.read_text(encoding="utf-8")
+        self.assertNotIn("secret-video-token", deep_text)
+        deep = json.loads(deep_text)
+        self.assertEqual(deep["aggregatePatterns"]["recordsWithVideoSampleEvidence"], 1)
+        self.assertEqual(deep["aggregatePatterns"]["videoSampleFrames"], 2)
+        deep_record = deep["records"][0]
+        self.assertEqual(deep_record["videoSampleEvidence"]["frameCount"], 2)
+        self.assertEqual(deep_record["contentDeconstruction"]["videoEvidence"]["frameCount"], 2)
         markdown = results_path.with_suffix(".md").read_text(encoding="utf-8")
         self.assertIn("Video sample report", markdown)
 

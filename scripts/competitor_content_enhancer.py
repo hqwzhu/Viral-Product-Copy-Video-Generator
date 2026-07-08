@@ -123,6 +123,7 @@ def normalize_source_record(record: dict[str, Any], source_type: str) -> dict[st
         "reusablePatterns": record.get("reusablePatterns") if isinstance(record.get("reusablePatterns"), list) else [],
         "contentStructure": record.get("contentStructure") if isinstance(record.get("contentStructure"), list) else [],
         "contentDeconstruction": record.get("contentDeconstruction") if isinstance(record.get("contentDeconstruction"), dict) else {},
+        "videoSampleEvidence": record.get("videoSampleEvidence") if isinstance(record.get("videoSampleEvidence"), dict) else {},
         "visibleMetrics": record.get("visibleMetrics") if isinstance(record.get("visibleMetrics"), dict) else {},
         "score": numeric(signals.get("score"), 0.0),
     }
@@ -142,6 +143,8 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
     patterns: dict[str, int] = {}
     structures: dict[str, int] = {}
     beat_functions: dict[str, int] = {}
+    video_backed_records = 0
+    video_sample_frames = 0
     for record in records:
         for pattern in record.get("reusablePatterns", []):
             patterns[str(pattern)] = patterns.get(str(pattern), 0) + 1
@@ -157,6 +160,10 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
             function = str(beat.get("function", "")).strip()
             if function:
                 beat_functions[function] = beat_functions.get(function, 0) + 1
+        video_sample = record.get("videoSampleEvidence") if isinstance(record.get("videoSampleEvidence"), dict) else {}
+        if video_sample:
+            video_backed_records += 1
+            video_sample_frames += int(video_sample.get("frameCount") or 0)
     return {
         "platform": platform,
         "recordCount": len(records),
@@ -168,6 +175,8 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
         "structureRoles": [name for name, _ in sorted(structures.items(), key=lambda item: item[1], reverse=True)[:5]],
         "beatFunctions": [name for name, _ in sorted(beat_functions.items(), key=lambda item: item[1], reverse=True)[:5]],
         "metricBackedRecords": sum(1 for record in records if record.get("visibleMetrics")),
+        "videoBackedRecords": video_backed_records,
+        "videoSampleFrames": video_sample_frames,
         "safePatternSummary": summarize_patterns(patterns, hooks, titles),
         "sourceRecords": [
             {
@@ -176,6 +185,7 @@ def build_insights(platform: str, records: list[dict[str, Any]]) -> dict[str, An
                 "title": record["title"],
                 "url": record["url"],
                 "score": record["score"],
+                "videoSampleFrames": (record.get("videoSampleEvidence") or {}).get("frameCount", 0),
             }
             for record in records[:5]
         ],
@@ -213,6 +223,8 @@ def apply_insights(platform: str, item: dict[str, Any], insights: dict[str, Any]
         "beatFunctions": insights.get("beatFunctions", [])[:5],
         "dominantPatterns": insights.get("dominantPatterns", []),
         "metricBackedRecords": insights.get("metricBackedRecords", 0),
+        "videoBackedRecords": insights.get("videoBackedRecords", 0),
+        "videoSampleFrames": insights.get("videoSampleFrames", 0),
         "safeUseRule": "Use observed structures and patterns, not copied competitor wording or fabricated metrics.",
     }
 
@@ -395,6 +407,7 @@ def render_markdown(enhanced: dict[str, Any], strategy: dict[str, Any]) -> str:
                 f"- Title: {item.get('title', '')}",
                 f"- Source hooks: {len(info.get('sourceHooks', [])) if isinstance(info.get('sourceHooks'), list) else 0}",
                 f"- Dominant patterns: {', '.join(info.get('dominantPatterns', [])) if isinstance(info.get('dominantPatterns'), list) else ''}",
+                f"- Video sample frames: {info.get('videoSampleFrames', 0)}",
             ]
         )
     lines.extend(["", "## Guardrails"])

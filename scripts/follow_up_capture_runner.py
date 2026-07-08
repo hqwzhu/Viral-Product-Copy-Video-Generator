@@ -119,7 +119,8 @@ def run_public_capture(args: argparse.Namespace, out_dir: Path, task: dict[str, 
     )
     records = records_from_import(imported_path, task)
     base["recordCount"] = len(records)
-    attach_video_sample(args, task, task_out_dir, base)
+    video_sample = attach_video_sample(args, task, task_out_dir, base)
+    enrich_records_with_video_sample(records, video_sample)
     return base, records
 
 
@@ -190,13 +191,14 @@ def run_browser_visible_capture(args: argparse.Namespace, out_dir: Path, task: d
     )
     records = records_from_import(imported_path, task)
     base["recordCount"] = len(records)
-    attach_video_sample(args, task, task_out_dir, base)
+    video_sample = attach_video_sample(args, task, task_out_dir, base)
+    enrich_records_with_video_sample(records, video_sample)
     return base, records
 
 
-def attach_video_sample(args: argparse.Namespace, task: dict[str, Any], task_out_dir: Path, result: dict[str, Any]) -> None:
+def attach_video_sample(args: argparse.Namespace, task: dict[str, Any], task_out_dir: Path, result: dict[str, Any]) -> dict[str, Any] | None:
     if not args.sample_video_frames or not should_sample_video(task):
-        return
+        return None
     url = str(task.get("url") or "")
     platform = str(task.get("platform") or "auto")
     command = [
@@ -218,15 +220,64 @@ def attach_video_sample(args: argparse.Namespace, task: dict[str, Any], task_out
     video_result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
     report_path = task_out_dir / COMPETITOR_DIR / "video-sampling/browser-video-sampler.json"
     payload = read_json(report_path)
-    result["videoSample"] = {
+    sample = {
         "status": payload.get("status", "error") if report_path.exists() and video_result.returncode == 0 else "error",
         "report": str(report_path) if report_path.exists() else "",
         "videoCount": payload.get("videoCount", 0),
         "frameCount": len(payload.get("frames", [])) if isinstance(payload.get("frames"), list) else 0,
+        "contentEvidence": payload.get("contentEvidence") if isinstance(payload.get("contentEvidence"), dict) else {},
+        "visibleTranscriptHints": payload.get("visibleTranscriptHints") if isinstance(payload.get("visibleTranscriptHints"), list) else [],
         "exitCode": video_result.returncode,
         "command": display_command(command),
         "stdoutTail": tail(video_result.stdout),
         "stderrTail": tail(video_result.stderr),
+    }
+    result["videoSample"] = sample
+    return sample
+
+
+def enrich_records_with_video_sample(records: list[dict[str, Any]], video_sample: dict[str, Any] | None) -> None:
+    if not video_sample or video_sample.get("status") != "ready":
+        return
+    evidence = video_sample_record(video_sample)
+    for record in records:
+        record["videoSampleEvidence"] = evidence
+        deconstruction = record.get("contentDeconstruction") if isinstance(record.get("contentDeconstruction"), dict) else {}
+        deconstruction["videoEvidence"] = {
+            "status": evidence["status"],
+            "report": evidence["report"],
+            "videoCount": evidence["videoCount"],
+            "frameCount": evidence["frameCount"],
+            "frameScreenshots": evidence["frameScreenshots"],
+            "visibleTranscriptHints": evidence["visibleTranscriptHints"],
+            "guardrail": "Browser-visible frame evidence only; no private stream download, token extraction, or inferred audio transcript.",
+        }
+        record["contentDeconstruction"] = deconstruction
+
+
+def video_sample_record(video_sample: dict[str, Any]) -> dict[str, Any]:
+    content_evidence = video_sample.get("contentEvidence") if isinstance(video_sample.get("contentEvidence"), dict) else {}
+    video_evidence = content_evidence.get("videoEvidence") if isinstance(content_evidence.get("videoEvidence"), dict) else {}
+    frames = video_evidence.get("frames") if isinstance(video_evidence.get("frames"), list) else []
+    frame_screenshots = [
+        {
+            "index": frame.get("index"),
+            "time": frame.get("time"),
+            "screenshot": frame.get("screenshot", ""),
+            "status": frame.get("status", ""),
+        }
+        for frame in frames
+        if isinstance(frame, dict)
+    ]
+    return {
+        "status": video_sample.get("status", ""),
+        "report": video_sample.get("report", ""),
+        "videoCount": video_sample.get("videoCount", 0),
+        "frameCount": video_sample.get("frameCount", 0),
+        "frameScreenshots": frame_screenshots,
+        "visibleTranscriptHints": [str(item) for item in video_sample.get("visibleTranscriptHints", [])],
+        "contentExcerpt": content_evidence.get("contentExcerpt", ""),
+        "suggestedNextStep": content_evidence.get("suggestedNextStep", ""),
     }
 
 
@@ -413,13 +464,21 @@ def read_json(path: Path) -> dict[str, Any]:
 def aggregate_deep_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     platforms = sorted({str(record.get("platform") or "unknown") for record in records})
     pattern_counts: dict[str, int] = {}
+    video_backed_records = 0
+    video_sample_frames = 0
     for record in records:
         for pattern in record.get("reusablePatterns", []):
             pattern_counts[str(pattern)] = pattern_counts.get(str(pattern), 0) + 1
+        sample = record.get("videoSampleEvidence") if isinstance(record.get("videoSampleEvidence"), dict) else {}
+        if sample:
+            video_backed_records += 1
+            video_sample_frames += int(sample.get("frameCount") or 0)
     return {
         "platforms": platforms,
         "titles": [record.get("title", "") for record in records[:10]],
         "recordsWithObservedMetrics": sum(1 for record in records if record.get("visibleMetrics")),
+        "recordsWithVideoSampleEvidence": video_backed_records,
+        "videoSampleFrames": video_sample_frames,
         "patternCounts": dict(sorted(pattern_counts.items())),
     }
 
@@ -521,6 +580,11 @@ def render_deep_markdown(report: dict[str, Any]) -> str:
                 f"- CTA: {record.get('cta') or 'none observed'}",
             ]
         )
+        sample = record.get("videoSampleEvidence") if isinstance(record.get("videoSampleEvidence"), dict) else {}
+        if sample:
+            lines.append(f"- Video sample frames: {sample.get('frameCount', 0)}")
+            if sample.get("report"):
+                lines.append(f"- Video sample report: {sample['report']}")
     lines.extend(["", "## Guardrails"])
     lines.extend(f"- {item}" for item in report["guardrails"])
     return "\n".join(lines)

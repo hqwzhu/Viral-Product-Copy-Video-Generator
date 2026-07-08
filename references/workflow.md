@@ -405,7 +405,7 @@ python scripts/follow_up_capture_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes per-task `video-sampling/browser-video-sampler.{json,md}` reports and `frames/*.png` screenshots under the task capture directory. It records only visible `<video>` metadata, redacted media URLs, visible transcript hints, and frame screenshots; it must not download private streams, extract signed media tokens, log in, or bypass risk controls.
+This writes per-task `video-sampling/browser-video-sampler.{json,md}` reports and `frames/*.png` screenshots under the task capture directory. When a capture also imports deep competitor records, the runner copies a safe `videoSampleEvidence` summary into `deep-competitor-library.json` and mirrors frame-count evidence under `contentDeconstruction.videoEvidence` for downstream script and storyboard deconstruction. It records only visible `<video>` metadata, redacted media URLs, visible transcript hints, and frame screenshots; it must not download private streams, extract signed media tokens, log in, or bypass risk controls.
 
 For a single known video URL:
 
