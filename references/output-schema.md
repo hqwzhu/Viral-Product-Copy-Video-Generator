@@ -15,7 +15,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 
 - `promotion-output/intake/product-profile.{json,md}` when `scripts/product_intake.py` is run from URL, HTML, rendered text, or structured snapshot input
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` captures browser-visible product page evidence
-- `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links
+- `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links, `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` when `scripts/product_url_reader.py` reads one or more product URLs into structured page snapshots and product profiles
 - `product-url-reader/<id>/structured-product-page.json` and `product-url-reader/<id>/intake/product-profile.{json,md}` per product URL read by `scripts/product_url_reader.py`
 - `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization after each cycle
@@ -99,13 +99,14 @@ The script writes JSON and Markdown reports under the selected output directory.
 `product-url-discovery.json` includes:
 
 - `status`: `ready` or `no_product_urls_found`
-- `input`: source website URL or saved HTML file, base URL, scoring thresholds, crawl limits, and external-link setting
-- `summary`: pages read, candidate URL count, and selected URL count
+- `input`: source website URL, saved HTML file, sitemap URL/file, base URL, scoring thresholds, crawl limits, sitemap URL limit, and external-link setting
+- `summary`: pages read, robots.txt reads, sitemaps read, sitemap URL count, candidate URL count, and selected URL count
 - `selectedUrls[]`: likely product URLs selected for follow-up reading
 - `candidates[]`: scored URL candidates with anchor text, source page, source depth, reasons, and `selected`
 - `fetchRecords[]`: public page fetch ledger when `--site-url` is used
+- `sitemapRecords[]`: robots.txt and sitemap fetch/parse ledger when sitemap discovery is used
 - `artifacts.urlsFile`: path to `product-url-discovery/product-urls.txt`
-- `guardrails`: public HTML only, no login/captcha/token bypass, and candidate-only evidence status
+- `guardrails`: public HTML/sitemap only, no login/captcha/token bypass, and candidate-only evidence status
 
 Discovered URLs are not treated as product facts. They must still pass through `product_url_reader.py` and `product_intake.py` before later promotion stages use them.
 

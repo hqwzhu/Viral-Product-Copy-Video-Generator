@@ -113,11 +113,29 @@ python scripts/product_url_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+The discovery step reads public HTML links plus public sitemap sources discovered from `robots.txt` and `/sitemap.xml`.
+You can also pass a sitemap directly:
+
+```bash
+python scripts/product_url_discovery.py \
+  --sitemap-url "https://example.com/sitemap.xml" \
+  --out-dir "./promotion-output"
+```
+
 To discover product URLs and immediately batch-run each discovered product through Codex-first reading and promotion cycles:
 
 ```bash
 python scripts/product_batch_runner.py \
   --discover-from-url "https://example.com" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+For a known sitemap source, use:
+
+```bash
+python scripts/product_batch_runner.py \
+  --discovery-sitemap-url "https://example.com/sitemap.xml" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```
@@ -640,7 +658,7 @@ The command writes:
 - `reports/promotion-manager/...` JSON and Markdown reports for research, deconstruction, content, review, publish packs, result input, and retrospective.
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
-- `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links.
+- `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links, `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input.
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` and `product-url-reader/<id>/structured-product-page.json` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots and product profiles.
 - `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `product-batch-runs/<id>/...` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization per product.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
@@ -683,7 +701,7 @@ The command writes:
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
 - Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
-- Use `scripts/product_url_discovery.py` when the user sends a website/homepage URL and wants the Skill to find likely product URLs first. It uses public HTML links only, filters obvious non-product pages, and writes `product-url-discovery/product-urls.txt` for follow-up reading.
+- Use `scripts/product_url_discovery.py` when the user sends a website/homepage URL and wants the Skill to find likely product URLs first. It uses public HTML links, public `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input, filters obvious non-product pages, and writes `product-url-discovery/product-urls.txt` for follow-up reading.
 - Use `scripts/product_batch_runner.py` when the user sends multiple product URLs, a URL file, or a website URL via `--discover-from-url`, and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--sample-video-frames` for per-cycle follow-up video evidence, or `--multi-query-sample-video-frames` for the post-cycle multi-query discovery pass. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
 - Use `scripts/final_capability_runner.py` when the user says "execute the Skill", "run the full promotion manager", or wants the highest-automation safe path from product URL or discovered website product URLs to publish queue, browser-assisted publish payloads, optional visible-field form fill, metrics/comment/business recovery, next-round optimization, and readiness audits. Add `--discover-from-url` when the user provides a website/homepage rather than exact product URLs. Use `--sample-video-frames` and `--multi-query-sample-video-frames` when the final run should carry browser-visible video sampling through product cycles and multi-query viral discovery.
 - Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path.
@@ -818,7 +836,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
 - `scripts/browser_video_sampler.py`: browser-visible video metadata and frame screenshot sampler for public video pages.
-- `scripts/product_url_discovery.py`: public website link scanner that finds likely product URLs and writes a URL file for Codex-first reading.
+- `scripts/product_url_discovery.py`: public website link and sitemap scanner that finds likely product URLs and writes a URL file for Codex-first reading.
 - `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading.
 - `scripts/product_batch_runner.py`: batch URL runner that can discover product URLs from a site, invoke Codex-first reading, run one promotion cycle per ready product, optionally run per-product multi-query viral discovery, and optionally run next-round optimization from recovered evidence.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.

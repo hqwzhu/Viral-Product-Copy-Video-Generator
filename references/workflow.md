@@ -96,7 +96,15 @@ python scripts/product_url_discovery.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/intake/product-url-discovery.{json,md}` plus `product-url-discovery/product-urls.txt`. Discovery uses public HTML links only, filters obvious non-product pages such as login, blog, privacy, docs, and checkout pages, and treats all discovered URLs as candidates that still need `product_url_reader.py` evidence.
+This writes `reports/promotion-manager/intake/product-url-discovery.{json,md}` plus `product-url-discovery/product-urls.txt`. Discovery uses public HTML links and public sitemap sources, filters obvious non-product pages such as login, blog, privacy, docs, and checkout pages, and treats all discovered URLs as candidates that still need `product_url_reader.py` evidence.
+
+The same discovery step also reads public sitemap sources from `robots.txt` and `/sitemap.xml`. When you already know the sitemap location, pass it directly:
+
+```bash
+python scripts/product_url_discovery.py \
+  --sitemap-url "https://example.com/sitemap.xml" \
+  --out-dir "./promotion-output"
+```
 
 To read multiple product URLs first and then run a complete local promotion cycle for each ready product:
 
@@ -112,6 +120,15 @@ The batch runner can also discover product URLs before reading them:
 ```bash
 python scripts/product_batch_runner.py \
   --discover-from-url "https://example.com" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
+If the product catalog is best represented by a sitemap, use direct sitemap discovery:
+
+```bash
+python scripts/product_batch_runner.py \
+  --discovery-sitemap-url "https://example.com/sitemap.xml" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --out-dir "./promotion-output"
 ```

@@ -537,6 +537,47 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("/blog/growth-notes", urls_text)
         self.assertNotIn("/login", urls_text)
 
+    def test_product_url_discovery_selects_product_links_from_sitemap_file(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-sitemap-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        sitemap = out_dir / "sitemap.xml"
+        sitemap.write_text(
+            """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/products/ai-prompt-kit</loc></url>
+  <url><loc>https://example.com/tools/video-script-generator</loc></url>
+  <url><loc>https://example.com/blog/growth-notes</loc></url>
+  <url><loc>https://example.com/login</loc></url>
+</urlset>""",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_URL_DISCOVERY),
+                "--sitemap-file",
+                str(sitemap),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "output/reports/promotion-manager/intake/product-url-discovery.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["sitemapsRead"], 1)
+        self.assertEqual(report["summary"]["sitemapUrls"], 4)
+        self.assertEqual(
+            set(report["selectedUrls"]),
+            {"https://example.com/products/ai-prompt-kit", "https://example.com/tools/video-script-generator"},
+        )
+        source_types = {item["sourceType"] for item in report["candidates"]}
+        self.assertEqual(source_types, {"sitemap"})
+
     def test_product_batch_runner_reads_urls_then_runs_promotion_cycles(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-runner-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -716,6 +757,81 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(len(report["discoveredUrls"]), 2)
         product_names = {run["product"]["productName"] for run in report["promotionRuns"]}
         self.assertEqual(product_names, {"AI Prompt Kit", "Video Script Generator"})
+
+    def test_product_batch_runner_discovers_sitemap_from_site_then_runs_cycles(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-sitemap-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        (site_dir / "products").mkdir(parents=True)
+        (site_dir / "index.html").write_text("<html><body><h1>AI Tool Station</h1></body></html>", encoding="utf-8")
+        (site_dir / "products" / "ai-prompt-kit.html").write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into promotion content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        base_url = f"http://127.0.0.1:{server.server_address[1]}"
+        (site_dir / "robots.txt").write_text(f"Sitemap: {base_url}/sitemap.xml\n", encoding="utf-8")
+        (site_dir / "sitemap.xml").write_text(
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base_url}/products/ai-prompt-kit.html</loc></url>
+  <url><loc>{base_url}/blog/post.html</loc></url>
+</urlset>""",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_BATCH_RUNNER),
+                "--discover-from-url",
+                f"{base_url}/index.html",
+                "--discovery-allow-localhost",
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["discoveredUrls"], 1)
+        self.assertEqual(report["summary"]["readyPromotionRuns"], 1)
+        discovery = json.loads(Path(report["discoveryReport"]).read_text(encoding="utf-8"))
+        self.assertEqual(discovery["summary"]["robotsTxtRead"], 1)
+        self.assertEqual(discovery["summary"]["sitemapsRead"], 1)
+        self.assertEqual(discovery["summary"]["sitemapUrls"], 2)
+        self.assertEqual(report["promotionRuns"][0]["product"]["productName"], "AI Prompt Kit")
 
     def test_product_batch_runner_runs_multi_query_discovery_after_each_cycle(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-multi-query-test-"))

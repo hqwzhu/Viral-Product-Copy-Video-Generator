@@ -51,13 +51,17 @@ def parse_args() -> argparse.Namespace:
     product_discovery = parser.add_argument_group("Product URL discovery")
     product_discovery.add_argument("--discover-from-url", default="", help="Public website or landing page URL to discover product URLs from before reading products.")
     product_discovery.add_argument("--discovery-html-file", default="", help="Saved public website HTML to discover product URLs from.")
+    product_discovery.add_argument("--discovery-sitemap-url", default="", help="Public sitemap.xml or sitemap index URL to discover product URLs from.")
+    product_discovery.add_argument("--discovery-sitemap-file", default="", help="Saved sitemap.xml, sitemap index, or .xml.gz file to discover product URLs from.")
     product_discovery.add_argument("--discovery-base-url", default="", help="Base URL for resolving links in --discovery-html-file.")
     product_discovery.add_argument("--discovery-top-n", type=int, default=50)
     product_discovery.add_argument("--discovery-min-score", type=float, default=3.0)
     product_discovery.add_argument("--discovery-max-pages", type=int, default=20)
     product_discovery.add_argument("--discovery-max-depth", type=int, default=1)
+    product_discovery.add_argument("--discovery-max-sitemap-urls", type=int, default=1000)
     product_discovery.add_argument("--discovery-timeout", type=float, default=20.0)
     product_discovery.add_argument("--discovery-include-external", action="store_true")
+    product_discovery.add_argument("--discovery-skip-sitemaps", action="store_true")
     product_discovery.add_argument("--discovery-allow-localhost", action="store_true")
 
     product = parser.add_argument_group("Product reading")
@@ -147,6 +151,8 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
     append_if_present(command, "--urls-file", args.urls_file)
     append_if_present(command, "--discover-from-url", args.discover_from_url)
     append_if_present(command, "--discovery-html-file", args.discovery_html_file)
+    append_if_present(command, "--discovery-sitemap-url", args.discovery_sitemap_url)
+    append_if_present(command, "--discovery-sitemap-file", args.discovery_sitemap_file)
     append_if_present(command, "--discovery-base-url", args.discovery_base_url)
     command.extend(
         [
@@ -158,12 +164,16 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
             str(args.discovery_max_pages),
             "--discovery-max-depth",
             str(args.discovery_max_depth),
+            "--discovery-max-sitemap-urls",
+            str(args.discovery_max_sitemap_urls),
             "--discovery-timeout",
             str(args.discovery_timeout),
         ]
     )
     if args.discovery_include_external:
         command.append("--discovery-include-external")
+    if args.discovery_skip_sitemaps:
+        command.append("--discovery-skip-sitemaps")
     if args.discovery_allow_localhost:
         command.append("--discovery-allow-localhost")
     append_common_batch_args(command, args)
@@ -455,6 +465,8 @@ def build_report(
             "urlsFile": args.urls_file,
             "discoverFromUrl": args.discover_from_url,
             "discoveryHtmlFile": args.discovery_html_file,
+            "discoverySitemapUrl": args.discovery_sitemap_url,
+            "discoverySitemapFile": args.discovery_sitemap_file,
             "platforms": args.platforms,
             "codexReadFirst": True,
         },
