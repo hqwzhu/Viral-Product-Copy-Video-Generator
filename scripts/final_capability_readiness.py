@@ -482,6 +482,10 @@ def external_gates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
     return [
         {
+            "step": "prepare_real_run_playbook",
+            "command": f"python scripts/real_run_playbook.py --url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\"",
+        },
+        {
             "step": "run_final_capability",
             "command": final_runner_command(out_dir),
         },

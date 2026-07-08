@@ -72,6 +72,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates workflow manifests, publish queues, published URL evidence, structured metric snapshots, official connectors, and business exports
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
+- `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1` when `scripts/real_run_playbook.py` generates a live-run command pack, evidence checklist, platform gates, and approval gates before a real product cycle
 - `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, publish setup kits, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
 - `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` turns final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into an end-state acceptance matrix and action queue
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
@@ -194,6 +195,20 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `artifacts.platformSetupGuide`: markdown platform setup guide with official references, required capabilities, target inputs, setup steps, verification commands, and constraints
 - `artifacts.platformSetupGuideJson`: machine-readable platform setup guide with the same data and no secret values
 - `guardrails`: no stored credential values, no final publish click, and no fabricated published URL or metrics
+
+## Real Run Playbook
+
+`real-run-playbook.json` includes:
+
+- `status`: `ready`
+- `input`: product URLs, URL file, optional discovery website, platforms, targets, known published URLs, business exports, and metric snapshot source
+- `phases[]`: ordered live-run phases with copy-ready commands, required evidence, proof targets, output paths, and approval gates
+- `evidenceChecklist[]`: concrete evidence paths for structured product snapshots, viral material, generated copy/video, publish readiness, real published URLs, real metrics, next-round optimization, and final readiness
+- `platformGates[]`: platform-specific external authorization and evidence gates
+- `approvalGates[]`: `I_APPROVE_PUBLISH` for official writes and `I_APPROVE_SKILL_SYNC` for installed Skill sync
+- `artifacts.markdown`: `real-run-playbook.md`
+- `artifacts.powershell`: `real-run-commands.ps1`
+- `guardrails`: no credential storage, no final publish click, no captcha/risk-control bypass, no fabricated published URLs or metrics
 
 ## Viral Content Library
 

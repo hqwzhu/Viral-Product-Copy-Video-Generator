@@ -44,6 +44,17 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
+Real run command pack before a live product cycle:
+
+```bash
+python scripts/real_run_playbook.py \
+  --url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --github-repo owner/repo \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
 The runner also writes a final readiness matrix that compares the run against the user's requested end state:
 
 ```bash
@@ -700,6 +711,7 @@ The command writes:
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` converts real metrics, comment demand signals, and business attribution into next-round content angles, platform actions, and copy-ready commands.
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, optional next-round optimization, and metrics recovery as one local operating cycle.
+- `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1` when `scripts/real_run_playbook.py` generates a copy-ready live-run command pack, evidence checklist, platform gates, and approval gates for a real product cycle.
 - `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` runs the highest-automation safe flow: Codex-first product reading, promotion cycles, multi-query viral discovery, publish readiness, browser-assisted publish payloads, optional visible-field form fill, real evidence recovery, next-round optimization, and audits. The report includes `cycleEvidence[]`, a per-product manager-facing rollup of generated content, videos, publish queues, published URL registration, public metrics, comments, business attribution, and next-round recommendations.
 - `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` merges final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into a requirement-by-requirement end-state matrix and action queue.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks scripts, tools, credential presence, platform limits, and final requirement gaps.
@@ -719,6 +731,7 @@ The command writes:
 - Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
 - Use `scripts/product_url_discovery.py` when the user sends a website/homepage URL and wants the Skill to find likely product URLs first. It uses public HTML links, public `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input, filters obvious non-product pages, and writes `product-url-discovery/product-urls.txt` for follow-up reading.
 - Use `scripts/product_batch_runner.py` when the user sends multiple product URLs, a URL file, or a website URL via `--discover-from-url`, and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--sample-video-frames` for per-cycle follow-up video evidence, or `--multi-query-sample-video-frames` for the post-cycle multi-query discovery pass. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
+- Use `scripts/real_run_playbook.py` before the first live run for a product or website. It writes a command pack that sequences final capability runner, publish readiness/setup, browser-assisted publishing, approved official publishing, real URL registration, public metrics/comment capture, business attribution, metrics recovery, next-round optimization, periodic operation, and controlled self-evolution. It records approval gates and evidence requirements; it does not execute platform writes.
 - Use `scripts/final_capability_runner.py` when the user says "execute the Skill", "run the full promotion manager", or wants the highest-automation safe path from product URL or discovered website product URLs to publish queue, browser-assisted publish payloads, optional visible-field form fill, metrics/comment/business recovery, next-round optimization, and readiness audits. Add `--discover-from-url` when the user provides a website/homepage rather than exact product URLs. Use `--sample-video-frames` and `--multi-query-sample-video-frames` when the final run should carry browser-visible video sampling through product cycles and multi-query viral discovery.
 - Use `scripts/final_capability_readiness.py` after a final run or audit when you need a single acceptance matrix for the requested final Agent scope. It identifies which requirements are satisfied, which need real run evidence, which are blocked by platform authorization, and which exact commands or approvals are next.
 - Use `scripts/final_capability_audit.py` before claiming final-agent readiness. The audit checks local scripts, browser runtime, `ffmpeg`, credential presence, publish constraints, metrics inputs, and self-evolution limits without writing credential values. It also runs `scripts/self_evolution_audit.py` and records the self-evolution report path.
@@ -888,6 +901,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/publish_executor.py`: approved official publish executor for GitHub, YouTube, and Douyin Open Platform video upload/create.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.
 - `scripts/promotion_cycle_runner.py`: one-command local operating cycle for workflow generation, guarded publish queue, published item registration, post-publish metric/comment evidence capture, business attribution, metrics recovery, and next-round optimization.
+- `scripts/real_run_playbook.py`: live-run command pack generator that writes phased commands, evidence checklist, platform gates, approval gates, and a PowerShell command file for a real product promotion cycle.
 - `scripts/final_capability_runner.py`: highest-automation safe runner that orchestrates product batch reading/cycles, viral discovery, publish readiness, browser-assisted publish materials, optional visible-field form fill, real evidence recovery, next-round optimization, and audits.
 - `scripts/final_capability_readiness.py`: final acceptance matrix builder that merges generated reports into requirement status, external gates, and next commands for the requested end state.
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.

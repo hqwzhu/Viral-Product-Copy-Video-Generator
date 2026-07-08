@@ -185,6 +185,19 @@ python scripts/final_capability_runner.py \
 
 This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}` and then generates `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, self-evolution audit, and final readiness matrix builder. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits and `finalReadinessMatrix` pointing to the end-state acceptance matrix. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
+Generate a live-run command pack before executing a real product cycle:
+
+```bash
+python scripts/real_run_playbook.py \
+  --url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --github-repo owner/repo \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+This writes `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1`. The playbook sequences final capability runner, publish readiness/setup, browser-assisted publishing, approved official publishing, real URL registration, public metric/comment capture, business attribution, metrics recovery, next-round optimization, periodic operation, and controlled self-evolution. It is a command pack and evidence checklist; it does not execute platform writes.
+
 When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
 
 ```bash

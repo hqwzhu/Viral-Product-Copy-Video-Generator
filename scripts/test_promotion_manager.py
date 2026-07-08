@@ -45,6 +45,7 @@ COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
+REAL_RUN_PLAYBOOK = ROOT / "scripts" / "real_run_playbook.py"
 AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
@@ -1241,6 +1242,56 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(report["browserPublishAssistant"][0]["report"]).exists())
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
         self.assertTrue((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.md").exists())
+
+    def test_real_run_playbook_generates_end_to_end_command_pack_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="real-run-playbook-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        secret_value = "fake-secret-real-run-token"
+        subprocess.run(
+            [
+                sys.executable,
+                str(REAL_RUN_PLAYBOOK),
+                "--url",
+                "https://example.com/ai-prompt-kit",
+                "--platforms",
+                "youtube,zhihu,xiaohongshu,douyin,github",
+                "--github-repo",
+                "owner/repo",
+                "--business-csv",
+                "./orders-and-revenue.csv",
+                "--published-url",
+                "github=https://github.com/owner/repo/blob/main/PROMOTION.md",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env={**os.environ, "GITHUB_TOKEN": secret_value},
+        )
+        report_path = out_dir / "reports/promotion-manager/real-run-playbook/real-run-playbook.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready")
+        phase_ids = [item["id"] for item in report["phases"]]
+        self.assertIn("real_full_run", phase_ids)
+        self.assertIn("publish_preparation", phase_ids)
+        self.assertIn("real_metrics_recovery", phase_ids)
+        self.assertIn("controlled_self_evolution", phase_ids)
+        commands = "\n".join(command["command"] for phase in report["phases"] for command in phase["commands"])
+        self.assertIn("scripts/final_capability_runner.py", commands)
+        self.assertIn("--auto-search-competitors", commands)
+        self.assertIn("--run-follow-up-captures", commands)
+        self.assertIn("--multi-query-run-follow-up-captures", commands)
+        self.assertIn("scripts/publish_setup_assistant.py", commands)
+        self.assertIn("scripts/metrics_recovery.py", commands)
+        approvals = {command["approvalRequired"] for phase in report["phases"] for command in phase["commands"] if command["approvalRequired"]}
+        self.assertEqual(approvals, {"I_APPROVE_PUBLISH", "I_APPROVE_SKILL_SYNC"})
+        checklist_ids = {item["id"] for item in report["evidenceChecklist"]}
+        self.assertIn("realPublishedUrls", checklist_ids)
+        self.assertIn("realMetrics", checklist_ids)
+        self.assertTrue(Path(report["artifacts"]["markdown"]).exists())
+        self.assertTrue(Path(report["artifacts"]["powershell"]).exists())
 
     def test_final_capability_runner_can_fill_browser_publish_payloads(self) -> None:
         if not playwright_chromium_available():
@@ -4527,6 +4578,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "build_real_run_playbook" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_browser_visible_video_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(report["platformAccessAudit"]["ready"])
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access" for item in report["recommendedCommands"]))
@@ -4541,6 +4593,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
+        self.assertTrue(report["scripts"]["real_run_playbook"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_readiness"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
