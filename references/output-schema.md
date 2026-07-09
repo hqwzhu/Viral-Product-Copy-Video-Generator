@@ -704,6 +704,12 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 - `jobs[].browserPublishAssistant.platformPublishUrls`: optional object or list of `platform=url` entries that override default creator/publisher entry URLs
 - `jobs[].browserPublishAssistant.publishedUrls`: optional URL registrations as a list of `platform=url` strings after the user has published
 - `jobs[].browserPublishAssistant.evidence`: optional evidence URL/path list attached to registered published URLs
+- `jobs[].browserFormFill.enabled`: optional boolean; when true, the scheduler runs `scripts/browser_publish_form_fill.py` for each prepared browser publish payload after `browserPublishAssistant`
+- `jobs[].browserFormFill.headed`: optional boolean; shows the browser while filling visible fields
+- `jobs[].browserFormFill.allowLocalhost`: test-only boolean for local publisher fixtures
+- `jobs[].browserFormFill.installBrowserIfMissing`: optional boolean; allows the official Playwright Chromium installer if the browser runtime is missing
+- `jobs[].browserFormFill.timeoutMs`: optional navigation timeout in milliseconds, default `30000`
+- `jobs[].browserFormFill.waitUntil`: optional Playwright load state, `load`, `domcontentloaded`, or `networkidle`
 - `jobs[].postPublishMetricsCapture.enabled`: optional boolean; when true, the scheduler runs `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery
 - `jobs[].postPublishMetricsCapture.publishedItemsJson`: optional file path or list of paths containing proven published URL evidence
 - `jobs[].postPublishMetricsCapture.publishedUrls`: optional URL or list of `platform=url` entries to capture

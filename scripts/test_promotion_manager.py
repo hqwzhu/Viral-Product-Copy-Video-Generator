@@ -3006,6 +3006,131 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["status"], "ready")
         self.assertEqual(recovery["summary"]["recordsWithMetrics"], 1)
 
+    def test_automation_scheduler_runs_browser_form_fill_after_publish_payloads(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-form-fill-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "publish.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Creator Publish Form</title></head>
+<body>
+  <form id="publish-form">
+    <input name="title" placeholder="Title">
+    <textarea name="body" placeholder="Body"></textarea>
+    <input name="tags" placeholder="Tags">
+    <input name="cover" placeholder="Cover">
+    <button id="publish" type="submit">Publish</button>
+  </form>
+  <script>
+    document.querySelector('#publish-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.body.dataset.submitted = 'yes';
+    });
+  </script>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        base_url = f"http://127.0.0.1:{server.server_address[1]}"
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-form-fill-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["xiaohongshu"],
+                            "topN": 2,
+                            "skipVideo": True,
+                            "publish": {"enabled": True, "platforms": ["xiaohongshu"]},
+                            "browserPublishAssistant": {
+                                "enabled": True,
+                                "platformPublishUrls": {"xiaohongshu": f"{base_url}/publish.html"},
+                            },
+                            "browserFormFill": {
+                                "enabled": True,
+                                "allowLocalhost": True,
+                                "timeoutMs": 10000,
+                            },
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        job_state = state["jobs"]["ai-prompt-kit-form-fill-weekly"]
+        self.assertEqual(job_state["lastStatus"], "ready")
+        self.assertEqual(len(job_state["lastBrowserFormFill"]), 1)
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        form_fill = run_report["records"][0]["browserFormFill"]
+        self.assertEqual(form_fill["status"], "ready")
+        self.assertEqual(form_fill["summary"]["runs"], 1)
+        self.assertEqual(form_fill["summary"]["ready"], 1)
+        self.assertEqual(form_fill["summary"]["submitted"], 0)
+        self.assertGreaterEqual(form_fill["summary"]["filledFields"], 2)
+        record = form_fill["records"][0]
+        self.assertEqual(record["platform"], "xiaohongshu")
+        self.assertFalse(record["submitted"])
+        self.assertTrue(record["finalPublishUserActionRequired"])
+        self.assertTrue(Path(record["report"]).exists())
+        self.assertTrue(Path(record["screenshot"]).exists())
+
     def test_automation_scheduler_passes_douyin_video_file_to_publish_queue(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-douyin-publish-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

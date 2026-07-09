@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 PUBLISH_QUEUE = SCRIPTS / "publish_queue.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
+BROWSER_PUBLISH_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 POST_PUBLISH_METRICS_CAPTURE = SCRIPTS / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = SCRIPTS / "comment_evidence_capture.py"
 BUSINESS_ATTRIBUTION = SCRIPTS / "business_attribution.py"
@@ -116,6 +117,14 @@ def init_config(args: argparse.Namespace) -> None:
         "nextRoundOptimization": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
+        "browserFormFill": {
+            "enabled": False,
+            "headed": False,
+            "allowLocalhost": False,
+            "installBrowserIfMissing": False,
+            "timeoutMs": 30000,
+            "waitUntil": "domcontentloaded",
+        },
     }
     config = {
         "version": 1,
@@ -206,12 +215,20 @@ def evaluate_job(
         }
     )
     publish_result: dict[str, Any] = {}
+    browser_publish_result: dict[str, Any] = {}
     if result.returncode == 0 and manifest_path.exists() and publish_enabled(job):
         publish_result = run_publish_queue(job, out_dir, base_dir, manifest_path)
         record["publishQueue"] = publish_result
         if publish_result.get("report") and browser_publish_assistant_enabled(job):
             browser_publish_result = run_browser_publish_assistant(job, out_dir, base_dir, publish_result["report"])
             record["browserPublishAssistant"] = browser_publish_result
+    if result.returncode == 0 and manifest_path.exists() and browser_form_fill_enabled(job):
+        if browser_publish_result.get("report"):
+            record["browserFormFill"] = run_browser_form_fill(job, out_dir, base_dir, browser_publish_result["report"])
+        else:
+            record["browserFormFill"] = browser_form_fill_blocked_result(
+                "browserPublishAssistant.enabled must be true and produce a payload report before browserFormFill can run."
+            )
     if result.returncode == 0 and manifest_path.exists() and multi_query_viral_discovery_enabled(job):
         multi_query_result = run_multi_query_viral_discovery(job, out_dir, base_dir, manifest_path)
         record["multiQueryViralDiscovery"] = multi_query_result
@@ -258,6 +275,8 @@ def evaluate_job(
         job_state["lastPublishQueue"] = record["publishQueue"]["report"]
     if record.get("browserPublishAssistant", {}).get("report"):
         job_state["lastBrowserPublishAssistant"] = record["browserPublishAssistant"]["report"]
+    if record.get("browserFormFill", {}).get("reports"):
+        job_state["lastBrowserFormFill"] = record["browserFormFill"]["reports"]
     if record.get("multiQueryViralDiscovery", {}).get("report"):
         job_state["lastMultiQueryViralDiscovery"] = record["multiQueryViralDiscovery"]["report"]
     if record.get("postPublishMetricsCapture", {}).get("report"):
@@ -284,6 +303,10 @@ def metrics_recovery_enabled(job: dict[str, Any]) -> bool:
 
 def browser_publish_assistant_enabled(job: dict[str, Any]) -> bool:
     return bool((job.get("browserPublishAssistant") or {}).get("enabled"))
+
+
+def browser_form_fill_enabled(job: dict[str, Any]) -> bool:
+    return bool((job.get("browserFormFill") or {}).get("enabled"))
 
 
 def post_publish_metrics_capture_enabled(job: dict[str, Any]) -> bool:
@@ -345,6 +368,106 @@ def run_browser_publish_assistant(job: dict[str, Any], out_dir: Path, base_dir: 
         "stderrTail": tail(result.stderr),
         "report": str(report_path) if report_path.exists() else "",
         "summary": summary,
+    }
+
+
+def run_browser_form_fill(job: dict[str, Any], out_dir: Path, base_dir: Path, browser_publish_report_path: str) -> dict[str, Any]:
+    report_path = Path(browser_publish_report_path)
+    try:
+        browser_publish_report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return browser_form_fill_blocked_result(f"Browser publish assistant report could not be read: {browser_publish_report_path}")
+
+    records = []
+    for item in browser_publish_report.get("records", []):
+        platform = str(item.get("platform") or "platform")
+        payload_json = str(((item.get("payloadFiles") or {}).get("json") or "")).strip()
+        payload_path = resolve_path(base_dir, payload_json) if payload_json else None
+        if not payload_path or not payload_path.exists():
+            records.append(
+                {
+                    "platform": platform,
+                    "status": "blocked",
+                    "reason": "Prepared browser publish payload JSON was missing.",
+                    "payloadJson": payload_json,
+                    "report": "",
+                    "exitCode": None,
+                }
+            )
+            continue
+
+        form_out_dir = out_dir / "browser-form-fill-runs" / safe_slug(platform)
+        command = build_browser_form_fill_command(job, form_out_dir, base_dir, payload_path)
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        form_report_path = form_out_dir / "reports/promotion-manager/browser-publish/browser-form-fill.json"
+        form_report: dict[str, Any] = {}
+        if form_report_path.exists():
+            try:
+                form_report = json.loads(form_report_path.read_text(encoding="utf-8-sig"))
+            except json.JSONDecodeError:
+                form_report = {}
+        filled_fields = form_report.get("filledFields", [])
+        records.append(
+            {
+                "platform": platform,
+                "status": form_report.get("status", "error") if result.returncode == 0 and form_report_path.exists() else "error",
+                "command": display_command(command),
+                "payloadJson": str(payload_path),
+                "report": str(form_report_path) if form_report_path.exists() else "",
+                "screenshot": str(((form_report.get("artifacts") or {}).get("screenshot") or "")),
+                "filledFields": len(filled_fields) if isinstance(filled_fields, list) else 0,
+                "missingFields": form_report.get("missingFields", []),
+                "submitted": bool(form_report.get("submitted", False)),
+                "finalPublishUserActionRequired": bool(form_report.get("finalPublishUserActionRequired", True)),
+                "exitCode": result.returncode,
+                "stdoutTail": tail(result.stdout),
+                "stderrTail": tail(result.stderr),
+            }
+        )
+    statuses = [str(item.get("status", "")) for item in records]
+    summary = {
+        "runs": len(records),
+        "ready": sum(1 for status in statuses if status == "ready"),
+        "blocked": sum(1 for status in statuses if status == "blocked"),
+        "errors": sum(1 for status in statuses if status == "error"),
+        "submitted": sum(1 for item in records if item.get("submitted")),
+        "finalPublishUserActionRequired": sum(1 for item in records if item.get("finalPublishUserActionRequired")),
+        "filledFields": sum(int(item.get("filledFields") or 0) for item in records),
+    }
+    if not records:
+        status = "no_browser_publish_payloads"
+    elif any(status == "error" for status in statuses):
+        status = "error"
+    elif any(status == "blocked" for status in statuses):
+        status = "blocked"
+    elif all(status == "ready" for status in statuses):
+        status = "ready"
+    else:
+        status = "partial_ready"
+    return {
+        "status": status,
+        "sourceReport": browser_publish_report_path,
+        "records": records,
+        "reports": [str(item.get("report")) for item in records if item.get("report")],
+        "summary": summary,
+        "guardrails": [
+            "Visible fields only; no login, captcha, risk-control bypass, secret extraction, or hidden field reads.",
+            "The helper stops before final publish and records finalPublishUserActionRequired.",
+        ],
+    }
+
+
+def browser_form_fill_blocked_result(reason: str) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "reason": reason,
+        "records": [],
+        "reports": [],
+        "summary": {"runs": 0, "ready": 0, "blocked": 1, "errors": 0, "submitted": 0, "finalPublishUserActionRequired": 0, "filledFields": 0},
+        "guardrails": [
+            "Browser form fill requires prepared browser-publish payload JSON.",
+            "It never performs final publish without user action.",
+        ],
     }
 
 
@@ -733,6 +856,29 @@ def build_browser_publish_assistant_command(job: dict[str, Any], out_dir: Path, 
     return command
 
 
+def build_browser_form_fill_command(job: dict[str, Any], out_dir: Path, base_dir: Path, payload_path: Path) -> list[str]:
+    fill = job.get("browserFormFill") or {}
+    command = [
+        sys.executable,
+        str(BROWSER_PUBLISH_FORM_FILL),
+        "--payload-json",
+        str(payload_path),
+        "--out-dir",
+        str(out_dir),
+        "--timeout-ms",
+        str(fill.get("timeoutMs") or 30000),
+        "--wait-until",
+        str(fill.get("waitUntil") or "domcontentloaded"),
+    ]
+    if fill.get("headed"):
+        command.append("--headed")
+    if fill.get("allowLocalhost"):
+        command.append("--allow-localhost")
+    if fill.get("installBrowserIfMissing"):
+        command.append("--install-browser-if-missing")
+    return command
+
+
 def build_multi_query_viral_discovery_command(job: dict[str, Any], out_dir: Path, base_dir: Path, manifest_path: Path) -> list[str]:
     discovery = job.get("multiQueryViralDiscovery") or {}
     command = [
@@ -946,6 +1092,8 @@ def render_run_report(report: dict[str, Any]) -> str:
             lines.append(f"- Publish queue: {record['publishQueue'].get('report', '')}")
         if record.get("browserPublishAssistant"):
             lines.append(f"- Browser publish assistant: {record['browserPublishAssistant'].get('report', '')}")
+        if record.get("browserFormFill"):
+            lines.append(f"- Browser form fill: {record['browserFormFill'].get('status', '')} ({record['browserFormFill'].get('summary', {}).get('runs', 0)} run(s))")
         if record.get("multiQueryViralDiscovery"):
             lines.append(f"- Multi-query viral discovery: {record['multiQueryViralDiscovery'].get('report', '')}")
         if record.get("postPublishMetricsCapture"):
