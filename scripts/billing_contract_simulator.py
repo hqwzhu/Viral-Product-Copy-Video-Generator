@@ -226,6 +226,9 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         "browser_publish_session",
         "real_evidence_inbox",
         "final_readiness_audit",
+        "automation_config_init",
+        "automation_due_run",
+        "automation_windows_task",
     ]:
         if workflow not in credit_costs:
             missing.append(f"creditCosts.{workflow}")

@@ -55,6 +55,9 @@
             <option value="browser_publish_session">Browser publish session</option>
             <option value="real_evidence_inbox">Real evidence inbox</option>
             <option value="final_readiness">Final readiness audit</option>
+            <option value="automation_init">Schedule init</option>
+            <option value="automation_run">Run scheduled jobs</option>
+            <option value="automation_windows_task">Windows task script</option>
           </select>
         </label>
       </section>
@@ -80,6 +83,30 @@
           <span>Evidence inbox folder</span>
           <input id="evidenceInbox" type="text" value=".\promotion-evidence-inbox">
         </label>
+        <label class="field compact" data-command-scope="automation-init automation-run automation-task">
+          <span>Automation config</span>
+          <input id="automationConfig" type="text" value=".\promotion-automation.json">
+        </label>
+        <label class="field compact" data-command-scope="automation-init">
+          <span>Automation output root</span>
+          <input id="automationOutputRoot" type="text" value=".\promotion-output\automation">
+        </label>
+        <label class="field compact" data-command-scope="automation-init">
+          <span>Job ID</span>
+          <input id="automationJobId" type="text" value="product-weekly">
+        </label>
+        <label class="field compact" data-command-scope="automation-init">
+          <span>Interval days</span>
+          <input id="automationIntervalDays" type="number" min="1" value="7">
+        </label>
+        <label class="field compact" data-command-scope="automation-task automation-init">
+          <span>Windows task script</span>
+          <input id="windowsTaskScript" type="text" value=".\register-enhe-promotion-task.ps1">
+        </label>
+        <label class="field compact" data-command-scope="automation-task automation-init">
+          <span>Windows task time</span>
+          <input id="windowsTaskTime" type="time" value="09:00">
+        </label>
         <div class="option-list">
           <label class="checkline" data-command-scope="publish">
             <input id="runFormFill" type="checkbox" checked>
@@ -92,6 +119,42 @@
           <label class="checkline" data-command-scope="publish evidence">
             <input id="allowLocalhost" type="checkbox">
             <span>Allow localhost test URLs</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="autoSearchCompetitors" type="checkbox" checked>
+            <span>Auto search competitors</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enableMultiQueryDiscovery" type="checkbox" checked>
+            <span>Multi-query viral discovery</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="browserFollowUps" type="checkbox" checked>
+            <span>Browser-assisted follow-ups</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enablePublishQueue" type="checkbox" checked>
+            <span>Enable publish queue</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enableBrowserPublishAssistant" type="checkbox" checked>
+            <span>Enable browser publish assistant</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enableBrowserFormFill" type="checkbox">
+            <span>Enable browser form fill</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enableMetricsRecovery" type="checkbox" checked>
+            <span>Enable metrics recovery</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="enableNextRoundOptimization" type="checkbox" checked>
+            <span>Enable next-round optimization</span>
+          </label>
+          <label class="checkline" data-command-scope="automation-init">
+            <input id="alsoWindowsTask" type="checkbox">
+            <span>Also generate Windows task script</span>
           </label>
         </div>
       </section>

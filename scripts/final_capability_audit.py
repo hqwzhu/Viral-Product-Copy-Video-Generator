@@ -553,12 +553,12 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate Skill, browser publish session, real evidence inbox, and readiness audit commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
+                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
                 "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
@@ -649,7 +649,14 @@ def browser_extension_status() -> dict[str, Any]:
             if not contract.get(key):
                 missing.append(f"browser-extension/billing-contract.json missing key: {key}")
         credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
-        for workflow in ["browser_publish_session", "real_evidence_inbox", "final_readiness_audit"]:
+        for workflow in [
+            "browser_publish_session",
+            "real_evidence_inbox",
+            "final_readiness_audit",
+            "automation_config_init",
+            "automation_due_run",
+            "automation_windows_task",
+        ]:
             if workflow not in credit_costs:
                 missing.append(f"browser-extension/billing-contract.json missing credit cost: {workflow}")
         license_body = (contract.get("licenseRequest") or {}).get("body") if isinstance(contract.get("licenseRequest"), dict) else {}
@@ -670,8 +677,12 @@ def browser_extension_status() -> dict[str, Any]:
             "Browser publish session",
             "Real evidence inbox",
             "Final readiness audit",
+            "Schedule init",
+            "Run scheduled jobs",
+            "Windows task script",
             "Publish queue JSON",
             "Evidence inbox folder",
+            "Automation config",
             "License key",
             "Open checkout",
             "Billing portal",
@@ -695,9 +706,13 @@ def browser_extension_status() -> dict[str, Any]:
             "browser_publish_session.py",
             "real_evidence_inbox.py",
             "final_capability_readiness.py",
+            "automation_scheduler.py",
             "browser_publish_session",
             "real_evidence_inbox",
             "final_readiness_audit",
+            "automation_config_init",
+            "automation_due_run",
+            "automation_windows_task",
         ]:
             if marker not in script_text:
                 missing.append(f"browser-extension/popup.js missing marker: {marker}")

@@ -12,7 +12,7 @@ This file maps the user's target requirements to the current Skill capability an
 | Self-evolve | `final_capability_audit.py`, `platform_access_audit.py`, `self_evolution_audit.py` | Only allowlisted runtime installs and approved Skill sync. No silent unreviewed self-replacement |
 | Sync installed Codex Skill | `self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC` | Explicit approval and reviewed clean files |
 | GitHub docs, intro, usage, install tutorial | `README.md` and `docs/*.md` | Keep docs updated with each capability change |
-| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, one-link run command, browser publish session command, evidence inbox command, readiness audit command | Production license API, payment-provider integration, hosted usage enforcement, and admin operations |
+| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, one-link run command, browser publish session command, evidence inbox command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, and admin operations |
 
 ## Acceptance Command
 
@@ -48,3 +48,32 @@ python scripts\real_evidence_inbox.py `
 ```
 
 The runner accepts published URL lists, platform metric exports/snapshots, visible comment evidence, and order/revenue exports. It orchestrates the existing safe recovery scripts and writes `reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.json`.
+
+## Periodic Automation
+
+The browser extension can generate the same scheduler commands operators would otherwise type manually:
+
+```powershell
+python scripts\automation_scheduler.py init `
+  --config ".\promotion-automation.json" `
+  --job-id "product-weekly" `
+  --browser-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --interval-days 7 `
+  --output-root ".\promotion-output\automation" `
+  --auto-search-competitors `
+  --enable-multi-query-viral-discovery `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --enable-publish-queue `
+  --enable-browser-publish-assistant `
+  --enable-metrics-recovery `
+  --enable-next-round-optimization
+```
+
+```powershell
+python scripts\automation_scheduler.py run --config ".\promotion-automation.json" --force
+python scripts\automation_scheduler.py windows-task --config ".\promotion-automation.json" --out-file ".\register-enhe-promotion-task.ps1" --time "09:00"
+```
+
+Scheduled jobs still cannot bypass credentials, `I_APPROVE_PUBLISH`, login, captcha, risk checks, or final browser publish review.

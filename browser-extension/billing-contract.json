@@ -1,6 +1,6 @@
 {
   "name": "ENHE Promotion Manager Billing Contract",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "provider": "stripe_or_equivalent_subscription_provider",
   "website": "https://www.enhe-tech.com.cn/",
   "checkoutUrl": "https://www.enhe-tech.com.cn/promotion-manager/checkout",
@@ -47,7 +47,10 @@
     "hosted_mp4_render": 3,
     "browser_publish_session": 2,
     "real_evidence_inbox": 2,
-    "final_readiness_audit": 1
+    "final_readiness_audit": 1,
+    "automation_config_init": 1,
+    "automation_due_run": 4,
+    "automation_windows_task": 1
   },
   "licenseRequest": {
     "method": "POST",
@@ -56,7 +59,7 @@
       "requestedPlan": "free|starter|growth|scale",
       "extensionVersion": "string",
       "website": "string",
-      "commandType": "skill_entry|browser_publish_session|real_evidence_inbox|final_readiness",
+      "commandType": "skill_entry|browser_publish_session|real_evidence_inbox|final_readiness|automation_init|automation_run|automation_windows_task",
       "estimatedMonthlyCredits": "number"
     }
   },

@@ -4063,6 +4063,62 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("2", discovery["command"])
         self.assertTrue(Path(discovery["report"]).exists())
 
+    def test_automation_scheduler_init_can_enable_closed_loop_flags(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-init-flags-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        config_path = out_dir / "automation.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "init",
+                "--config",
+                str(config_path),
+                "--job-id",
+                "product-weekly",
+                "--browser-url",
+                "https://example.com/product",
+                "--platforms",
+                "youtube,xiaohongshu",
+                "--interval-days",
+                "7",
+                "--output-root",
+                str(out_dir / "automation-output"),
+                "--auto-search-competitors",
+                "--enable-multi-query-viral-discovery",
+                "--run-follow-up-captures",
+                "--capture-browser-assisted-follow-ups",
+                "--sample-video-frames",
+                "--enable-publish-queue",
+                "--enable-browser-publish-assistant",
+                "--enable-browser-form-fill",
+                "--enable-post-publish-metrics-capture",
+                "--enable-comment-evidence-capture",
+                "--enable-business-attribution",
+                "--enable-metrics-recovery",
+                "--enable-next-round-optimization",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        job = config["jobs"][0]
+        self.assertEqual(job["id"], "product-weekly")
+        self.assertEqual(job["platforms"], ["youtube", "xiaohongshu"])
+        self.assertTrue(job["autoSearchCompetitors"])
+        self.assertTrue(job["multiQueryViralDiscovery"]["enabled"])
+        self.assertTrue(job["multiQueryViralDiscovery"]["sampleVideoFrames"])
+        self.assertTrue(job["followUpCapture"]["enabled"])
+        self.assertTrue(job["followUpCapture"]["captureBrowserAssisted"])
+        self.assertTrue(job["publish"]["enabled"])
+        self.assertTrue(job["browserPublishAssistant"]["enabled"])
+        self.assertTrue(job["browserFormFill"]["enabled"])
+        self.assertTrue(job["postPublishMetricsCapture"]["enabled"])
+        self.assertTrue(job["commentEvidenceCapture"]["enabled"])
+        self.assertTrue(job["businessAttribution"]["enabled"])
+        self.assertTrue(job["metricsRecovery"]["enabled"])
+        self.assertTrue(job["nextRoundOptimization"]["enabled"])
+
     def test_automation_scheduler_writes_windows_task_script(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -5770,7 +5826,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Browser publish session", popup)
         self.assertIn("Real evidence inbox", popup)
         self.assertIn("Final readiness audit", popup)
+        self.assertIn("Schedule init", popup)
+        self.assertIn("Run scheduled jobs", popup)
+        self.assertIn("Windows task script", popup)
         self.assertIn("Publish queue JSON", popup)
+        self.assertIn("Automation config", popup)
+        self.assertIn("Enable metrics recovery", popup)
         self.assertIn("License key", popup)
         self.assertIn("Open checkout", popup)
         self.assertIn("Billing portal", popup)
@@ -5788,8 +5849,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser_publish_session.py", script)
         self.assertIn("real_evidence_inbox.py", script)
         self.assertIn("final_capability_readiness.py", script)
+        self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
         self.assertIn("real_evidence_inbox", script)
+        self.assertIn("automation_config_init", script)
+        self.assertIn("automation_due_run", script)
+        self.assertIn("automation_windows_task", script)
         css = (BROWSER_EXTENSION / "popup.css").read_text(encoding="utf-8")
         self.assertIn("--accent", css)
         self.assertIn("grid-template-columns", css)
@@ -5801,6 +5866,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser_publish_session", contract["creditCosts"])
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
         self.assertIn("final_readiness_audit", contract["creditCosts"])
+        self.assertIn("automation_config_init", contract["creditCosts"])
+        self.assertIn("automation_due_run", contract["creditCosts"])
+        self.assertIn("automation_windows_task", contract["creditCosts"])
         self.assertIn("commandType", contract["licenseRequest"]["body"])
         self.assertIn("checkout.session.completed", contract["requiredWebhookEvents"])
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
@@ -5852,6 +5920,31 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(usage_record["workflowType"], "research_run")
         self.assertEqual(usage_record["creditsReserved"], 3)
         self.assertEqual(usage_record["creditsUsed"], 3)
+
+    def test_billing_contract_simulator_accepts_automation_due_run(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="billing-automation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "demo",
+                "--plan",
+                "growth",
+                "--workflow-type",
+                "automation_due_run",
+                "--out-dir",
+                str(out_dir),
+                "--reset-state",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        state_path = out_dir / "reports/promotion-manager/billing-simulator/billing-simulator-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        usage_record = next(iter(state["usageLedger"].values()))
+        self.assertEqual(usage_record["workflowType"], "automation_due_run")
+        self.assertEqual(usage_record["creditsReserved"], 4)
 
     def test_self_evolution_managed_files_include_docs_and_browser_extension(self) -> None:
         module = load_script_module(SELF_EVOLUTION_AUDIT)

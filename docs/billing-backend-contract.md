@@ -50,7 +50,7 @@ Request:
 {
   "licenseKey": "pm_live_xxx",
   "requestedPlan": "growth",
-  "extensionVersion": "0.2.0",
+  "extensionVersion": "0.3.0",
   "website": "https://www.enhe-tech.com.cn/",
   "commandType": "skill_entry",
   "estimatedMonthlyCredits": 120
@@ -85,6 +85,9 @@ The backend should keep these credit costs in sync with `browser-extension/billi
 | `browser_publish_session` | 2 | Browser/manual publish payloads, optional visible-field fill coordination, screenshots, and follow-up commands. |
 | `real_evidence_inbox` | 2 | Published URL, metric, comment, order, and revenue evidence recovery. |
 | `final_readiness_audit` | 1 | Final capability matrix refresh. |
+| `automation_config_init` | 1 | Create a recurring automation config with safe job toggles. |
+| `automation_due_run` | 4 | Run one due scheduled promotion job. |
+| `automation_windows_task` | 1 | Generate a local Windows Task Scheduler registration script. |
 
 ### Usage Authorization
 

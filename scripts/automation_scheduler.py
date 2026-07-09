@@ -59,10 +59,23 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("--auto-search-competitors", action="store_true")
     init.add_argument("--search-html-snapshot-dir", default="")
     init.add_argument("--capture-browser-assisted-follow-ups", action="store_true")
+    init.add_argument("--run-follow-up-captures", action="store_true")
+    init.add_argument("--sample-video-frames", action="store_true")
+    init.add_argument("--video-sample-count", type=int, default=5)
     init.add_argument("--skip-creator-leaderboard", action="store_true")
     init.add_argument("--run-creator-follow-up", action="store_true")
     init.add_argument("--creator-follow-up-dry-run", action="store_true")
+    init.add_argument("--enable-multi-query-viral-discovery", action="store_true")
+    init.add_argument("--multi-query-dry-run", action="store_true")
     init.add_argument("--skip-competitor-informed-content", action="store_true")
+    init.add_argument("--enable-publish-queue", action="store_true")
+    init.add_argument("--enable-browser-publish-assistant", action="store_true")
+    init.add_argument("--enable-browser-form-fill", action="store_true")
+    init.add_argument("--enable-post-publish-metrics-capture", action="store_true")
+    init.add_argument("--enable-comment-evidence-capture", action="store_true")
+    init.add_argument("--enable-business-attribution", action="store_true")
+    init.add_argument("--enable-metrics-recovery", action="store_true")
+    init.add_argument("--enable-next-round-optimization", action="store_true")
 
     run = subparsers.add_parser("run", help="Run jobs that are due.")
     run.add_argument("--config", required=True)
@@ -83,6 +96,12 @@ def parse_args() -> argparse.Namespace:
 def init_config(args: argparse.Namespace) -> None:
     path = Path(args.config)
     path.parent.mkdir(parents=True, exist_ok=True)
+    publish_enabled = (
+        args.enable_publish_queue
+        or args.enable_browser_publish_assistant
+        or args.enable_browser_form_fill
+    )
+    browser_publish_assistant_enabled = args.enable_browser_publish_assistant or args.enable_browser_form_fill
     job: dict[str, Any] = {
         "id": args.job_id,
         "enabled": True,
@@ -96,23 +115,38 @@ def init_config(args: argparse.Namespace) -> None:
         "autoSearchCompetitors": args.auto_search_competitors,
         "searchHtmlSnapshotDir": args.search_html_snapshot_dir,
         "followUpCapture": {
-            "enabled": False,
+            "enabled": args.run_follow_up_captures,
             "limit": 20,
             "dryRun": False,
             "captureBrowserAssisted": args.capture_browser_assisted_follow_ups,
-            "sampleVideoFrames": False,
-            "videoSampleCount": 5,
+            "sampleVideoFrames": args.sample_video_frames,
+            "videoSampleCount": args.video_sample_count,
         },
         "skipCreatorLeaderboard": args.skip_creator_leaderboard,
         "creatorFollowUp": {"enabled": args.run_creator_follow_up, "limit": 20, "topN": 5, "dryRun": args.creator_follow_up_dry_run},
-        "multiQueryViralDiscovery": {"enabled": False, "dryRun": False, "queryCount": 5, "queries": []},
+        "multiQueryViralDiscovery": {
+            "enabled": args.enable_multi_query_viral_discovery,
+            "dryRun": args.multi_query_dry_run,
+            "queryCount": 5,
+            "queries": [],
+            "runFollowUpCaptures": args.run_follow_up_captures,
+            "captureBrowserAssistedFollowUps": args.capture_browser_assisted_follow_ups,
+            "sampleVideoFrames": args.sample_video_frames,
+            "videoSampleCount": args.video_sample_count,
+        },
         "competitorInformedContent": {"enabled": not args.skip_competitor_informed_content},
         "skipVideo": args.skip_video,
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
-        "postPublishMetricsCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
+        "postPublishMetricsCapture": {
+            "enabled": args.enable_post_publish_metrics_capture,
+            "limit": 20,
+            "captureBrowserAssisted": args.capture_browser_assisted_follow_ups,
+            "publishedItemsJson": [],
+            "publishedUrls": [],
+        },
         "commentEvidenceCapture": {
-            "enabled": False,
+            "enabled": args.enable_comment_evidence_capture,
             "limit": 20,
             "platform": "auto",
             "structuredJson": "",
@@ -125,7 +159,7 @@ def init_config(args: argparse.Namespace) -> None:
             "publishedUrls": [],
         },
         "businessAttribution": {
-            "enabled": False,
+            "enabled": args.enable_business_attribution,
             "businessCsv": [],
             "businessXlsx": [],
             "businessJson": [],
@@ -134,7 +168,7 @@ def init_config(args: argparse.Namespace) -> None:
             "publishedUrls": [],
         },
         "metricsRecovery": {
-            "enabled": False,
+            "enabled": args.enable_metrics_recovery,
             "metricsCsv": [],
             "metricsXlsx": [],
             "metricsJson": [],
@@ -149,11 +183,11 @@ def init_config(args: argparse.Namespace) -> None:
             "githubRepos": [],
             "youtubeVideoIds": [],
         },
-        "nextRoundOptimization": {"enabled": False},
-        "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
-        "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
+        "nextRoundOptimization": {"enabled": args.enable_next_round_optimization},
+        "publish": {"enabled": publish_enabled, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
+        "browserPublishAssistant": {"enabled": browser_publish_assistant_enabled, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
         "browserFormFill": {
-            "enabled": False,
+            "enabled": args.enable_browser_form_fill,
             "headed": False,
             "allowLocalhost": False,
             "installBrowserIfMissing": False,

@@ -16,7 +16,10 @@ const COMMAND_LABELS = {
   skill_entry: "Skill run",
   browser_publish_session: "Publish session",
   real_evidence_inbox: "Evidence inbox",
-  final_readiness: "Readiness audit"
+  final_readiness: "Readiness audit",
+  automation_init: "Schedule init",
+  automation_run: "Scheduled run",
+  automation_windows_task: "Windows task"
 };
 
 const els = {
@@ -33,9 +36,24 @@ const els = {
   publishQueue: document.getElementById("publishQueue"),
   platformPublishUrls: document.getElementById("platformPublishUrls"),
   evidenceInbox: document.getElementById("evidenceInbox"),
+  automationConfig: document.getElementById("automationConfig"),
+  automationOutputRoot: document.getElementById("automationOutputRoot"),
+  automationJobId: document.getElementById("automationJobId"),
+  automationIntervalDays: document.getElementById("automationIntervalDays"),
+  windowsTaskScript: document.getElementById("windowsTaskScript"),
+  windowsTaskTime: document.getElementById("windowsTaskTime"),
   runFormFill: document.getElementById("runFormFill"),
   captureBrowserEvidence: document.getElementById("captureBrowserEvidence"),
   allowLocalhost: document.getElementById("allowLocalhost"),
+  autoSearchCompetitors: document.getElementById("autoSearchCompetitors"),
+  enableMultiQueryDiscovery: document.getElementById("enableMultiQueryDiscovery"),
+  browserFollowUps: document.getElementById("browserFollowUps"),
+  enablePublishQueue: document.getElementById("enablePublishQueue"),
+  enableBrowserPublishAssistant: document.getElementById("enableBrowserPublishAssistant"),
+  enableBrowserFormFill: document.getElementById("enableBrowserFormFill"),
+  enableMetricsRecovery: document.getElementById("enableMetricsRecovery"),
+  enableNextRoundOptimization: document.getElementById("enableNextRoundOptimization"),
+  alsoWindowsTask: document.getElementById("alsoWindowsTask"),
   plan: document.getElementById("plan"),
   monthlyRuns: document.getElementById("monthlyRuns"),
   deepReview: document.getElementById("deepReview"),
@@ -71,6 +89,15 @@ els.commandType.addEventListener("change", handleCommandTypeChange);
 els.runFormFill.addEventListener("change", updateEstimate);
 els.captureBrowserEvidence.addEventListener("change", updateEstimate);
 els.allowLocalhost.addEventListener("change", updateEstimate);
+els.autoSearchCompetitors.addEventListener("change", updateEstimate);
+els.enableMultiQueryDiscovery.addEventListener("change", updateEstimate);
+els.browserFollowUps.addEventListener("change", updateEstimate);
+els.enablePublishQueue.addEventListener("change", updateEstimate);
+els.enableBrowserPublishAssistant.addEventListener("change", updateEstimate);
+els.enableBrowserFormFill.addEventListener("change", updateEstimate);
+els.enableMetricsRecovery.addEventListener("change", updateEstimate);
+els.enableNextRoundOptimization.addEventListener("change", updateEstimate);
+els.alsoWindowsTask.addEventListener("change", updateEstimate);
 Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
   input.addEventListener("change", updateEstimate);
 });
@@ -129,6 +156,19 @@ function generateCommand() {
   }
   if (commandType === "final_readiness") {
     generateFinalReadinessCommand();
+    return;
+  }
+  if (commandType === "automation_init") {
+    generateAutomationInitCommand();
+    return;
+  }
+  if (commandType === "automation_run") {
+    generateAutomationRunCommand();
+    return;
+  }
+  if (commandType === "automation_windows_task") {
+    els.commandOutput.value = automationWindowsTaskCommand();
+    updateEstimate();
     return;
   }
   generateSkillEntryCommand();
@@ -229,6 +269,82 @@ function generateFinalReadinessCommand() {
   ];
   els.commandOutput.value = args.join(" ");
   updateEstimate();
+}
+
+function generateAutomationInitCommand() {
+  const url = els.productUrl.value.trim();
+  const platforms = selectedPlatforms();
+  if (!url) {
+    els.commandOutput.value = "Enter a product or website URL first.";
+    return;
+  }
+  if (!platforms.length) {
+    els.commandOutput.value = "Select at least one platform.";
+    return;
+  }
+  const args = [
+    "python scripts\\automation_scheduler.py init",
+    `--config ${quote(automationConfig())}`,
+    `--job-id ${quote(els.automationJobId.value.trim() || "product-weekly")}`,
+    `--browser-url ${quote(url)}`,
+    `--platforms ${platforms.join(",")}`,
+    `--interval-days ${positiveInt(els.automationIntervalDays.value, 7)}`,
+    `--output-root ${quote(automationOutputRoot())}`,
+    "--install-browser-if-missing"
+  ];
+  if (els.autoSearchCompetitors.checked) {
+    args.push("--auto-search-competitors");
+  }
+  if (els.enableMultiQueryDiscovery.checked) {
+    args.push("--enable-multi-query-viral-discovery");
+  }
+  if (els.browserFollowUps.checked) {
+    args.push("--run-follow-up-captures");
+    args.push("--capture-browser-assisted-follow-ups");
+    args.push("--sample-video-frames");
+  }
+  if (els.enablePublishQueue.checked) {
+    args.push("--enable-publish-queue");
+  }
+  if (els.enableBrowserPublishAssistant.checked) {
+    args.push("--enable-browser-publish-assistant");
+  }
+  if (els.enableBrowserFormFill.checked) {
+    args.push("--enable-browser-form-fill");
+  }
+  if (els.enableMetricsRecovery.checked) {
+    args.push("--enable-metrics-recovery");
+  }
+  if (els.enableNextRoundOptimization.checked) {
+    args.push("--enable-next-round-optimization");
+  }
+  const commands = [args.join(" ")];
+  if (els.alsoWindowsTask.checked) {
+    commands.push(automationWindowsTaskCommand());
+  }
+  els.commandOutput.value = commands.join("\n");
+  updateEstimate();
+}
+
+function generateAutomationRunCommand() {
+  const args = [
+    "python scripts\\automation_scheduler.py run",
+    `--config ${quote(automationConfig())}`,
+    "--force"
+  ];
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function automationWindowsTaskCommand() {
+  const args = [
+    "python scripts\\automation_scheduler.py windows-task",
+    `--config ${quote(automationConfig())}`,
+    `--out-file ${quote(els.windowsTaskScript.value.trim() || ".\\register-enhe-promotion-task.ps1")}`,
+    "--task-name \"ENHE Promotion Manager\"",
+    `--time ${quote(els.windowsTaskTime.value.trim() || "09:00")}`
+  ];
+  return args.join(" ");
 }
 
 async function copyCommand() {
@@ -352,6 +468,18 @@ function estimateCredits() {
     workflowType = "final_readiness_audit";
     creditsPerRun = 1;
   }
+  if (commandType === "automation_init") {
+    workflowType = "automation_config_init";
+    creditsPerRun = els.alsoWindowsTask.checked ? 2 : 1;
+  }
+  if (commandType === "automation_run") {
+    workflowType = "automation_due_run";
+    creditsPerRun = 4;
+  }
+  if (commandType === "automation_windows_task") {
+    workflowType = "automation_windows_task";
+    creditsPerRun = 1;
+  }
   if (commandType === "skill_entry" && els.deepReview.checked) {
     creditsPerRun += 15;
   }
@@ -368,7 +496,7 @@ function setLicenseStatus(label, className) {
 
 function handleCommandTypeChange() {
   const commandType = els.commandType.value;
-  const scope = commandType === "browser_publish_session" ? "publish" : commandType === "real_evidence_inbox" ? "evidence" : "";
+  const scope = commandScope(commandType);
   els.commandModeLabel.textContent = COMMAND_LABELS[commandType] || "Workflow";
   Array.from(document.querySelectorAll("[data-command-scope]")).forEach((node) => {
     const scopes = String(node.dataset.commandScope || "").split(/\s+/);
@@ -377,8 +505,35 @@ function handleCommandTypeChange() {
   updateEstimate();
 }
 
+function commandScope(commandType) {
+  if (commandType === "browser_publish_session") {
+    return "publish";
+  }
+  if (commandType === "real_evidence_inbox") {
+    return "evidence";
+  }
+  if (commandType === "automation_init") {
+    return "automation-init";
+  }
+  if (commandType === "automation_run") {
+    return "automation-run";
+  }
+  if (commandType === "automation_windows_task") {
+    return "automation-task";
+  }
+  return "";
+}
+
 function outDir() {
   return els.outDir.value.trim() || ".\\promotion-output";
+}
+
+function automationConfig() {
+  return els.automationConfig.value.trim() || ".\\promotion-automation.json";
+}
+
+function automationOutputRoot() {
+  return els.automationOutputRoot.value.trim() || ".\\promotion-output\\automation";
 }
 
 function parseList(value) {
@@ -390,4 +545,12 @@ function parseList(value) {
 
 function quote(value) {
   return `"${String(value).replace(/"/g, '\\"')}"`;
+}
+
+function positiveInt(value, fallback) {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+  return parsed;
 }

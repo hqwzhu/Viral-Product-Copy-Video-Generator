@@ -100,6 +100,37 @@ python scripts\publish_executor.py `
   --out-dir ".\promotion-output"
 ```
 
+## Periodic Automation
+
+Create a recurring local job:
+
+```powershell
+python scripts\automation_scheduler.py init `
+  --config ".\promotion-automation.json" `
+  --job-id "product-weekly" `
+  --browser-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --interval-days 7 `
+  --output-root ".\promotion-output\automation" `
+  --auto-search-competitors `
+  --enable-multi-query-viral-discovery `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --enable-publish-queue `
+  --enable-browser-publish-assistant `
+  --enable-metrics-recovery `
+  --enable-next-round-optimization
+```
+
+Run due jobs manually or generate a Windows Task Scheduler registration script:
+
+```powershell
+python scripts\automation_scheduler.py run --config ".\promotion-automation.json" --force
+python scripts\automation_scheduler.py windows-task --config ".\promotion-automation.json" --out-file ".\register-enhe-promotion-task.ps1" --time "09:00"
+```
+
+Scheduled jobs can prepare content, MP4s, publish queues, browser-assisted publish payloads, evidence recovery, and next-round optimization. They still cannot bypass credentials, platform review, `I_APPROVE_PUBLISH`, login, captcha, risk checks, or final browser publish review.
+
 ## Metrics And Next Round
 
 Register a real published URL:

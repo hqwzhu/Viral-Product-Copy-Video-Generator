@@ -41,6 +41,9 @@ Use `safety_multiplier = 1.6` at launch until real logs are available.
 | Browser publish session | Payload preparation, visible-field form fill coordination, screenshots, and post-publish commands | Mostly local/browser automation plus hosted state | About 0.20 USD |
 | Real evidence inbox | Normalize published URLs, metric exports, comments, orders, revenue, and next-round recovery commands | Low hosted model usage unless ENHE adds hosted analysis | About 0.35 USD |
 | Final readiness audit | Merge generated reports into the final capability matrix | No heavy hosted model call | About 0.10 USD |
+| Automation config init | Generate recurring job config and safe scheduler command pack | Low hosted model usage | About 0.10 USD |
+| Automation due run | Run one due scheduled promotion cycle with research, queue/evidence toggles, and reports | Same as a full promotion loop | About 0.80-1.40 USD before real usage logs |
+| Windows task script | Generate local Task Scheduler registration script | No hosted model call | About 0.05 USD |
 
 ## Credit Model
 
@@ -56,7 +59,9 @@ Credits prevent heavy users from creating losses.
 | Browser publish session | 2 |
 | Real evidence inbox | 2 |
 | Final readiness audit | 1 |
-| Scheduled weekly automation | Same credits as the run type |
+| Automation config init | 1 |
+| Automation due run | 4 |
+| Windows task script | 1 |
 
 Internal planning value: `1 credit = up to 0.35 USD gross cost`.
 

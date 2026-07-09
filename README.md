@@ -25,7 +25,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can import an evidence inbox, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, and webhook contract locally before a real payment backend is deployed. |
+| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands including periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, and webhook contract locally before a real payment backend is deployed. |
 
 ## Install
 
@@ -120,7 +120,7 @@ The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/
 
 - Captures the active tab URL and title.
 - Lets the user select target platforms and run depth.
-- Generates Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, and final readiness audits.
+- Generates Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts.
 - Estimates token-backed subscription usage from command type, run depth, hosted MP4, browser publish, and evidence-recovery options.
 - Stores a license key locally and can call a configurable ENHE license endpoint.
 - Opens ENHE checkout and customer billing portal URLs.
@@ -157,6 +157,15 @@ python scripts\billing_contract_simulator.py demo `
 ```
 
 The simulator writes `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json` and keeps only hashed license keys in its state file.
+
+Validate the periodic automation credit path:
+
+```powershell
+python scripts\billing_contract_simulator.py demo `
+  --plan growth `
+  --workflow-type automation_due_run `
+  --out-dir ".\promotion-output"
+```
 
 The docs include the formulas, cost assumptions, and backend usage-control contract used for the initial launch model. Recalculate the numbers from real usage logs before public launch.
 
@@ -241,6 +250,33 @@ python scripts\browser_publish_session.py `
   --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" `
   --run-form-fill `
   --out-dir ".\promotion-output"
+```
+
+Periodic automation config:
+
+```powershell
+python scripts\automation_scheduler.py init `
+  --config ".\promotion-automation.json" `
+  --job-id "product-weekly" `
+  --browser-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --interval-days 7 `
+  --output-root ".\promotion-output\automation" `
+  --auto-search-competitors `
+  --enable-multi-query-viral-discovery `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --enable-publish-queue `
+  --enable-browser-publish-assistant `
+  --enable-metrics-recovery `
+  --enable-next-round-optimization
+```
+
+Run due scheduled jobs or write a Windows Task Scheduler registration script:
+
+```powershell
+python scripts\automation_scheduler.py run --config ".\promotion-automation.json" --force
+python scripts\automation_scheduler.py windows-task --config ".\promotion-automation.json" --out-file ".\register-enhe-promotion-task.ps1" --time "09:00"
 ```
 
 Recover metrics:

@@ -34,7 +34,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, and final readiness audits. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
 To validate the paid-subscription contract locally before deploying a backend:
 
@@ -42,6 +42,15 @@ To validate the paid-subscription contract locally before deploying a backend:
 python scripts/billing_contract_simulator.py demo \
   --plan growth \
   --workflow-type research_run \
+  --out-dir "./promotion-output"
+```
+
+To validate the scheduled automation credit path locally:
+
+```bash
+python scripts/billing_contract_simulator.py demo \
+  --plan growth \
+  --workflow-type automation_due_run \
   --out-dir "./promotion-output"
 ```
 
@@ -627,13 +636,31 @@ python scripts/automation_scheduler.py init \
   --job-id "product-weekly" \
   --browser-url "https://example.com/product" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
-  --interval-days 7
+  --interval-days 7 \
+  --output-root "./promotion-output/automation" \
+  --auto-search-competitors \
+  --enable-multi-query-viral-discovery \
+  --run-follow-up-captures \
+  --capture-browser-assisted-follow-ups \
+  --enable-publish-queue \
+  --enable-browser-publish-assistant \
+  --enable-metrics-recovery \
+  --enable-next-round-optimization
 ```
 
 Then run due jobs manually or from an OS scheduler:
 
 ```bash
 python scripts/automation_scheduler.py run --config "./promotion-automation.json"
+```
+
+To generate a Windows Task Scheduler registration script:
+
+```bash
+python scripts/automation_scheduler.py windows-task \
+  --config "./promotion-automation.json" \
+  --out-file "./register-enhe-promotion-task.ps1" \
+  --time "09:00"
 ```
 
 To run an official publish action, start with a dry run:
@@ -1024,7 +1051,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `docs/final-capability-map.md`: requirement-to-capability map and remaining external gates.
 - `browser-extension/manifest.json`: Chrome MV3 extension manifest.
 - `browser-extension/billing-contract.json`: machine-readable subscription backend contract for the extension and ENHE website.
-- `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, multi-command generator, subscription estimate, license hook, and ENHE website links.
+- `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, multi-command and periodic automation generator, subscription estimate, license hook, and ENHE website links.
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
