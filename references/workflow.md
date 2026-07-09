@@ -182,6 +182,18 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
+For browser-assisted publishing in the same one-link run, provide the creator entry URL and enable visible-field form fill:
+
+```bash
+python scripts/skill_entry.py \
+  --link "https://example.com/product" \
+  --platforms xiaohongshu \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-browser-form-fill \
+  --browser-form-fill-timeout-ms 30000 \
+  --out-dir "./promotion-output"
+```
+
 This writes `reports/promotion-manager/skill-entry/skill-entry.{json,md}` after generating the real-run playbook, running the final capability runner, and refreshing the final readiness matrix. The default `--link-mode auto` treats the link as both a product candidate and a public product-discovery seed.
 
 Use the final capability runner when Codex should execute the highest-automation safe path in one command:
@@ -223,6 +235,8 @@ python scripts/real_run_playbook.py \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --github-repo owner/repo \
   --business-csv "./orders-and-revenue.csv" \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-browser-form-fill \
   --out-dir "./promotion-output"
 ```
 

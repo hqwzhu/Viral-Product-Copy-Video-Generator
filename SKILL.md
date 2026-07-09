@@ -34,6 +34,18 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
+When browser-assisted platforms have known creator entry URLs, the one-link entry can also fill visible fields and stop before final publish:
+
+```bash
+python scripts/skill_entry.py \
+  --link "https://example.com/product" \
+  --platforms xiaohongshu \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-browser-form-fill \
+  --browser-form-fill-timeout-ms 30000 \
+  --out-dir "./promotion-output"
+```
+
 `--link-mode auto` is the default. It treats the link as a product candidate and also uses the first link as a public website discovery seed, then passes product pages through Codex/browser structured intake before generation.
 
 Lower-level workflow:
@@ -80,6 +92,8 @@ python scripts/real_run_playbook.py \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --github-repo owner/repo \
   --business-csv "./orders-and-revenue.csv" \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-browser-form-fill \
   --out-dir "./promotion-output"
 ```
 

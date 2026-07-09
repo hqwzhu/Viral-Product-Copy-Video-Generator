@@ -235,7 +235,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `real-run-playbook.json` includes:
 
 - `status`: `ready`
-- `input`: product URLs, URL file, optional discovery website, platforms, targets, known published URLs, business exports, and metric snapshot source
+- `input`: product URLs, URL file, optional discovery website, platforms, targets, platform publisher URL overrides, browser form-fill request flag, known published URLs, business exports, and metric snapshot source
 - `phases[]`: ordered live-run phases with copy-ready commands, required evidence, proof targets, output paths, and approval gates
 - `evidenceChecklist[]`: concrete evidence paths for structured product snapshots, viral material, generated copy/video, publish readiness, real published URLs, real metrics, next-round optimization, and final readiness
 - `platformGates[]`: platform-specific external authorization and evidence gates

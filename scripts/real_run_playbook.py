@@ -42,6 +42,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--youtube-privacy-status", default="private", choices=["private", "public", "unlisted"])
     parser.add_argument("--youtube-category-id", default="22")
     parser.add_argument("--douyin-video-file", default="")
+    parser.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
+    parser.add_argument("--run-browser-form-fill", action="store_true", help="Include browser form-fill execution in final runner commands.")
+    parser.add_argument("--browser-form-fill-headed", action="store_true")
+    parser.add_argument("--browser-form-fill-allow-localhost", action="store_true")
+    parser.add_argument("--browser-form-fill-install-browser-if-missing", action="store_true")
+    parser.add_argument("--browser-form-fill-timeout-ms", type=int, default=30000)
+    parser.add_argument("--browser-form-fill-wait-until", default="domcontentloaded", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--business-csv", action="append", default=[], help="Business orders/revenue CSV export. Can repeat.")
     parser.add_argument("--business-xlsx", action="append", default=[], help="Business orders/revenue Excel .xlsx export. Can repeat.")
     parser.add_argument("--published-url", action="append", default=[], help="Known published URL as platform=url. Can repeat.")
@@ -77,6 +84,8 @@ def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "youtubePrivacyStatus": args.youtube_privacy_status,
             "youtubeCategoryId": args.youtube_category_id,
             "douyinVideoFile": args.douyin_video_file,
+            "platformPublishUrl": args.platform_publish_url,
+            "runBrowserFormFill": bool(args.run_browser_form_fill),
             "businessCsv": args.business_csv,
             "businessXlsx": args.business_xlsx,
             "publishedUrl": args.published_url,
@@ -172,16 +181,16 @@ def build_phases(args: argparse.Namespace, out_dir: Path, run_root: Path) -> lis
                 ),
                 command(
                     "prepare_browser_publish_payloads",
-                    [
-                        "python",
-                        "scripts/browser_publish_assistant.py",
-                        "--publish-queue",
-                        str(run_root / "reports/promotion-manager/publish-queue/publish-queue.json"),
-                        "--out-dir",
-                        str(run_root),
-                    ],
+                    browser_publish_assistant_command(args, run_root),
                     proves=["copy-ready browser/manual payloads for Zhihu, Xiaohongshu, Douyin fallback, TikTok, and similar platforms"],
                     outputs=[str(run_root / "reports/promotion-manager/browser-publish/browser-publish-assistant.json")],
+                ),
+                command(
+                    "fill_prepared_browser_publish_payload",
+                    browser_form_fill_command(args, run_root),
+                    requires=["prepared browser-publish payload JSON", "user-visible publisher entry URL"],
+                    proves=["visible publisher fields can be filled while stopping before final publish"],
+                    outputs=[str(run_root / "browser-form-fill-runs/<platform>/reports/promotion-manager/browser-publish/browser-form-fill.json")],
                 ),
                 command(
                     "build_real_evidence_setup",
@@ -426,6 +435,17 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     append_if(command, "--youtube-privacy-status", args.youtube_privacy_status)
     append_if(command, "--youtube-category-id", args.youtube_category_id)
     append_if(command, "--douyin-video-file", args.douyin_video_file)
+    append_many(command, "--platform-publish-url", args.platform_publish_url)
+    if args.run_browser_form_fill:
+        command.append("--run-browser-form-fill")
+        if args.browser_form_fill_headed:
+            command.append("--browser-form-fill-headed")
+        if args.browser_form_fill_allow_localhost:
+            command.append("--browser-form-fill-allow-localhost")
+        if args.browser_form_fill_install_browser_if_missing:
+            command.append("--browser-form-fill-install-browser-if-missing")
+        command.extend(["--browser-form-fill-timeout-ms", str(args.browser_form_fill_timeout_ms)])
+        command.extend(["--browser-form-fill-wait-until", args.browser_form_fill_wait_until])
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--published-url", args.published_url)
@@ -455,6 +475,42 @@ def publish_readiness_command(args: argparse.Namespace, run_root: Path) -> list[
     append_if(command, "--youtube-privacy-status", args.youtube_privacy_status)
     append_if(command, "--youtube-category-id", args.youtube_category_id)
     append_if(command, "--douyin-video-file", args.douyin_video_file or str(run_root / "videos/product-douyin.mp4"))
+    return command
+
+
+def browser_publish_assistant_command(args: argparse.Namespace, run_root: Path) -> list[str]:
+    command = [
+        "python",
+        "scripts/browser_publish_assistant.py",
+        "--publish-queue",
+        str(run_root / "reports/promotion-manager/publish-queue/publish-queue.json"),
+        "--out-dir",
+        str(run_root),
+    ]
+    append_many(command, "--platform-publish-url", args.platform_publish_url)
+    return command
+
+
+def browser_form_fill_command(args: argparse.Namespace, run_root: Path) -> list[str]:
+    platform = first_browser_assisted_platform(args.platforms)
+    command = [
+        "python",
+        "scripts/browser_publish_form_fill.py",
+        "--payload-json",
+        str(run_root / f"reports/promotion-manager/browser-publish/payloads/{platform}.payload.json"),
+        "--out-dir",
+        str(run_root / "browser-form-fill-runs" / platform),
+        "--timeout-ms",
+        str(args.browser_form_fill_timeout_ms),
+        "--wait-until",
+        args.browser_form_fill_wait_until,
+    ]
+    if args.browser_form_fill_headed:
+        command.append("--headed")
+    if args.browser_form_fill_allow_localhost:
+        command.append("--allow-localhost")
+    if args.browser_form_fill_install_browser_if_missing:
+        command.append("--install-browser-if-missing")
     return command
 
 
@@ -529,6 +585,14 @@ def automation_init_command(args: argparse.Namespace) -> list[str]:
     else:
         command.extend(["--browser-url", "https://example.com/product"])
     return command
+
+
+def first_browser_assisted_platform(platforms: str) -> str:
+    candidates = [item.strip().lower() for item in platforms.split(",") if item.strip()]
+    for platform in candidates:
+        if platform in {"zhihu", "xiaohongshu", "douyin", "tiktok"}:
+            return platform
+    return candidates[0] if candidates else "<platform>"
 
 
 def published_url_pairs(args: argparse.Namespace) -> list[tuple[str, str]]:

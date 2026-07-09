@@ -1556,6 +1556,107 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn(str(business_xlsx), final_command)
         self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())
 
+    def test_skill_entry_can_run_browser_form_fill_from_one_link(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="skill-entry-form-fill-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit</title><meta name="description" content="Prompt templates for launch copy."></head>
+<body><h1>AI Prompt Kit</h1><p>Turn one product URL into launch content.</p></body>
+</html>""",
+            encoding="utf-8",
+        )
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "publish.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Creator Publish Form</title></head>
+<body>
+  <form id="publish-form">
+    <input name="title" placeholder="Title">
+    <textarea name="body" placeholder="Body"></textarea>
+    <input name="tags" placeholder="Tags">
+    <input name="cover" placeholder="Cover">
+    <button id="publish" type="submit">Publish</button>
+  </form>
+  <script>
+    document.querySelector('#publish-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.body.dataset.submitted = 'yes';
+    });
+  </script>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        base_url = f"http://127.0.0.1:{server.server_address[1]}"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SKILL_ENTRY),
+                "--link",
+                product_page.as_uri(),
+                "--link-mode",
+                "product",
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-auto-search-competitors",
+                "--skip-creator-follow-up",
+                "--skip-follow-up-captures",
+                "--skip-video-sampling",
+                "--skip-video",
+                "--multi-query-dry-run",
+                "--multi-query-query-count",
+                "1",
+                "--platform-publish-url",
+                f"xiaohongshu={base_url}/publish.html",
+                "--run-browser-form-fill",
+                "--browser-form-fill-allow-localhost",
+                "--browser-form-fill-timeout-ms",
+                "10000",
+                "--skip-platform-access-audit",
+                "--skip-final-capability-audit",
+                "--skip-self-evolution-audit",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.json").read_text(encoding="utf-8"))
+        final_command = report["steps"][1]["command"]
+        self.assertIn("--run-browser-form-fill", final_command)
+        self.assertIn("--browser-form-fill-allow-localhost", final_command)
+        final_run = json.loads((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.json").read_text(encoding="utf-8"))
+        self.assertEqual(final_run["summary"]["browserFormFillRuns"], 1)
+        self.assertEqual(final_run["summary"]["browserFormFillReady"], 1)
+        fill_result = final_run["browserFormFill"][0]
+        self.assertFalse(fill_result["submitted"])
+        self.assertTrue(fill_result["finalPublishUserActionRequired"])
+        self.assertTrue(Path(fill_result["screenshot"]).exists())
+
     def test_real_run_playbook_generates_end_to_end_command_pack_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="real-run-playbook-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1576,6 +1677,14 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "./orders-and-revenue.xlsx",
                 "--published-url",
                 "github=https://github.com/owner/repo/blob/main/PROMOTION.md",
+                "--platform-publish-url",
+                "xiaohongshu=https://creator.example.test/publish",
+                "--run-browser-form-fill",
+                "--browser-form-fill-allow-localhost",
+                "--browser-form-fill-timeout-ms",
+                "12345",
+                "--browser-form-fill-wait-until",
+                "load",
                 "--out-dir",
                 str(out_dir),
             ],
@@ -1589,6 +1698,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         report = json.loads(report_text)
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["input"]["businessXlsx"], ["./orders-and-revenue.xlsx"])
+        self.assertEqual(report["input"]["platformPublishUrl"], ["xiaohongshu=https://creator.example.test/publish"])
+        self.assertTrue(report["input"]["runBrowserFormFill"])
         phase_ids = [item["id"] for item in report["phases"]]
         self.assertIn("real_full_run", phase_ids)
         self.assertIn("publish_preparation", phase_ids)
@@ -1601,8 +1712,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--capture-browser-assisted-follow-ups", commands)
         self.assertIn("--business-xlsx", commands)
         self.assertIn("./orders-and-revenue.xlsx", commands)
+        self.assertIn("--platform-publish-url", commands)
+        self.assertIn("xiaohongshu=https://creator.example.test/publish", commands)
+        self.assertIn("--run-browser-form-fill", commands)
+        self.assertIn("--browser-form-fill-timeout-ms 12345", commands)
+        self.assertIn("--wait-until load", commands)
         self.assertIn("--multi-query-run-follow-up-captures", commands)
         self.assertIn("scripts/publish_setup_assistant.py", commands)
+        self.assertIn("scripts/browser_publish_form_fill.py", commands)
         self.assertIn("scripts/metrics_recovery.py", commands)
         approvals = {command["approvalRequired"] for phase in report["phases"] for command in phase["commands"] if command["approvalRequired"]}
         self.assertEqual(approvals, {"I_APPROVE_PUBLISH", "I_APPROVE_SKILL_SYNC"})

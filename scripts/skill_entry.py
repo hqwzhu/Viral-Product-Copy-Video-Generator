@@ -87,6 +87,11 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--douyin-video-file", default="")
     publish.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
     publish.add_argument("--run-browser-form-fill", action="store_true", help="Fill visible publisher fields and stop before final publish.")
+    publish.add_argument("--browser-form-fill-headed", action="store_true")
+    publish.add_argument("--browser-form-fill-allow-localhost", action="store_true")
+    publish.add_argument("--browser-form-fill-install-browser-if-missing", action="store_true")
+    publish.add_argument("--browser-form-fill-timeout-ms", type=int, default=30000)
+    publish.add_argument("--browser-form-fill-wait-until", default="domcontentloaded", choices=["load", "domcontentloaded", "networkidle"])
 
     evidence = parser.add_argument_group("Real evidence recovery")
     evidence.add_argument("--published-url", action="append", default=[], help="Known real published URL as platform=url.")
@@ -213,6 +218,14 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
     append_many(command, "--platform-publish-url", args.platform_publish_url)
     if args.run_browser_form_fill:
         command.append("--run-browser-form-fill")
+        if args.browser_form_fill_headed:
+            command.append("--browser-form-fill-headed")
+        if args.browser_form_fill_allow_localhost:
+            command.append("--browser-form-fill-allow-localhost")
+        if args.browser_form_fill_install_browser_if_missing:
+            command.append("--browser-form-fill-install-browser-if-missing")
+        command.extend(["--browser-form-fill-timeout-ms", str(args.browser_form_fill_timeout_ms)])
+        command.extend(["--browser-form-fill-wait-until", args.browser_form_fill_wait_until])
 
     append_many(command, "--published-url", args.published_url)
     append_many(command, "--business-csv", args.business_csv)
