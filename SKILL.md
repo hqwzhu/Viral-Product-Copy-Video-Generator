@@ -61,6 +61,16 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
+When the user has multiple real evidence files, put them into one folder and run the inbox orchestrator:
+
+```bash
+python scripts/real_evidence_inbox.py \
+  --inbox-dir "./promotion-evidence-inbox" \
+  --out-dir "./promotion-output"
+```
+
+The inbox can contain `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, JSON/text variants, or an optional `inbox-manifest.json` with explicit roles. The script registers real published URLs, imports metrics, captures comment demand signals, attributes orders/revenue, runs metrics recovery, and generates next-round recommendations.
+
 When browser-assisted platforms have known creator entry URLs, the one-link entry can also fill visible fields and stop before final publish:
 
 ```bash
@@ -821,6 +831,7 @@ The command writes:
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` turns readiness into credential names, target requirements, official setup references, approval gates, and next commands without storing secret values.
 - `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, `templates/*`, and `commands/import-real-evidence.ps1` when `scripts/real_evidence_setup.py` creates fillable platform metrics, comment, published URL, and business attribution evidence templates.
+- `reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.{json,md}` and normalized helper files when `scripts/real_evidence_inbox.py` scans a local evidence folder, registers published URLs, imports metrics/comments/orders/revenue, and runs next-round optimization.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries. With `--check-live`, it also records official documentation reachability, UTC check time, `learningFreshness`, and `officialDocGapResearch` so missing official sources stay on safe manual/browser/export fallbacks instead of being treated as automation-ready.
@@ -963,6 +974,7 @@ If no real data exists, output `waiting_real_data`. Never estimate or fabricate 
 Excel `.xlsx` platform and business exports are valid real-data inputs through `metrics_intake.py --xlsx-file`, `metrics_recovery.py --metrics-xlsx`, and `metrics_recovery.py --business-xlsx`.
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. It parses visible English/Chinese metric labels and common units/currency (`12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, `￥88.00`) from text and structured snapshots. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
+Use `scripts/real_evidence_inbox.py` when the user has a folder of real evidence files from several platforms. It discovers or reads an optional `inbox-manifest.json`, normalizes published URL evidence, then orchestrates `published_items.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py`, and `next_round_optimizer.py`.
 Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.
 Run `scripts/comment_evidence_capture.py` after real published URLs or visible comment exports exist. It extracts public/browser-visible comments, likes/replies per comment when visible, and demand signals such as questions, pricing objections, integrations, feature requests, pain points, and CTA intent. Treat its manual evidence requests as missing evidence, not recovered comments.
 Run `scripts/business_attribution.py` when orders or revenue are exported from a business system with UTM fields, referrers, content IDs, or campaign/title fields. It attributes only rows that match proven published content and leaves weak platform-only rows unmatched.
@@ -1026,6 +1038,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/metric_parsing.py`: shared visible metric label and number parser for English/Chinese labels, `k/m/b`, `万/亿/千/百`, and common currency symbols.
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
+- `scripts/real_evidence_inbox.py`: local evidence inbox orchestrator that discovers published URL, metric, comment, order, and revenue files, runs the recovery scripts, and writes a single manager-facing report.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
 - `scripts/publish_url_capture.py`: post-publish browser snapshot/HTML/text capturer that registers real published URLs.
 - `scripts/post_publish_metrics_capture.py`: public/browser-visible post-publish metrics capturer for registered URLs; writes a metrics export for recovery and manual evidence requests when metrics are hidden.

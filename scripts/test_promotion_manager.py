@@ -40,6 +40,7 @@ PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 PUBLISH_SETUP_ASSISTANT = ROOT / "scripts" / "publish_setup_assistant.py"
 REAL_EVIDENCE_SETUP = ROOT / "scripts" / "real_evidence_setup.py"
+REAL_EVIDENCE_INBOX = ROOT / "scripts" / "real_evidence_inbox.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
@@ -5963,6 +5964,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
+        self.assertTrue(report["scripts"]["real_evidence_inbox"]["exists"])
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
@@ -5978,6 +5980,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser_publish_form_fill.py", publish_evidence)
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
+        self.assertIn("real_evidence_inbox.py", metrics_evidence)
         optimization_evidence = "\n".join(by_requirement["retrospective_next_round_optimization"]["evidence"])
         self.assertIn("next_round_optimizer.py", optimization_evidence)
         docs_evidence = "\n".join(by_requirement["github_documentation_and_install_tutorial"]["evidence"]).replace("\\", "/")
@@ -6011,6 +6014,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "load_browser_extension" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "billing_contract_simulator_demo" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "import_real_evidence_inbox" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "optimize_next_round_from_recovered_evidence" for item in report["recommendedCommands"]))
@@ -6249,6 +6253,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "import_real_evidence_inbox" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
@@ -7186,6 +7191,82 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["aggregates"]["totals"]["orders"], 2.0)
         self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 120.0)
         self.assertEqual(recovery["recoveryStatus"], "ready")
+
+    def test_real_evidence_inbox_runs_recovery_and_next_round_from_inbox_files(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="real-evidence-inbox-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        inbox_dir = out_dir / "inbox"
+        inbox_dir.mkdir()
+        (inbox_dir / "published-urls.csv").write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,contentId,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,xhs-note-123,published-screenshot.png",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (inbox_dir / "metrics.csv").write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,comments,favorites,shares,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,3000,380,24,90,15,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (inbox_dir / "comments.txt").write_text(
+            "\n".join(
+                [
+                    "Comment by Ada: Can this integrate with Notion API? likes: 5 replies: 1",
+                    "Comment by Ben: Pricing looks good, where can I try the demo?",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (inbox_dir / "orders.csv").write_text(
+            "\n".join(
+                [
+                    "orderId,utm_source,utm_content,referrer,revenue,status",
+                    "order-1,xiaohongshu,xhs-note-123,,88.00,paid",
+                    "order-2,email,unknown,,50.00,paid",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(REAL_EVIDENCE_INBOX),
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+                "--skip-post-publish-capture",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        inbox_report = json.loads((out_dir / "reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.json").read_text(encoding="utf-8"))
+        self.assertEqual(inbox_report["status"], "ready")
+        self.assertEqual(inbox_report["coverage"]["publishedRecords"], 1)
+        self.assertEqual(inbox_report["coverage"]["recordsWithMetrics"], 1)
+        self.assertEqual(inbox_report["coverage"]["commentCount"], 2)
+        self.assertEqual(inbox_report["coverage"]["matchedBusinessRows"], 1)
+        self.assertEqual(inbox_report["coverage"]["attributedOrders"], 1.0)
+        self.assertEqual(inbox_report["coverage"]["attributedRevenue"], 88.0)
+        self.assertGreater(inbox_report["coverage"]["nextRoundContent"], 0)
+        step_statuses = {step["id"]: step["status"] for step in inbox_report["steps"]}
+        self.assertEqual(step_statuses["published_items"], "ready")
+        self.assertEqual(step_statuses["comment_evidence_capture"], "ready")
+        self.assertEqual(step_statuses["business_attribution"], "ready")
+        self.assertEqual(step_statuses["metrics_recovery"], "ready")
+        self.assertEqual(step_statuses["next_round_optimizer"], "ready")
+        self.assertTrue((out_dir / "reports/promotion-manager/published-items/published-items.json").exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/comment-evidence/comment-evidence-export.json").exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json").exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/optimization/next-round-optimization.json").exists())
 
     def test_publish_executor_github_dry_run_requires_explicit_execution(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-test-"))

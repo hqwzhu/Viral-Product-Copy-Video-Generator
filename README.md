@@ -23,7 +23,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
 | Copy and video generation | Ready | Platform-native copy and ffmpeg MP4 rendering are included. Voiceover can use an audio file or Windows review-quality TTS. |
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. |
-| Metrics and revenue | Waiting for real evidence | The Skill can import and recover real data, but it cannot invent published URLs, platform metrics, orders, or revenue. |
+| Metrics and revenue | Waiting for real evidence | The Skill can import an evidence inbox, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
 | Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, and webhook contract locally before a real payment backend is deployed. |
 
@@ -103,6 +103,16 @@ python scripts\final_capability_audit.py --out-dir ".\promotion-output"
 python scripts\self_evolution_audit.py --out-dir ".\promotion-output"
 python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 ```
+
+After publishing, put real evidence files into a local inbox and recover the loop:
+
+```powershell
+python scripts\real_evidence_inbox.py `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+The inbox can contain files such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, or an optional `inbox-manifest.json` with explicit file roles. The runner registers real published URLs, imports visible/exported metrics, captures comment demand signals, attributes orders/revenue, and runs the next-round optimizer.
 
 ## Browser Extension
 
@@ -229,6 +239,15 @@ Recover metrics:
 python scripts\metrics_recovery.py `
   --metrics-json ".\promotion-output\reports\promotion-manager\post-publish-capture\post-publish-metrics-export.json" `
   --business-csv ".\orders-and-revenue.csv" `
+  --out-dir ".\promotion-output"
+```
+
+Recover a whole real-evidence inbox:
+
+```powershell
+python scripts\real_evidence_inbox.py `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --skip-post-publish-capture `
   --out-dir ".\promotion-output"
 ```
 

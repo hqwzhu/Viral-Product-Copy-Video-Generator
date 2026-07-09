@@ -52,6 +52,7 @@ SCRIPT_REQUIREMENTS = {
     "post_publish_metrics_capture": "post_publish_metrics_capture.py",
     "comment_evidence_capture": "comment_evidence_capture.py",
     "business_attribution": "business_attribution.py",
+    "real_evidence_inbox": "real_evidence_inbox.py",
     "metrics_intake": "metrics_intake.py",
     "metric_parsing": "metric_parsing.py",
     "metrics_recovery": "metrics_recovery.py",
@@ -392,6 +393,7 @@ def requirement_status(
             "post_publish_metrics_capture",
             "comment_evidence_capture",
             "business_attribution",
+            "real_evidence_inbox",
             "metrics_intake",
             "metric_parsing",
             "metrics_recovery",
@@ -496,6 +498,7 @@ def requirement_status(
                     "post_publish_metrics_capture",
                     "comment_evidence_capture",
                     "business_attribution",
+                    "real_evidence_inbox",
                     "metrics_intake",
                     "metric_parsing",
                     "metrics_recovery",
@@ -944,6 +947,13 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/metrics_recovery.py --metrics-json "
                 f"\"{out_dir}/reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "import_real_evidence_inbox",
+            "command": (
+                f"python scripts/real_evidence_inbox.py --inbox-dir \"./promotion-evidence-inbox\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {

@@ -8,7 +8,7 @@ This file maps the user's target requirements to the current Skill capability an
 | Parse all product URLs after Codex reads pages | `browser_snapshot.py`, `product_url_discovery.py`, `product_url_reader.py`, `product_batch_runner.py`, `product_intake.py` | Playwright browser runtime for dynamic pages |
 | Generate copy and real video files | `promotion_manager.py`, `competitor_content_enhancer.py`, `render_video.py` | ffmpeg for MP4 output, optional voiceover file |
 | Auto-publish where possible, otherwise semi-auto | `publish_queue.py`, `publish_readiness_runner.py`, `publish_executor.py`, `youtube_oauth_publish.py`, `browser_publish_assistant.py`, `browser_publish_form_fill.py` | Credentials, app review, authorization, explicit `I_APPROVE_PUBLISH`, manual final publish for browser-assisted platforms |
-| Recover real views, likes, comments, orders, revenue | `published_items.py`, `publish_url_capture.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py` | Real published URLs, official metrics credentials, screenshots, exports, business-system data |
+| Recover real views, likes, comments, orders, revenue | `real_evidence_inbox.py`, `published_items.py`, `publish_url_capture.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py` | Real published URLs, official metrics credentials, screenshots, exports, business-system data |
 | Self-evolve | `final_capability_audit.py`, `platform_access_audit.py`, `self_evolution_audit.py` | Only allowlisted runtime installs and approved Skill sync. No silent unreviewed self-replacement |
 | Sync installed Codex Skill | `self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC` | Explicit approval and reviewed clean files |
 | GitHub docs, intro, usage, install tutorial | `README.md` and `docs/*.md` | Keep docs updated with each capability change |
@@ -23,3 +23,15 @@ python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 ```
 
 The readiness status can remain partial when the blocker is external platform authorization or missing real metrics. That is expected and safer than fabricating readiness.
+
+## Real Evidence Inbox
+
+After a real publishing round, put exported evidence into `promotion-evidence-inbox` and run:
+
+```powershell
+python scripts\real_evidence_inbox.py `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+The runner accepts published URL lists, platform metric exports/snapshots, visible comment evidence, and order/revenue exports. It orchestrates the existing safe recovery scripts and writes `reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.json`.
