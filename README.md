@@ -22,7 +22,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Product URL reading | Ready | Browser snapshots, structured JSON intake, static fallback, URL discovery, and batch runner are included. |
 | Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
 | Copy and video generation | Ready | Platform-native copy and ffmpeg MP4 rendering are included. Voiceover can use an audio file or Windows review-quality TTS. |
-| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. |
+| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can import an evidence inbox, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
 | Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, and webhook contract locally before a real payment backend is deployed. |
@@ -230,6 +230,16 @@ Browser-assisted publishing payloads:
 ```powershell
 python scripts\browser_publish_assistant.py `
   --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --out-dir ".\promotion-output"
+```
+
+Browser-assisted publish session with visible-field fill and no final publish click:
+
+```powershell
+python scripts\browser_publish_session.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" `
+  --run-form-fill `
   --out-dir ".\promotion-output"
 ```
 

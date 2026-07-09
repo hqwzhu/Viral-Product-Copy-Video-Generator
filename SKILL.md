@@ -708,6 +708,16 @@ python scripts/browser_publish_assistant.py \
   --out-dir "./promotion-output"
 ```
 
+To run one browser-assisted publish session that prepares payloads, optionally fills visible fields, writes screenshots, and stops before final publish:
+
+```bash
+python scripts/browser_publish_session.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" \
+  --run-form-fill \
+  --out-dir "./promotion-output"
+```
+
 To fill visible publisher form fields from one prepared payload and stop before final publish:
 
 ```bash
@@ -834,6 +844,7 @@ The command writes:
 - `reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.{json,md}` and normalized helper files when `scripts/real_evidence_inbox.py` scans a local evidence folder, registers published URLs, imports metrics/comments/orders/revenue, and runs next-round optimization.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
+- `reports/promotion-manager/browser-publish-session/browser-publish-session.{json,md}` and per-platform form-fill reports when `scripts/browser_publish_session.py` orchestrates payload preparation, optional visible-field fill, screenshots, final publish checklist, and post-publish evidence commands.
 - `reports/promotion-manager/platform-access/platform-access-audit.{json,md}` when `scripts/platform_access_audit.py` maps official API, app-review, manual/browser-assisted, and metrics access boundaries. With `--check-live`, it also records official documentation reachability, UTC check time, `learningFreshness`, and `officialDocGapResearch` so missing official sources stay on safe manual/browser/export fallbacks instead of being treated as automation-ready.
 - `reports/promotion-manager/publish-capture/publish-url-capture.{json,md}` when `scripts/publish_url_capture.py` captures a browser-visible published page and registers the real URL.
 - `reports/promotion-manager/published-items/published-items.{json,md}` when `scripts/published_items.py` registers proven published URLs from queue execution reports or manual evidence.
@@ -1051,6 +1062,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/real_evidence_setup.py`: publish-queue-to-evidence-kit generator that writes platform metric, comment, published URL, business attribution, structured snapshot templates, and safe import commands without storing secrets or fabricating data.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
 - `scripts/browser_publish_form_fill.py`: controlled Playwright helper that fills visible publisher fields from a prepared payload, screenshots the result, and stops before final publish.
+- `scripts/browser_publish_session.py`: session-level browser-assisted publisher that runs payload preparation, optional visible-field form fill, screenshots, final user-action checklist, URL registration commands, and evidence inbox command.
 - `scripts/platform_access_audit.py`: official access boundary auditor for platform publishing, metrics recovery, app-review requirements, and manual/browser-assisted fallback rules.
 - `scripts/publish_executor.py`: approved official publish executor for GitHub, YouTube, and Douyin Open Platform video upload/create.
 - `scripts/youtube_oauth_publish.py`: YouTube OAuth consent and same-process upload helper.

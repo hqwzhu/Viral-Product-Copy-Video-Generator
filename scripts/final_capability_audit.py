@@ -44,6 +44,7 @@ SCRIPT_REQUIREMENTS = {
     "publish_setup_assistant": "publish_setup_assistant.py",
     "browser_publish_assistant": "browser_publish_assistant.py",
     "browser_publish_form_fill": "browser_publish_form_fill.py",
+    "browser_publish_session": "browser_publish_session.py",
     "platform_access_audit": "platform_access_audit.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
@@ -381,6 +382,7 @@ def requirement_status(
             "publish_readiness",
             "browser_publish_assistant",
             "browser_publish_form_fill",
+            "browser_publish_session",
             "publish_executor",
             "youtube_oauth_publish",
         ],
@@ -474,6 +476,7 @@ def requirement_status(
                     "publish_setup_assistant",
                     "browser_publish_assistant",
                     "browser_publish_form_fill",
+                    "browser_publish_session",
                     "publish_executor",
                     "youtube_oauth_publish",
                 ],
@@ -929,6 +932,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/browser_publish_assistant.py --publish-queue "
                 f"\"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "run_browser_publish_session",
+            "command": (
+                f"python scripts/browser_publish_session.py --publish-queue "
+                f"\"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" "
+                f"--run-form-fill --out-dir \"{out_dir}\""
             ),
         },
         {

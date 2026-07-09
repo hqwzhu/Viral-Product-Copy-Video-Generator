@@ -76,6 +76,16 @@ python scripts\browser_publish_assistant.py `
   --out-dir ".\promotion-output"
 ```
 
+Run a browser-assisted publish session. This prepares payloads, optionally fills visible fields, writes screenshots, and stops before the final publish action:
+
+```powershell
+python scripts\browser_publish_session.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" `
+  --run-form-fill `
+  --out-dir ".\promotion-output"
+```
+
 Official publishing only runs when credentials, targets, and approval are present:
 
 ```powershell

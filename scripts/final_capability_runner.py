@@ -965,6 +965,10 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
         },
         {
+            "purpose": "run_browser_publish_session",
+            "command": f"python scripts/browser_publish_session.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --run-form-fill --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+        },
+        {
             "purpose": "prepare_real_evidence_templates",
             "command": f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
         },

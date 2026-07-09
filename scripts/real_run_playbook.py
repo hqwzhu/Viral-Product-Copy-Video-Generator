@@ -212,6 +212,12 @@ def build_phases(args: argparse.Namespace, out_dir: Path, run_root: Path) -> lis
                     outputs=[str(run_root / "reports/promotion-manager/browser-publish/browser-publish-assistant.json")],
                 ),
                 command(
+                    "run_browser_publish_session",
+                    browser_publish_session_command(args, run_root),
+                    proves=["payload preparation, visible-field fill where possible, screenshots, final user-action checklist, and post-publish evidence commands"],
+                    outputs=[str(run_root / "reports/promotion-manager/browser-publish-session/browser-publish-session.json")],
+                ),
+                command(
                     "fill_prepared_browser_publish_payload",
                     browser_form_fill_command(args, run_root),
                     requires=["prepared browser-publish payload JSON", "user-visible publisher entry URL"],
@@ -569,6 +575,29 @@ def browser_publish_assistant_command(args: argparse.Namespace, run_root: Path) 
         str(run_root),
     ]
     append_many(command, "--platform-publish-url", args.platform_publish_url)
+    return command
+
+
+def browser_publish_session_command(args: argparse.Namespace, run_root: Path) -> list[str]:
+    command = [
+        "python",
+        "scripts/browser_publish_session.py",
+        "--publish-queue",
+        str(run_root / "reports/promotion-manager/publish-queue/publish-queue.json"),
+        "--out-dir",
+        str(run_root),
+    ]
+    append_many(command, "--platform-publish-url", args.platform_publish_url)
+    if args.run_browser_form_fill:
+        command.append("--run-form-fill")
+        if args.browser_form_fill_headed:
+            command.append("--headed")
+        if args.browser_form_fill_allow_localhost:
+            command.append("--allow-localhost")
+        if args.browser_form_fill_install_browser_if_missing:
+            command.append("--install-browser-if-missing")
+        command.extend(["--timeout-ms", str(args.browser_form_fill_timeout_ms)])
+        command.extend(["--wait-until", args.browser_form_fill_wait_until])
     return command
 
 

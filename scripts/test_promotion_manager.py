@@ -43,6 +43,7 @@ REAL_EVIDENCE_SETUP = ROOT / "scripts" / "real_evidence_setup.py"
 REAL_EVIDENCE_INBOX = ROOT / "scripts" / "real_evidence_inbox.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
+BROWSER_PUBLISH_SESSION = ROOT / "scripts" / "browser_publish_session.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 POST_PUBLISH_METRICS_CAPTURE = ROOT / "scripts" / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
@@ -1844,6 +1845,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--wait-until load", commands)
         self.assertIn("--multi-query-run-follow-up-captures", commands)
         self.assertIn("scripts/publish_setup_assistant.py", commands)
+        self.assertIn("scripts/browser_publish_session.py", commands)
         self.assertIn("scripts/browser_publish_form_fill.py", commands)
         self.assertIn("scripts/metrics_recovery.py", commands)
         approvals = {command["approvalRequired"] for phase in report["phases"] for command in phase["commands"] if command["approvalRequired"]}
@@ -5961,6 +5963,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["publish_setup_assistant"]["exists"])
         self.assertTrue(report["scripts"]["browser_publish_assistant"]["exists"])
         self.assertTrue(report["scripts"]["browser_publish_form_fill"]["exists"])
+        self.assertTrue(report["scripts"]["browser_publish_session"]["exists"])
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
@@ -5978,6 +5981,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         publish_evidence = "\n".join(by_requirement["all_platform_auto_publish"]["evidence"])
         self.assertIn("publish_setup_assistant.py", publish_evidence)
         self.assertIn("browser_publish_form_fill.py", publish_evidence)
+        self.assertIn("browser_publish_session.py", publish_evidence)
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
         self.assertIn("real_evidence_inbox.py", metrics_evidence)
@@ -5993,6 +5997,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["billing_contract_simulator"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "run_browser_publish_session" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
         self.assertTrue(
@@ -6254,6 +6259,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "import_real_evidence_inbox" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "run_xiaohongshu_browser_publish_session" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
@@ -7761,6 +7767,135 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(filled["coverText"]["value"], "Launch faster")
         self.assertTrue(Path(report["artifacts"]["screenshot"]).exists())
         self.assertTrue((out_dir / "reports/promotion-manager/browser-publish/browser-form-fill.md").exists())
+
+    def test_browser_publish_session_runs_payloads_and_form_fill_without_submit(self) -> None:
+        if not playwright_chromium_available():
+            self.skipTest("Playwright Chromium is not installed")
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-publish-session-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "publish.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>Creator Publish Form</title></head>
+<body>
+  <form id="publish-form">
+    <input name="title" placeholder="Title">
+    <textarea name="body" placeholder="Body"></textarea>
+    <input name="tags" placeholder="Tags">
+    <input name="cover" placeholder="Cover">
+    <button id="publish" type="submit">Publish</button>
+  </form>
+  <script>
+    document.querySelector('#publish-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.body.dataset.submitted = 'yes';
+    });
+  </script>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        queue_dir = out_dir / "reports/promotion-manager/publish-queue"
+        drafts_dir = queue_dir / "drafts"
+        drafts_dir.mkdir(parents=True)
+        draft_path = drafts_dir / "xiaohongshu-draft.md"
+        draft_path.write_text(
+            "\n".join(
+                [
+                    "# xiaohongshu Publish Draft",
+                    "",
+                    "- Title: 3 steps to launch AI content",
+                    "- CTA: Try the product",
+                    "- Cover text: Launch faster",
+                    "- Tags: #AI #ProductLaunch",
+                    "",
+                    "## Description",
+                    "",
+                    "Use one product URL to prepare platform-native launch content.",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        queue_path = queue_dir / "publish-queue.json"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "status": "queued_browser_assisted",
+                            "publishMode": "browser_assisted_publish",
+                            "contentDraft": str(draft_path),
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/product?utm_source=xiaohongshu&utm_medium=social&utm_campaign=launch&utm_content=launch-xhs"
+                            },
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        publisher_url = f"http://127.0.0.1:{server.server_address[1]}/publish.html"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BROWSER_PUBLISH_SESSION),
+                "--publish-queue",
+                str(queue_path),
+                "--platforms",
+                "xiaohongshu",
+                "--platform-publish-url",
+                f"xiaohongshu={publisher_url}",
+                "--run-form-fill",
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/browser-publish-session/browser-publish-session.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready_form_fill_completed")
+        self.assertEqual(report["summary"]["payloadsPrepared"], 1)
+        self.assertEqual(report["summary"]["formFillReady"], 1)
+        self.assertEqual(report["summary"]["submitted"], 0)
+        self.assertEqual(report["summary"]["finalPublishUserActionRequired"], 1)
+        self.assertTrue(Path(report["assistant"]["report"]).exists())
+        record = report["records"][0]
+        self.assertEqual(record["platform"], "xiaohongshu")
+        self.assertTrue(Path(record["payloadJson"]).exists())
+        self.assertTrue(Path(record["clipboard"]).exists())
+        self.assertIn("published_items.py", record["registerPublishedUrlCommand"])
+        self.assertIn("publish_url_capture.py", record["capturePublishedUrlCommand"])
+        self.assertEqual(record["formFill"]["status"], "ready")
+        self.assertFalse(record["formFill"]["submitted"])
+        self.assertTrue(record["formFill"]["finalPublishUserActionRequired"])
+        self.assertTrue(Path(record["formFill"]["report"]).exists())
+        self.assertTrue(Path(record["formFill"]["screenshot"]).exists())
+        filled = {item["field"]: item for item in record["formFill"]["filledFields"]}
+        self.assertEqual(filled["title"]["value"], "3 steps to launch AI content")
+        self.assertIn("Use one product URL", filled["body"]["value"])
+        self.assertIn("real_evidence_inbox.py", report["postPublish"]["realEvidenceInboxCommand"])
+        self.assertTrue((out_dir / "reports/promotion-manager/browser-publish-session/browser-publish-session.md").exists())
 
     def test_publish_readiness_runner_audits_queue_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-test-"))

@@ -641,9 +641,24 @@ def publish_actions(out_dir: Path, readiness_reports: list[dict[str, Any]], setu
                 actions.append(action(50, f"execute_{platform}_when_approved", f"Execute {platform} only after credentials, target, and approval are ready.", commands["executeWhenReady"], approval="I_APPROVE_PUBLISH"))
             if commands.get("prepareBrowserPublish"):
                 actions.append(action(51, f"prepare_{platform}_browser_publish", f"Prepare browser/manual publish payloads for {platform}.", commands["prepareBrowserPublish"]))
+                actions.append(
+                    action(
+                        52,
+                        f"run_{platform}_browser_publish_session",
+                        f"Run a browser-assisted publish session for {platform}, fill visible fields where possible, and stop before final publish.",
+                        browser_publish_session_command(commands["prepareBrowserPublish"]),
+                    )
+                )
     if not actions and readiness_reports:
         actions.append(action(40, "build_publish_setup_kit", "Build publish setup kit from readiness reports.", f"python scripts/publish_setup_assistant.py --out-dir \"{out_dir}\""))
     return actions
+
+
+def browser_publish_session_command(prepare_command: str) -> str:
+    command = prepare_command.replace("browser_publish_assistant.py", "browser_publish_session.py")
+    if "--run-form-fill" not in command:
+        command = f"{command} --run-form-fill"
+    return command
 
 
 def action(priority: int, action_id: str, description: str, command: str, approval: str = "") -> dict[str, Any]:
@@ -731,6 +746,10 @@ def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
         {
             "step": "prepare_browser_publish",
             "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\"",
+        },
+        {
+            "step": "run_browser_publish_session",
+            "command": f"python scripts/browser_publish_session.py --publish-queue \"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --run-form-fill --out-dir \"{out_dir}\"",
         },
         {
             "step": "recover_real_metrics",

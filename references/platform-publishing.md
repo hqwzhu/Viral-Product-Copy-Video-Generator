@@ -34,6 +34,8 @@ Publishing capabilities are time-sensitive. Refresh official docs before impleme
 
 `scripts/browser_publish_assistant.py` prepares payload JSON, clipboard text, checklist files, and a copy-ready `scripts/browser_publish_form_fill.py` command for manual/browser-assisted platforms. `scripts/browser_publish_form_fill.py` may fill visible form fields from one payload and write a screenshot/report, but it must not login, bypass challenges, or click the final publish/submit button.
 
+`scripts/browser_publish_session.py` is the manager-facing wrapper for that semi-automatic path. It runs the assistant, optionally runs visible-field form fill for each prepared payload, writes per-platform screenshots/reports, and returns URL registration plus evidence inbox commands for after the user performs the final publish action.
+
 `scripts/publish_readiness_runner.py` audits an existing queue or builds one first with `--build-queue`. It reports per-platform readiness, missing target fields, credential presence by environment variable name, approval status, and next actions. It does not store secret values and does not bypass the explicit approval gate.
 
 `scripts/publish_setup_assistant.py` converts a readiness report into a setup kit: platform credential environment variable names, missing targets, official setup references, required capabilities, approval gates, safe rerun/execution commands, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}`. The env file is a template only and must not contain real secrets.
