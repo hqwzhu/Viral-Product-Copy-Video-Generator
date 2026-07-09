@@ -415,6 +415,10 @@ def requirement_status(
         scripts,
         ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "skill_entry", "final_capability_runner", "next_round_optimizer"],
     )
+    phase_reporting_ready = scripts_ready(
+        scripts,
+        ["real_run_playbook", "skill_entry", "final_capability_runner", "final_capability_readiness"],
+    )
     docs = github_docs_status()
     extension = browser_extension_status()
     full_platform_publish_ready = all(
@@ -576,6 +580,25 @@ def requirement_status(
                 "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, and reserve hosted usage credits; the local simulator proves the contract shape for license, usage, and webhook flows.",
                 "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
+            ],
+        },
+        {
+            "id": "phase_progress_reporting",
+            "label": "Report progress after each stage with completed goals, unfinished goals, next plan, and estimated remaining time",
+            "status": "ready" if phase_reporting_ready else "partial_ready",
+            "evidence": scripts_present(
+                scripts,
+                ["real_run_playbook", "skill_entry", "final_capability_runner", "final_capability_readiness"],
+            ),
+            "missing": []
+            if phase_reporting_ready
+            else missing_for_scripts(
+                scripts,
+                ["real_run_playbook", "skill_entry", "final_capability_runner", "final_capability_readiness"],
+            ),
+            "limits": [
+                "Progress reports are generated from completed local stages and evidence paths.",
+                "Time estimates are planning estimates; platform review, account authorization, and real metrics arrival can change them.",
             ],
         },
         {

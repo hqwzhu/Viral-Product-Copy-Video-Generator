@@ -11,7 +11,7 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-The entry script builds a real-run playbook, runs the final capability runner, and writes a readiness matrix.
+The entry script builds a real-run playbook, runs the final capability runner, and writes a readiness matrix. After each major stage, use `reports\promotion-manager\final-readiness\final-capability-readiness.md` as the phase progress report: current stage, completed goals, unfinished goals, next plan, and estimated remaining time.
 
 ## Website URL With Product Discovery
 

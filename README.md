@@ -107,6 +107,8 @@ python scripts\self_evolution_audit.py --out-dir ".\promotion-output"
 python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 ```
 
+Use `reports\promotion-manager\final-readiness\final-capability-readiness.md` as the phase progress report after each major stage. It should cover the current stage, completed goals, unfinished goals, next plan, and estimated remaining time.
+
 Build one launch unlock pack for platform access, publish setup, browser-assisted publishing, and real evidence collection:
 
 ```powershell

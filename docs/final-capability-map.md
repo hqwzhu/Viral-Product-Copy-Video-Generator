@@ -13,6 +13,7 @@ This file maps the user's target requirements to the current Skill capability an
 | Sync installed Codex Skill | `self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC` | Explicit approval and reviewed clean files |
 | GitHub docs, intro, usage, install tutorial | `README.md` and `docs/*.md` | Keep docs updated with each capability change |
 | Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, usage credit reservation, hosted run payload/endpoint handoff, one-link run command, browser publish session command, launch unlock pack command, evidence inbox setup/import commands, performance monitor command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, usage commit, hosted worker fleet, and admin operations |
+| Phase progress reporting | `real_run_playbook.py`, `skill_entry.py`, `final_capability_runner.py`, `final_capability_readiness.py` | Estimates can change when platform review, account authorization, publishing, or real metric exports are delayed |
 
 ## Acceptance Command
 
@@ -23,6 +24,18 @@ python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 ```
 
 The readiness status can remain partial when the blocker is external platform authorization or missing real metrics. That is expected and safer than fabricating readiness.
+
+## Phase Progress Reporting
+
+After every major stage, report:
+
+- Current stage
+- Completed goals
+- Unfinished goals
+- Next plan
+- Estimated remaining time
+
+`final_capability_readiness.py` writes `phase_progress_reporting` into the JSON and Markdown readiness matrix so the operator can compare local progress against the full requested goal.
 
 ## Browser-Assisted Publish Session
 

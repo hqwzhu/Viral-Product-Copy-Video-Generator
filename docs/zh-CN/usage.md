@@ -9,7 +9,7 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-入口脚本会生成真实运行 playbook，执行最高自动化的安全流程，并写出最终 readiness 矩阵。
+入口脚本会生成真实运行 playbook，执行最高自动化的安全流程，并写出最终 readiness 矩阵。每个主要阶段完成后，使用 `reports\promotion-manager\final-readiness\final-capability-readiness.md` 作为阶段进度报告，汇报当前阶段、已实现目标、未实现目标、下一步计划和预计剩余时间。
 
 ## 网站 URL 自动发现产品页
 

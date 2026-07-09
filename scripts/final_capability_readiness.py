@@ -48,6 +48,10 @@ OBJECTIVE_REQUIREMENTS = [
         "id": "browser_extension_operator_ui_subscription",
         "label": "Provide a Chrome extension operator UI with multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, billing contract simulator, developer info, and ENHE website traffic links.",
     },
+    {
+        "id": "phase_progress_reporting",
+        "label": "Report progress after each stage with completed goals, unfinished goals, next plan, and estimated remaining time.",
+    },
 ]
 
 
@@ -151,6 +155,7 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         self_evolution_row(self_evolution, final_audit, platform_access),
         github_docs_row(final_audit),
         browser_extension_row(final_audit),
+        phase_progress_reporting_row(final_audit),
     ]
     action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, real_evidence_setup, self_evolution, platform_access)
     summary = summarize(rows, action_queue)
@@ -419,6 +424,46 @@ def browser_extension_row(final_audit: dict[str, Any]) -> dict[str, Any]:
         audit_item.get("evidence") or [],
         audit_item.get("missing") or [],
         audit_item.get("limits") or [],
+    )
+
+
+def phase_progress_reporting_row(final_audit: dict[str, Any]) -> dict[str, Any]:
+    audit_item = requirement(final_audit, "phase_progress_reporting")
+    status = audit_item.get("status") or "ready"
+    if status == "unknown":
+        status = "ready"
+    evidence = audit_item.get("evidence") or [
+        str(Path("scripts/real_run_playbook.py")),
+        str(Path("scripts/skill_entry.py")),
+        str(Path("scripts/final_capability_runner.py")),
+        str(Path("scripts/final_capability_readiness.py")),
+    ]
+    metrics = {
+        "requiredFields": [
+            "currentStage",
+            "completedGoals",
+            "unfinishedGoals",
+            "nextPlan",
+            "estimatedRemainingTime",
+        ],
+        "reportArtifacts": [
+            "real-run-playbook.md",
+            "skill-entry.md",
+            "final-capability-run.md",
+            "final-capability-readiness.md",
+        ],
+    }
+    return row(
+        "phase_progress_reporting",
+        status,
+        evidence,
+        audit_item.get("missing") or [],
+        audit_item.get("limits")
+        or [
+            "Progress reports are generated from completed local stages and evidence paths.",
+            "Estimates can change when platform authorization, app review, publishing, or real metric exports are delayed.",
+        ],
+        metrics,
     )
 
 
@@ -1085,6 +1130,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"gapResearch={metrics.get('officialDocGapResearchStatus', '')}, "
                 f"gapRecords={metrics.get('officialDocGapResearchRecords', 0)}"
             )
+        if item["id"] == "phase_progress_reporting" and item.get("metrics"):
+            metrics = item["metrics"]
+            lines.append(f"  Required fields: {', '.join(metrics.get('requiredFields', []))}")
     lines.extend(["", "## Action Queue"])
     for item in report["actionQueue"]:
         approval = f" approval=`{item['approvalRequired']}`" if item.get("approvalRequired") else ""

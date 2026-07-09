@@ -6327,6 +6327,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
         self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
+        self.assertEqual(by_requirement["phase_progress_reporting"]["status"], "ready")
         self.assertEqual(by_requirement["retrospective_next_round_optimization"]["status"], "ready")
         self.assertTrue(
             any("browser_video_sampler.py" in path for path in by_requirement["viral_creator_content_research"]["evidence"])
@@ -6381,6 +6382,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/manifest.json", extension_evidence)
         self.assertIn("browser-extension/popup.js", extension_evidence)
         self.assertIn("scripts/billing_contract_simulator.py", extension_evidence)
+        phase_evidence = "\n".join(by_requirement["phase_progress_reporting"]["evidence"]).replace("\\", "/")
+        self.assertIn("scripts/final_capability_readiness.py", phase_evidence)
+        self.assertIn("scripts/real_run_playbook.py", phase_evidence)
         self.assertTrue(report["scripts"]["billing_contract_simulator"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
@@ -6641,6 +6645,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchMissingCapabilities"], 2)
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
         self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
+        self.assertEqual(by_requirement["phase_progress_reporting"]["status"], "ready")
         self.assertIn(
             "official platform doc gap research still has unresolved missing capabilities",
             by_requirement["controlled_self_evolution"]["missing"],
