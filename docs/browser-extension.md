@@ -128,13 +128,23 @@ python scripts\billing_contract_simulator.py demo `
   --out-dir ".\promotion-output"
 ```
 
+Use `demo-hosted-run` to validate the extension's hosted payload handoff after usage reservation:
+
+```powershell
+python scripts\billing_contract_simulator.py demo-hosted-run `
+  --plan growth `
+  --workflow-type standard_run `
+  --product-url "https://example.com/product" `
+  --out-dir ".\promotion-output"
+```
+
 The simulator writes:
 
 - `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json`
 - `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.md`
 - `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator-state.json`
 
-The state file stores a license hash, subscription status, remaining credits, usage reservations, usage commits, and handled webhook event IDs. It does not store plaintext license keys or payment provider secrets.
+The state file stores a license hash, subscription status, remaining credits, usage reservations, hosted run records, usage commits, and handled webhook event IDs. It does not store plaintext license keys or payment provider secrets.
 
 The extension's Reserve credits button sends the selected workflow type, estimated credits, and an idempotency key to the usage authorization endpoint. The Copy hosted payload and Start hosted run buttons then package the active product URL, selected platforms, command type, workflow depth, local Codex command, options, usage ID, and explicit safety flags for the hosted run endpoint. Production hosted runs should commit actual usage server-side after completion; local Codex command generation does not need a hosted usage reservation.
 

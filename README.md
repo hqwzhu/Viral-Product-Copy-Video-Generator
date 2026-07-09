@@ -138,7 +138,7 @@ Full guide: [docs/browser-extension.md](docs/browser-extension.md)
 
 ## Subscription Model
 
-The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, a machine-readable backend contract, and a local reference simulator for license, usage, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
+The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, hosted-run payload handoff, a machine-readable backend contract, and a local reference simulator for license, usage, hosted-run, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
 
 The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
 
@@ -157,6 +157,16 @@ python scripts\billing_contract_simulator.py demo `
 ```
 
 The simulator writes `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json` and keeps only hashed license keys in its state file.
+
+Validate the hosted-run handoff used by the extension after reserving credits:
+
+```powershell
+python scripts\billing_contract_simulator.py demo-hosted-run `
+  --plan growth `
+  --workflow-type standard_run `
+  --product-url "https://example.com/product" `
+  --out-dir ".\promotion-output"
+```
 
 Validate the periodic automation credit path:
 

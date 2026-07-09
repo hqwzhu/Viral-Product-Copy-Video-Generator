@@ -110,6 +110,12 @@ python scripts\billing_contract_simulator.py demo --plan growth --workflow-type 
 
 Use it to verify that a plan's included credits, workflow credit costs, usage reservation, usage commit, and renewal webhook behavior match the pricing model before building the production backend.
 
+For the extension's hosted run handoff, validate quota enforcement with:
+
+```powershell
+python scripts\billing_contract_simulator.py demo-hosted-run --plan growth --workflow-type standard_run --product-url "https://example.com/product" --out-dir ".\promotion-output"
+```
+
 The browser extension can call the usage authorization endpoint before a hosted run to reserve the selected workflow's estimated credits, then copy or submit a hosted run payload to the ENHE hosted run endpoint. The hosted backend should require a matching usage reservation before paid model calls and commit actual token and rendering usage after completion; local command generation does not need a reservation.
 
 ## Launch Rule

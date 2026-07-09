@@ -5966,6 +5966,121 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(usage_record["workflowType"], "automation_due_run")
         self.assertEqual(usage_record["creditsReserved"], 4)
 
+    def test_billing_contract_simulator_runs_hosted_run_flow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="billing-hosted-run-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        secret_license = "pm_demo_hosted_run_secret_for_test"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "demo-hosted-run",
+                "--license-key",
+                secret_license,
+                "--plan",
+                "growth",
+                "--workflow-type",
+                "standard_run",
+                "--product-url",
+                "https://example.com/product",
+                "--local-command",
+                'python scripts\\skill_entry.py --link "https://example.com/product"',
+                "--out-dir",
+                str(out_dir),
+                "--reset-state",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/billing-simulator/billing-simulator.json"
+        state_path = out_dir / "reports/promotion-manager/billing-simulator/billing-simulator-state.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        state_text = state_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_license, report_text)
+        self.assertNotIn(secret_license, state_text)
+        report = json.loads(report_text)
+        state = json.loads(state_text)
+        self.assertEqual(report["status"], "ready")
+        self.assertTrue(report["response"]["hostedRun"]["accepted"])
+        self.assertEqual(report["response"]["hostedRun"]["status"], "queued")
+        self.assertEqual(report["response"]["usageCommit"]["status"], "succeeded")
+        self.assertEqual(report["summary"]["hostedRuns"], 1)
+        self.assertEqual(report["summary"]["completedHostedRuns"], 1)
+        hosted_run = next(iter(state["hostedRuns"].values()))
+        usage_record = state["usageLedger"][hosted_run["usageId"]]
+        self.assertEqual(hosted_run["workflowType"], "standard_run")
+        self.assertEqual(hosted_run["status"], "succeeded")
+        self.assertEqual(usage_record["creditsReserved"], 4)
+        self.assertEqual(usage_record["creditsUsed"], 4)
+
+    def test_billing_contract_simulator_blocks_hosted_run_without_matching_reservation(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="billing-hosted-run-blocked-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        secret_license = "pm_demo_hosted_run_blocked_secret"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "issue-license",
+                "--license-key",
+                secret_license,
+                "--plan",
+                "growth",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        authorization = subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "authorize-usage",
+                "--license-key",
+                secret_license,
+                "--workflow-type",
+                "research_run",
+                "--idempotency-key",
+                "blocked-hosted-run-test",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        usage_id = json.loads(authorization.stdout)["usage"]["usageId"]
+        hosted = subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "hosted-run",
+                "--license-key",
+                secret_license,
+                "--usage-id",
+                usage_id,
+                "--workflow-type",
+                "standard_run",
+                "--product-url",
+                "https://example.com/product",
+                "--platforms",
+                "youtube",
+                "--local-command",
+                'python scripts\\skill_entry.py --link "https://example.com/product"',
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        response = json.loads(hosted.stdout)
+        self.assertFalse(response["hostedRun"]["accepted"])
+        self.assertEqual(response["hostedRun"]["reason"], "usage_workflow_mismatch")
+
     def test_self_evolution_managed_files_include_docs_and_browser_extension(self) -> None:
         module = load_script_module(SELF_EVOLUTION_AUDIT)
         files = {item.as_posix() for item in module.managed_skill_files(ROOT)}

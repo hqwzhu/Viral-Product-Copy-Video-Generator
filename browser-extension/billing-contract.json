@@ -134,6 +134,7 @@
     "Verify webhook signatures on the backend.",
     "Hash license keys at rest.",
     "Use idempotency keys for usage reservations.",
-    "Never allow hosted model calls without a server-side quota check."
+    "Never allow hosted model calls without a server-side quota check.",
+    "Reject hosted run requests unless usageId, workflowType, and reserved credits match the server-side usage ledger."
   ]
 }

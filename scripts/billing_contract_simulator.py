@@ -3,8 +3,8 @@
 
 This is not a production payment backend. It is a deterministic local harness
 that proves the extension contract can support license validation, usage
-reservation, usage commit, and subscription webhook state changes without
-storing payment secrets or plaintext license keys.
+reservation, hosted run acceptance, usage commit, and subscription webhook
+state changes without storing payment secrets or plaintext license keys.
 """
 
 from __future__ import annotations
@@ -54,6 +54,21 @@ def parse_args() -> argparse.Namespace:
     demo.add_argument("--output-tokens", type=int, default=65000)
     demo.add_argument("--reset-state", action="store_true", help="Start the demo with an empty local state file.")
 
+    hosted_demo = subparsers.add_parser("demo-hosted-run", parents=[parent], help="Run license, usage reservation, hosted run acceptance, usage commit, and webhook flow.")
+    hosted_demo.add_argument("--license-key", default="", help="Optional demo license key. The key is hashed before storage.")
+    hosted_demo.add_argument("--plan", default="growth", choices=["free", "starter", "growth", "scale"])
+    hosted_demo.add_argument("--workflow-type", default="standard_run")
+    hosted_demo.add_argument("--command-type", default="skill_entry")
+    hosted_demo.add_argument("--product-url", default="https://example.com/product")
+    hosted_demo.add_argument("--platforms", default="youtube,zhihu,xiaohongshu,douyin,github")
+    hosted_demo.add_argument("--workflow-depth", default="full", choices=["full", "research", "playbook"])
+    hosted_demo.add_argument("--local-command", default="")
+    hosted_demo.add_argument("--idempotency-key", default="demo-hosted-run-idempotency-key")
+    hosted_demo.add_argument("--input-tokens", type=int, default=220000)
+    hosted_demo.add_argument("--output-tokens", type=int, default=80000)
+    hosted_demo.add_argument("--video-seconds-rendered", type=int, default=0)
+    hosted_demo.add_argument("--reset-state", action="store_true", help="Start the demo with an empty local state file.")
+
     issue = subparsers.add_parser("issue-license", parents=[parent], help="Issue or refresh one local license record.")
     issue.add_argument("--license-key", required=True)
     issue.add_argument("--plan", default="starter", choices=["free", "starter", "growth", "scale"])
@@ -75,6 +90,23 @@ def parse_args() -> argparse.Namespace:
     commit.add_argument("--output-tokens", type=int, default=0)
     commit.add_argument("--video-seconds-rendered", type=int, default=0)
     commit.add_argument("--status", default="succeeded", choices=["succeeded", "failed"])
+
+    hosted = subparsers.add_parser("hosted-run", parents=[parent], help="Accept a hosted run request after a matching usage reservation.")
+    hosted.add_argument("--payload-json", default="", help="Optional hostedRunRequest JSON copied from the extension.")
+    hosted.add_argument("--license-key", default="")
+    hosted.add_argument("--usage-id", default="")
+    hosted.add_argument("--workflow-type", default="standard_run")
+    hosted.add_argument("--estimated-credits", type=int)
+    hosted.add_argument("--command-type", default="skill_entry")
+    hosted.add_argument("--product-url", default="")
+    hosted.add_argument("--platforms", default="")
+    hosted.add_argument("--workflow-depth", default="full")
+    hosted.add_argument("--local-command", default="")
+    hosted.add_argument("--complete", action="store_true", help="Immediately commit usage as if the hosted worker completed.")
+    hosted.add_argument("--input-tokens", type=int, default=0)
+    hosted.add_argument("--output-tokens", type=int, default=0)
+    hosted.add_argument("--video-seconds-rendered", type=int, default=0)
+    hosted.add_argument("--status", default="succeeded", choices=["succeeded", "failed"])
 
     webhook = subparsers.add_parser("webhook", parents=[parent], help="Apply a simulated payment-provider webhook event.")
     webhook.add_argument("--event", required=True)
@@ -108,6 +140,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
 
     if args.command == "demo":
         response = demo_flow(args, contract, state)
+    elif args.command == "demo-hosted-run":
+        response = hosted_demo_flow(args, contract, state)
     elif args.command == "issue-license":
         response = {
             "status": "ready",
@@ -143,6 +177,21 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 args.status,
             ),
         }
+    elif args.command == "hosted-run":
+        payload = hosted_payload_from_args(args, contract)
+        response = {
+            "status": "ready",
+            "hostedRun": accept_hosted_run(state, contract, payload),
+        }
+        if args.complete and response["hostedRun"].get("accepted"):
+            response["usageCommit"] = complete_hosted_run(
+                state,
+                response["hostedRun"]["runId"],
+                args.input_tokens,
+                args.output_tokens,
+                args.video_seconds_rendered,
+                args.status,
+            )
     elif args.command == "webhook":
         response = {
             "status": "ready",
@@ -188,6 +237,63 @@ def demo_flow(args: argparse.Namespace, contract: dict[str, Any], state: dict[st
         "licenseBeforeUsage": license_before_usage,
         "usageAuthorization": authorization,
         "usageCommit": committed,
+        "licenseAfterUsage": license_after_usage,
+        "webhook": webhook,
+        "licenseAfterWebhook": license_after_webhook,
+    }
+
+
+def hosted_demo_flow(args: argparse.Namespace, contract: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    license_key = args.license_key or f"pm_demo_{uuid.uuid4().hex}"
+    issued = issue_license(state, contract, license_key, args.plan, "demo@example.com")
+    license_before_usage = validate_license(state, license_key)
+    authorization = authorize_usage(
+        state,
+        contract,
+        license_key,
+        args.workflow_type,
+        args.idempotency_key,
+        None,
+    )
+    payload = {
+        "licenseKey": license_key,
+        "usageId": authorization.get("usageId", ""),
+        "workflowType": args.workflow_type,
+        "estimatedCredits": authorization.get("creditsReserved", workflow_credits(contract, args.workflow_type, None)),
+        "commandType": args.command_type,
+        "extensionVersion": contract.get("version", ""),
+        "website": contract.get("website", ""),
+        "requestSource": "chrome_extension",
+        "idempotencyKey": f"{args.idempotency_key}:hosted-run",
+        "productUrl": args.product_url,
+        "platforms": parse_platforms(args.platforms),
+        "workflowDepth": args.workflow_depth,
+        "localCommand": args.local_command or default_hosted_local_command(args.product_url, args.platforms),
+        "options": {"outputDir": ".\\promotion-output"},
+        "safety": hosted_safety_defaults(),
+    }
+    hosted_run = accept_hosted_run(state, contract, payload)
+    usage_commit = {}
+    if hosted_run.get("accepted"):
+        usage_commit = complete_hosted_run(
+            state,
+            hosted_run["runId"],
+            args.input_tokens,
+            args.output_tokens,
+            args.video_seconds_rendered,
+            "succeeded",
+        )
+    license_after_usage = validate_license(state, license_key)
+    webhook = apply_webhook(state, contract, "invoice.payment_succeeded", license_key, args.plan, "demo@example.com")
+    license_after_webhook = validate_license(state, license_key)
+    return {
+        "status": "ready",
+        "secretStored": False,
+        "license": issued,
+        "licenseBeforeUsage": license_before_usage,
+        "usageAuthorization": authorization,
+        "hostedRun": hosted_run,
+        "usageCommit": usage_commit,
         "licenseAfterUsage": license_after_usage,
         "webhook": webhook,
         "licenseAfterWebhook": license_after_webhook,
@@ -269,6 +375,13 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         ]:
             if key not in hosted_run_body:
                 missing.append(f"hostedRunRequest.body.{key}")
+    hosted_run_response = contract.get("hostedRunResponse") if isinstance(contract.get("hostedRunResponse"), dict) else {}
+    if not hosted_run_response:
+        missing.append("hostedRunResponse")
+    else:
+        for key in ["accepted", "runId", "status", "reason"]:
+            if key not in hosted_run_response:
+                missing.append(f"hostedRunResponse.{key}")
     return {
         "status": "ready" if not missing else "invalid",
         "missing": missing,
@@ -405,6 +518,231 @@ def commit_usage(
     return usage_commit_public_view(usage, "committed", refund)
 
 
+def hosted_payload_from_args(args: argparse.Namespace, contract: dict[str, Any]) -> dict[str, Any]:
+    if args.payload_json:
+        payload = read_json(Path(args.payload_json))
+        if not payload:
+            raise SystemExit(f"Unable to read hosted run payload JSON: {args.payload_json}")
+        return payload
+    workflow_type = args.workflow_type
+    estimated_credits = args.estimated_credits
+    if estimated_credits is None:
+        estimated_credits = workflow_credits(contract, workflow_type, None)
+    return {
+        "licenseKey": args.license_key,
+        "usageId": args.usage_id,
+        "workflowType": workflow_type,
+        "estimatedCredits": estimated_credits,
+        "commandType": args.command_type,
+        "extensionVersion": contract.get("version", ""),
+        "website": contract.get("website", ""),
+        "requestSource": "chrome_extension",
+        "idempotencyKey": f"hosted-run-{uuid.uuid4().hex}",
+        "productUrl": args.product_url,
+        "platforms": parse_platforms(args.platforms),
+        "workflowDepth": args.workflow_depth,
+        "localCommand": args.local_command,
+        "options": {},
+        "safety": hosted_safety_defaults(),
+    }
+
+
+def accept_hosted_run(state: dict[str, Any], contract: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    license_key = str(payload.get("licenseKey", ""))
+    record = find_license(state, license_key)
+    if not record:
+        return denied_hosted_run("license_not_found")
+    if record.get("status") not in ACTIVE_STATUSES:
+        return denied_hosted_run("inactive_license", record)
+
+    workflow_type = str(payload.get("workflowType", ""))
+    expected_credits = workflow_credits(contract, workflow_type, payload.get("estimatedCredits"))
+    usage_id = str(payload.get("usageId", ""))
+    if expected_credits > 0 and not usage_id:
+        return denied_hosted_run("missing_usage_reservation", record, expected_credits)
+
+    usage = state["usageLedger"].get(usage_id) if usage_id else None
+    if expected_credits > 0:
+        validation_error = validate_usage_for_hosted_run(usage, record, workflow_type, expected_credits)
+        if validation_error:
+            return denied_hosted_run(validation_error, record, expected_credits)
+
+    payload_error = validate_hosted_payload(payload)
+    if payload_error:
+        return denied_hosted_run(payload_error, record, expected_credits)
+
+    run_id = f"run_{uuid.uuid4().hex[:16]}"
+    now = utc_now()
+    hosted_run = {
+        "id": run_id,
+        "licenseId": record["id"],
+        "usageId": usage_id,
+        "workflowType": workflow_type,
+        "estimatedCredits": expected_credits,
+        "commandType": str(payload.get("commandType", "")),
+        "productUrl": str(payload.get("productUrl", "")),
+        "platforms": normalize_platforms(payload.get("platforms")),
+        "workflowDepth": str(payload.get("workflowDepth", "")),
+        "localCommand": str(payload.get("localCommand", "")),
+        "status": "queued",
+        "acceptedAt": now,
+        "completedAt": "",
+        "safety": sanitize_safety(payload.get("safety")),
+    }
+    state["hostedRuns"][run_id] = hosted_run
+    return hosted_run_public_view(hosted_run, "ok")
+
+
+def validate_usage_for_hosted_run(
+    usage: dict[str, Any] | None,
+    record: dict[str, Any],
+    workflow_type: str,
+    expected_credits: int,
+) -> str:
+    if not usage:
+        return "missing_usage_reservation"
+    if usage.get("licenseId") != record["id"]:
+        return "usage_license_mismatch"
+    if usage.get("status") != "reserved":
+        return "usage_not_reserved"
+    if usage.get("workflowType") != workflow_type:
+        return "usage_workflow_mismatch"
+    if int(usage.get("creditsReserved", 0)) < expected_credits:
+        return "reserved_credits_too_low"
+    return ""
+
+
+def validate_hosted_payload(payload: dict[str, Any]) -> str:
+    command_type = str(payload.get("commandType", ""))
+    if command_type in {"skill_entry", "automation_init"} and not str(payload.get("productUrl", "")).strip():
+        return "missing_product_url"
+    platforms = normalize_platforms(payload.get("platforms"))
+    if command_type in {"skill_entry", "automation_init"} and not platforms:
+        return "missing_platforms"
+    if not str(payload.get("localCommand", "")).strip():
+        return "missing_local_command"
+    safety = payload.get("safety") if isinstance(payload.get("safety"), dict) else {}
+    for key in [
+        "approvalRequiredForOfficialPublish",
+        "finalPublishNotClickedByExtension",
+        "noPlatformSecretsInPayload",
+        "noCaptchaBypass",
+    ]:
+        if safety.get(key) is not True:
+            return f"safety_flag_missing:{key}"
+    return ""
+
+
+def complete_hosted_run(
+    state: dict[str, Any],
+    run_id: str,
+    input_tokens: int,
+    output_tokens: int,
+    video_seconds_rendered: int,
+    status: str,
+) -> dict[str, Any]:
+    hosted_run = state["hostedRuns"].get(run_id)
+    if not hosted_run:
+        return {"status": "not_found", "runId": run_id}
+    if hosted_run.get("status") in {"succeeded", "failed"}:
+        usage = state["usageLedger"].get(hosted_run.get("usageId", ""))
+        return {"status": "idempotent", "runId": run_id, "usage": usage_commit_public_view(usage, "idempotent") if usage else {}}
+    if not hosted_run.get("usageId"):
+        hosted_run["status"] = status
+        hosted_run["completedAt"] = utc_now()
+        return {
+            "status": status,
+            "runId": run_id,
+            "usage": {},
+        }
+    usage_commit = commit_usage(
+        state,
+        hosted_run.get("usageId", ""),
+        hosted_run.get("estimatedCredits"),
+        input_tokens,
+        output_tokens,
+        video_seconds_rendered,
+        status,
+    )
+    hosted_run["status"] = status
+    hosted_run["completedAt"] = utc_now()
+    return {
+        "status": status,
+        "runId": run_id,
+        "usage": usage_commit,
+    }
+
+
+def denied_hosted_run(
+    reason: str,
+    record: dict[str, Any] | None = None,
+    requested_credits: int = 0,
+) -> dict[str, Any]:
+    return {
+        "accepted": False,
+        "runId": "",
+        "status": "blocked",
+        "dashboardUrl": "",
+        "reportUrl": "",
+        "reason": reason,
+        "licenseId": record["id"] if record else "",
+        "requestedCredits": requested_credits,
+    }
+
+
+def hosted_run_public_view(hosted_run: dict[str, Any], reason: str) -> dict[str, Any]:
+    run_id = hosted_run["id"]
+    return {
+        "accepted": True,
+        "runId": run_id,
+        "status": hosted_run.get("status", ""),
+        "dashboardUrl": f"https://www.enhe-tech.com.cn/promotion-manager/runs/{run_id}",
+        "reportUrl": "",
+        "reason": reason,
+        "usageId": hosted_run.get("usageId", ""),
+        "workflowType": hosted_run.get("workflowType", ""),
+        "estimatedCredits": int(hosted_run.get("estimatedCredits", 0)),
+    }
+
+
+def parse_platforms(value: str) -> list[str]:
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+
+
+def normalize_platforms(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return parse_platforms(str(value or ""))
+
+
+def sanitize_safety(value: Any) -> dict[str, bool]:
+    safety = value if isinstance(value, dict) else {}
+    return {
+        "approvalRequiredForOfficialPublish": safety.get("approvalRequiredForOfficialPublish") is True,
+        "finalPublishNotClickedByExtension": safety.get("finalPublishNotClickedByExtension") is True,
+        "noPlatformSecretsInPayload": safety.get("noPlatformSecretsInPayload") is True,
+        "noCaptchaBypass": safety.get("noCaptchaBypass") is True,
+    }
+
+
+def hosted_safety_defaults() -> dict[str, bool]:
+    return {
+        "approvalRequiredForOfficialPublish": True,
+        "finalPublishNotClickedByExtension": True,
+        "noPlatformSecretsInPayload": True,
+        "noCaptchaBypass": True,
+    }
+
+
+def default_hosted_local_command(product_url: str, platforms: str) -> str:
+    return (
+        "python scripts\\skill_entry.py "
+        f"--link \"{product_url}\" "
+        f"--platforms {platforms} "
+        "--out-dir \".\\promotion-output\""
+    )
+
+
 def apply_webhook(
     state: dict[str, Any],
     contract: dict[str, Any],
@@ -457,11 +795,11 @@ def apply_webhook(
 
 
 def workflow_credits(contract: dict[str, Any], workflow_type: str, estimated_credits: int | None) -> int:
-    if estimated_credits is not None:
-        return max(0, int(estimated_credits))
     credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
     if workflow_type not in credit_costs:
         raise SystemExit(f"Unknown workflow type in billing contract: {workflow_type}")
+    if estimated_credits is not None:
+        return max(0, int(estimated_credits))
     return max(0, int(credit_costs[workflow_type]))
 
 
@@ -535,12 +873,13 @@ def load_state(path: Path) -> dict[str, Any]:
     state.setdefault("version", "0.1.0")
     state.setdefault("licenses", {})
     state.setdefault("usageLedger", {})
+    state.setdefault("hostedRuns", {})
     state.setdefault("events", [])
     return state
 
 
 def empty_state() -> dict[str, Any]:
-    return {"version": "0.1.0", "licenses": {}, "usageLedger": {}, "events": []}
+    return {"version": "0.1.0", "licenses": {}, "usageLedger": {}, "hostedRuns": {}, "events": []}
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
@@ -597,12 +936,15 @@ def render_markdown(report: dict[str, Any]) -> str:
 def state_summary(state: dict[str, Any]) -> dict[str, Any]:
     licenses = state.get("licenses") if isinstance(state.get("licenses"), dict) else {}
     ledger = state.get("usageLedger") if isinstance(state.get("usageLedger"), dict) else {}
+    hosted_runs = state.get("hostedRuns") if isinstance(state.get("hostedRuns"), dict) else {}
     events = state.get("events") if isinstance(state.get("events"), list) else []
     return {
         "licenses": len(licenses),
         "activeLicenses": sum(1 for record in licenses.values() if record.get("status") in ACTIVE_STATUSES),
         "usageRecords": len(ledger),
         "committedUsageRecords": sum(1 for record in ledger.values() if record.get("status") in {"succeeded", "failed"}),
+        "hostedRuns": len(hosted_runs),
+        "completedHostedRuns": sum(1 for record in hosted_runs.values() if record.get("status") in {"succeeded", "failed"}),
         "webhookEvents": len(events),
     }
 

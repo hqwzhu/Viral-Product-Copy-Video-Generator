@@ -210,13 +210,33 @@ python scripts\billing_contract_simulator.py demo `
   --out-dir ".\promotion-output"
 ```
 
-It validates `browser-extension/billing-contract.json`, creates a local hashed license record, validates that license, reserves credits before a run, commits actual token usage, and applies a simulated `invoice.payment_succeeded` webhook. Reports are written to:
+It validates `browser-extension/billing-contract.json`, creates a local hashed license record, validates that license, reserves credits before a run, accepts a hosted run when the usage reservation matches, commits actual token usage, and applies a simulated `invoice.payment_succeeded` webhook. Reports are written to:
 
 ```text
 promotion-output\reports\promotion-manager\billing-simulator\
 ```
 
 Use it as an implementation reference for endpoint behavior and loss-control checks. It is not a production backend: a deployed service still needs authentication, database transactions, salted or peppered license-key hashing, webhook signature verification, audit logging, admin controls, and real payment-provider SDK integration.
+
+To validate the hosted-run handoff that the extension sends after reserving credits:
+
+```powershell
+python scripts\billing_contract_simulator.py demo-hosted-run `
+  --plan growth `
+  --workflow-type standard_run `
+  --product-url "https://example.com/product" `
+  --out-dir ".\promotion-output"
+```
+
+To validate a copied extension payload against an existing reserved usage record:
+
+```powershell
+python scripts\billing_contract_simulator.py hosted-run `
+  --payload-json ".\hosted-run-payload.json" `
+  --out-dir ".\promotion-output"
+```
+
+The simulator rejects hosted runs when the license is inactive, the `usageId` is missing, the reserved workflow does not match the hosted request, reserved credits are too low, required product/platform fields are missing, or safety flags are absent.
 
 ## Webhooks
 

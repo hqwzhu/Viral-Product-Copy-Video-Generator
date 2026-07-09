@@ -624,6 +624,10 @@ def browser_extension_status() -> dict[str, Any]:
     simulator_path = ROOT / "scripts/billing_contract_simulator.py"
     if simulator_path.exists():
         evidence.append(str(simulator_path))
+        simulator_text = safe_read(simulator_path)
+        for marker in ["demo-hosted-run", "hosted-run", "accept_hosted_run", "complete_hosted_run", "hostedRuns"]:
+            if marker not in simulator_text:
+                missing.append(f"scripts/billing_contract_simulator.py missing marker: {marker}")
     else:
         missing.append("scripts/billing_contract_simulator.py")
     manifest_path = ROOT / "browser-extension/manifest.json"
