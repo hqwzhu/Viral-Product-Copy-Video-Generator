@@ -56,6 +56,8 @@ python scripts\launch_unlock_pack.py `
 
 `scripts\final_capability_runner.py` 现在会在存在发布队列时为每个产品 run 自动生成该解锁包。只有在你更新了凭证、目标文件或平台发布入口后，才需要单独重建。
 
+内容审核现在也会生成 `reports\promotion-manager\cheat-review\` 桥接包：每个平台一份待评分草稿，并附带可在 Codex 中触发 `cheat-score` 的提示词。它只用于审核，不会自动创建不可逆预测日志；只有你明确启动 `cheat-on-content` 预测周期时才会写预测文件。
+
 发布后，先登记真实 URL，再运行性能监控：
 
 ```powershell

@@ -55,6 +55,19 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
+内容审核桥接包：
+
+```powershell
+python scripts\promotion_manager.py review `
+  --product-name "Product" `
+  --product-url "https://example.com/product" `
+  --audience "creators, founders" `
+  --value-proposition "Turns product pages into launch content" `
+  --out-dir ".\promotion-output"
+```
+
+审核步骤会写入 `reports\promotion-manager\cheat-review\*-cheat-review-pack.json`，并为每个平台生成可交给 Codex `cheat-score` 的草稿。它只准备审核输入，不会自动写预测日志。
+
 ## 发布
 
 生成受保护发布队列：

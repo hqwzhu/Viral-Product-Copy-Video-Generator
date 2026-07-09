@@ -12,10 +12,11 @@ Use this reference when the user asks the promotion Skill to review generated dr
 ## Safe Review Flow
 
 1. Generate platform content into the selected output directory.
-2. Pick the exact draft to review, usually one Markdown draft from `reports/promotion-manager/generated-content/`.
-3. Ask `cheat-on-content` for qualitative scoring only, or use `cheat-score` if the user's project has already been initialized for that system.
-4. Copy actionable rewrite suggestions back into the promotion review report.
-5. Keep the publish pack approval gate unchanged.
+2. Read the generated bridge pack at `reports/promotion-manager/cheat-review/<product>-cheat-review-pack.json`.
+3. Pick the exact per-platform Markdown draft from `reports/promotion-manager/cheat-review/drafts/`.
+4. Ask `cheat-on-content` for qualitative scoring only, or use `cheat-score` if the user's project has already been initialized for that system.
+5. Copy actionable rewrite suggestions back into the promotion review report.
+6. Keep the publish pack approval gate unchanged.
 
 ## Prediction Cycle Boundary
 

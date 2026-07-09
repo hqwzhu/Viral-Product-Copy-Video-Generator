@@ -20,7 +20,7 @@ When the user sends a product link, do this:
 1. Inspect the product page or ask for missing basics: product name, target audience, pain points, value proposition, price, target platforms, and primary goal.
 2. Research platform constraints and competitors when the request depends on current information. Prefer official docs for API/publishing claims.
 3. Use `scripts/skill_entry.py` when the user simply gives a link and asks Codex to execute the Skill. It generates the real-run playbook, runs the highest-automation safe flow, and refreshes the final readiness matrix.
-4. Review the generated content. If `cheat-on-content` is installed, use it for a second-pass content review; otherwise use the generated scorecard. Read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md) before writing prediction logs.
+4. Review the generated content. The workflow writes a `cheat-review` pack with platform draft files and Codex prompts for `cheat-score`. If `cheat-on-content` is installed, use it for a second-pass content review; otherwise use the generated scorecard. Read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md) before writing prediction logs.
 5. Give the user publish packs and ask for approval before any publishing action.
 
 Default one-command workflow:
@@ -901,6 +901,7 @@ The command writes:
 - `reports/promotion-manager/competitors/follow-up-captures/<task>/browser-visible-snapshot.json` when browser-assisted follow-up capture opens a public platform URL and imports browser-visible page evidence.
 - `reports/promotion-manager/competitors/video-sampling/browser-video-sampler.{json,md}` and `video-sampling/frames/*.png` when `scripts/browser_video_sampler.py` captures browser-visible video metadata and frame screenshots. When run from follow-up captures, the same files are written under `follow-up-captures/<task>/reports/promotion-manager/competitors/video-sampling/`, and safe `videoSampleEvidence` is copied into `deep-competitor-library.json` for downstream script/storyboard deconstruction.
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from observed viral patterns. The workflow writes this back to `<product>-platform-content.json` before video rendering unless `--skip-competitor-informed-content` is supplied.
+- `reports/promotion-manager/cheat-review/<product>-cheat-review-pack.{json,md}` and `cheat-review/drafts/*.md` when `scripts/promotion_manager.py review|all` prepares platform drafts for Codex `cheat-score` without writing prediction logs.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` turns readiness into credential names, target requirements, official setup references, approval gates, and next commands without storing secret values.
@@ -1002,6 +1003,7 @@ Score every platform draft for:
 - compliance risk
 
 If `cheat-on-content` is available, run a qualitative review through that skill. Do not write immutable prediction logs unless the user explicitly asks to start a real `cheat-on-content` prediction cycle. For details, read [references/cheat-on-content-integration.md](references/cheat-on-content-integration.md).
+The built-in promotion review writes `reports/promotion-manager/cheat-review/<product>-cheat-review-pack.{json,md}` plus per-platform draft files under `cheat-review/drafts/`. Treat those files as the handoff to Codex `cheat-score`; they are review inputs, not proof that a prediction cycle has started.
 
 ### 5. Publish Pack
 

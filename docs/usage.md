@@ -57,6 +57,19 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
+Review packs:
+
+```powershell
+python scripts\promotion_manager.py review `
+  --product-name "Product" `
+  --product-url "https://example.com/product" `
+  --audience "creators, founders" `
+  --value-proposition "Turns product pages into launch content" `
+  --out-dir ".\promotion-output"
+```
+
+The review step writes `reports\promotion-manager\cheat-review\*-cheat-review-pack.json` and one draft per platform for Codex `cheat-score`. These are review inputs only; prediction logs are created only when you explicitly start a cheat-on-content prediction cycle.
+
 ## Publishing
 
 Build the guarded queue:

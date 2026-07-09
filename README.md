@@ -120,6 +120,8 @@ The unlock pack writes a checklist, next-action commands, credential variable-na
 
 `scripts\final_capability_runner.py` now builds this unlock pack automatically for each product run when a publish queue exists. Use the standalone command when you want to rebuild the pack after changing credentials, target files, or publisher entry URLs.
 
+Content review now also writes a cheat-on-content bridge pack under `reports\promotion-manager\cheat-review\`. It creates one draft file per platform plus Codex `cheat-score` prompts, but it does not create immutable prediction logs unless you explicitly start a prediction cycle.
+
 After publishing, put real evidence files into a local inbox and recover the loop:
 
 ```powershell
@@ -223,7 +225,7 @@ product URL or website URL
   -> viral material library
   -> creator leaderboard and follow-up capture
   -> copy, script, storyboard, MP4 draft
-  -> cheat-on-content style review and scorecard
+  -> cheat-on-content review pack and scorecard
   -> guarded publish queue
   -> official or browser/manual publish
   -> real metrics, comments, order, and revenue import

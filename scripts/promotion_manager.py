@@ -274,6 +274,7 @@ def main() -> None:
         )
 
     plan = build_content_plan(product)
+    content_path = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product.name)}-platform-content.json"
     if args.command in ("plan", "all"):
         write_named_report(
             out_dir / "reports/promotion-manager/content-plans",
@@ -293,6 +294,14 @@ def main() -> None:
 
     review = review_content(content)
     if args.command in ("review", "all"):
+        cheat_review_pack = build_cheat_review_pack(out_dir, product, content, content_path)
+        apply_cheat_review_pack(review, cheat_review_pack)
+        write_named_report(
+            out_dir / "reports/promotion-manager/cheat-review",
+            f"{slugify(product.name)}-cheat-review-pack",
+            cheat_review_pack,
+            render_cheat_review_pack(cheat_review_pack),
+        )
         write_named_report(
             out_dir / "reports/promotion-manager/generated-content",
             f"{slugify(product.name)}-content-review",
@@ -388,6 +397,7 @@ def ensure_output_tree(out_dir: Path) -> None:
         "reports/promotion-manager/competitors",
         "reports/promotion-manager/content-plans",
         "reports/promotion-manager/generated-content",
+        "reports/promotion-manager/cheat-review",
         "reports/promotion-manager/publish-packs",
         "reports/promotion-manager/publish-results",
         "reports/promotion-manager/retrospectives",
@@ -787,8 +797,8 @@ def review_content(content: dict[str, Any]) -> list[dict[str, Any]]:
                 "platformFitScore": 82,
                 "seoScore": 80,
                 "cheatOnContent": {
-                    "status": "fallback_scorecard_used",
-                    "reason": "Run cheat-on-content manually from Codex if a real prediction/review cycle is required.",
+                    "status": "pending_cheat_review_pack",
+                    "reason": "The promotion manager will create a cheat-on-content review pack without writing prediction logs.",
                 },
                 "riskFlags": risk_flags,
                 "rewriteSuggestions": [
@@ -800,6 +810,124 @@ def review_content(content: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return reviews
+
+
+def build_cheat_review_pack(out_dir: Path, product: Product, content: dict[str, Any], content_path: Path) -> dict[str, Any]:
+    report_dir = out_dir / "reports/promotion-manager/cheat-review"
+    draft_dir = report_dir / "drafts"
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    skill_paths = detect_cheat_skill_paths()
+    project_state = detect_cheat_project_state(out_dir)
+    draft_items = []
+    for platform, item in content.items():
+        draft_path = draft_dir / f"{slugify(product.name)}-{platform}.md"
+        draft_path.write_text(render_cheat_draft(product, platform, item), encoding="utf-8")
+        prompt = f"Use cheat-score to score this draft without prediction logging: {draft_path}"
+        draft_items.append(
+            {
+                "platform": platform,
+                "draftPath": str(draft_path),
+                "reviewPrompt": prompt,
+                "contentPath": str(content_path),
+                "status": "ready_for_codex_cheat_score",
+                "notes": [
+                    "This pack prepares the draft for cheat-on-content qualitative scoring.",
+                    "It does not create immutable prediction files.",
+                    "If the content project is not initialized, run cheat-init before formal scoring.",
+                ],
+            }
+        )
+    return {
+        "generatedAt": TODAY,
+        "status": "cheat_review_pack_created",
+        "product": asdict(product),
+        "skillDetection": skill_paths,
+        "projectState": project_state,
+        "drafts": draft_items,
+        "nextActions": [
+            "Use the reviewPrompt for the target platform draft inside Codex.",
+            "Use cheat-score for exploratory scoring only.",
+            "Use cheat-predict only when the user explicitly starts a real prediction cycle.",
+        ],
+        "safety": {
+            "writesPredictionLogs": False,
+            "usesRealPerformanceData": False,
+            "fallbackScorecardRemainsAvailable": True,
+        },
+    }
+
+
+def detect_cheat_skill_paths() -> dict[str, Any]:
+    candidates = [
+        Path.home() / ".codex/skills/cheat-on-content/SKILL.md",
+        Path.home() / ".codex/skills/cheat-score/SKILL.md",
+        Path.home() / ".codex/skills/cheat-on-content/skills/cheat-score/SKILL.md",
+        Path.home() / ".agents/skills/cheat-on-content/SKILL.md",
+    ]
+    existing = [str(path) for path in candidates if path.exists()]
+    return {
+        "cheatOnContentInstalled": any(path.endswith("cheat-on-content\\SKILL.md") or path.endswith("cheat-on-content/SKILL.md") for path in existing),
+        "cheatScoreInstalled": any("cheat-score" in path for path in existing),
+        "paths": existing,
+    }
+
+
+def detect_cheat_project_state(out_dir: Path) -> dict[str, Any]:
+    candidates = [
+        Path.cwd() / ".cheat-state.json",
+        out_dir / ".cheat-state.json",
+        out_dir / "rubric_notes.md",
+    ]
+    existing = [str(path) for path in candidates if path.exists()]
+    return {
+        "initialized": any(path.endswith(".cheat-state.json") for path in existing),
+        "rubricAvailable": any(path.endswith("rubric_notes.md") for path in existing),
+        "paths": existing,
+    }
+
+
+def apply_cheat_review_pack(review: list[dict[str, Any]], pack: dict[str, Any]) -> None:
+    by_platform = {item["platform"]: item for item in pack["drafts"]}
+    for item in review:
+        draft = by_platform.get(item["platform"], {})
+        item["cheatOnContent"] = {
+            "status": pack["status"],
+            "draftPath": draft.get("draftPath", ""),
+            "reviewPrompt": draft.get("reviewPrompt", ""),
+            "cheatOnContentInstalled": pack["skillDetection"]["cheatOnContentInstalled"],
+            "cheatScoreInstalled": pack["skillDetection"]["cheatScoreInstalled"],
+            "projectInitialized": pack["projectState"]["initialized"],
+            "reason": "A review pack was created for Codex to invoke cheat-score without writing prediction logs.",
+        }
+
+
+def render_cheat_draft(product: Product, platform: str, item: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            f"# {product.name} - {platform} promotion draft",
+            "",
+            f"- Product URL: {product.url}",
+            f"- Audience: {', '.join(product.audience)}",
+            f"- Goal: {product.goal}",
+            f"- Platform: {platform}",
+            f"- Content type: {item.get('contentType', '')}",
+            f"- Title: {item.get('title', '')}",
+            f"- Hook: {item.get('hook', '')}",
+            f"- CTA: {item.get('cta', '')}",
+            f"- Cover text: {item.get('coverText', '')}",
+            f"- Compliance notice: {item.get('complianceNotice', '')}",
+            "",
+            "## Platform Payload",
+            "",
+            "```json",
+            json.dumps(item, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## Cheat Review Boundary",
+            "",
+            "Score this as a draft only. Do not create prediction files unless the user explicitly asks for a prediction cycle.",
+        ]
+    )
 
 
 def build_publish_pack(content: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1125,9 +1253,37 @@ def render_review(review: list[dict[str, Any]]) -> str:
                 f"- Virality: {item['viralityScore']}",
                 f"- Compliance: {item['complianceScore']}",
                 f"- Cheat-on-content: {item['cheatOnContent']['status']}",
+                f"- Cheat draft: {item['cheatOnContent'].get('draftPath', '')}",
                 f"- Recommendation: {item['finalRecommendation']}",
             ]
         )
+    return "\n".join(lines)
+
+
+def render_cheat_review_pack(pack: dict[str, Any]) -> str:
+    lines = [
+        "# Cheat-On-Content Review Pack",
+        "",
+        f"Status: `{pack['status']}`",
+        f"Cheat-on-content installed: {pack['skillDetection']['cheatOnContentInstalled']}",
+        f"Cheat-score installed: {pack['skillDetection']['cheatScoreInstalled']}",
+        f"Project initialized: {pack['projectState']['initialized']}",
+        "",
+        "This pack prepares draft files for Codex to invoke cheat-score. It does not write prediction logs.",
+        "",
+        "## Drafts",
+    ]
+    for item in pack["drafts"]:
+        lines.extend(
+            [
+                "",
+                f"### {item['platform']}",
+                f"- Draft: `{item['draftPath']}`",
+                f"- Prompt: `{item['reviewPrompt']}`",
+            ]
+        )
+    lines.extend(["", "## Next Actions"])
+    lines.extend([f"- {item}" for item in pack["nextActions"]])
     return "\n".join(lines)
 
 

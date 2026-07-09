@@ -217,6 +217,7 @@ class PromotionManagerScriptTest(unittest.TestCase):
             "reports/promotion-manager/content-plans/ai-prompt-kit-content-plan.json",
             "reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json",
             "reports/promotion-manager/generated-content/ai-prompt-kit-content-review.json",
+            "reports/promotion-manager/cheat-review/ai-prompt-kit-cheat-review-pack.json",
             "reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json",
             "reports/promotion-manager/publish-results/ai-prompt-kit-publish-result-input.json",
             "reports/promotion-manager/retrospectives/ai-prompt-kit-retrospective.json",
@@ -254,7 +255,13 @@ class PromotionManagerScriptTest(unittest.TestCase):
         out_dir = self.run_all()
         review = self.load_json(out_dir, "reports/promotion-manager/generated-content/ai-prompt-kit-content-review.json")
         self.assertTrue(all("complianceScore" in item for item in review))
-        self.assertTrue(all(item["cheatOnContent"]["status"] == "fallback_scorecard_used" for item in review))
+        self.assertTrue(all(item["cheatOnContent"]["status"] == "cheat_review_pack_created" for item in review))
+        self.assertTrue(all(Path(item["cheatOnContent"]["draftPath"]).exists() for item in review))
+        self.assertTrue(all("cheat-score" in item["cheatOnContent"]["reviewPrompt"] for item in review))
+        cheat_pack = self.load_json(out_dir, "reports/promotion-manager/cheat-review/ai-prompt-kit-cheat-review-pack.json")
+        self.assertEqual(cheat_pack["status"], "cheat_review_pack_created")
+        self.assertFalse(cheat_pack["safety"]["writesPredictionLogs"])
+        self.assertEqual(len(cheat_pack["drafts"]), len(review))
 
         publish_pack = self.load_json(out_dir, "reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json")
         self.assertTrue(all(item["approvalRequired"] for item in publish_pack))
