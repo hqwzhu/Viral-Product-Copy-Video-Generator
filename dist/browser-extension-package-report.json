@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-07-10",
+  "status": "ready",
+  "extensionDir": "C:\\Users\\HU\\Documents\\viral-product-copy-video-generator\\browser-extension",
+  "package": "dist\\enhe-promotion-manager-0.5.0.zip",
+  "version": "0.5.0",
+  "name": "ENHE Promotion Manager",
+  "checks": {
+    "requiredFiles": true,
+    "manifestV3": true,
+    "icons": true,
+    "allowedPermissions": true,
+    "hostPermissionsScopedToEnhe": true,
+    "noRemoteExecutableCode": true,
+    "noUnsafeEval": true,
+    "packageCreated": true
+  },
+  "files": [
+    "billing-contract.json",
+    "icons/icon128.png",
+    "icons/icon16.png",
+    "icons/icon48.png",
+    "manifest.json",
+    "popup.css",
+    "popup.html",
+    "popup.js"
+  ],
+  "missing": [],
+  "storeSubmission": {
+    "chrome": "https://developer.chrome.com/docs/webstore/publish",
+    "edge": "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
+    "privacyPolicyUrl": "https://www.enhe-tech.com.cn/privacy",
+    "supportUrl": "https://www.enhe-tech.com.cn/"
+  },
+  "guardrails": [
+    "Package local extension code only; remote services may return data, not executable code.",
+    "No platform API keys, payment secrets, cookies, OAuth tokens, or webhook secrets are packaged.",
+    "Final platform publishing remains gated by user review and explicit platform approval."
+  ]
+}

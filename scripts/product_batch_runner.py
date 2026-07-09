@@ -66,6 +66,9 @@ def parse_args() -> argparse.Namespace:
     reader.add_argument("--timeout-ms", type=int, default=30000)
     reader.add_argument("--wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     reader.add_argument("--screenshot", action="store_true")
+    reader.add_argument("--disable-web-text-fallback", action="store_true")
+    reader.add_argument("--web-text-fallback-url-template", default="")
+    reader.add_argument("--web-text-fallback-file", default="")
 
     workflow = parser.add_argument_group("Promotion cycle")
     workflow.add_argument("--platforms", default=DEFAULT_PLATFORMS)
@@ -205,6 +208,10 @@ def run_product_url_reader(
     command.extend(["--timeout-ms", str(args.timeout_ms), "--wait-until", args.wait_until])
     if args.screenshot:
         command.append("--screenshot")
+    if args.disable_web_text_fallback:
+        command.append("--disable-web-text-fallback")
+    append_if_present(command, "--web-text-fallback-url-template", args.web_text_fallback_url_template)
+    append_if_present(command, "--web-text-fallback-file", args.web_text_fallback_file)
 
     step = run_command("product_url_reader", command)
     steps.append(step)
@@ -243,6 +250,9 @@ def workflow_source(record: dict[str, Any]) -> dict[str, Any] | None:
     snapshot = Path(str((record.get("browser") or {}).get("snapshot", "")))
     if record.get("sourceMode") == "browser_structured_snapshot" and snapshot.exists():
         return {"flag": "--structured-json", "value": str(snapshot), "sourceMode": "browser_structured_snapshot"}
+    text_file = Path(str((record.get("webText") or {}).get("textFile", "")))
+    if record.get("sourceMode") == "web_text_fallback" and text_file.exists():
+        return {"flag": "--text-file", "value": str(text_file), "sourceMode": "web_text_fallback"}
     url = str(record.get("url", "")).strip()
     if url:
         return {"flag": "--product-url", "value": url, "sourceMode": "static_url_fallback"}
@@ -517,6 +527,7 @@ def build_report(
         "blockedPromotionRuns": sum(1 for item in runs if item.get("status") == "blocked"),
         "browserStructuredRuns": sum(1 for item in runs if item.get("sourceMode") == "browser_structured_snapshot"),
         "staticFallbackRuns": sum(1 for item in runs if item.get("sourceMode") == "static_url_fallback"),
+        "webTextFallbackRuns": sum(1 for item in runs if item.get("sourceMode") == "web_text_fallback"),
         "multiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") not in {"", "skipped", None}),
         "readyMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "ready"),
         "plannedMultiQueryDiscoveryRuns": sum(1 for item in runs if item.get("multiQueryViralDiscovery", {}).get("status") == "planned"),
@@ -554,6 +565,7 @@ def build_report(
             "Product URL discovery uses public HTML links only and produces candidates that still require product_url_reader.py evidence.",
             "Browser structured snapshots are passed to promotion_cycle_runner.py with --structured-json when available.",
             "Static URL intake is used only when browser capture is skipped or unavailable and fallback is allowed.",
+            "Public web-reader text fallback is passed to promotion_cycle_runner.py with --text-file after browser/static intake failures.",
             "Multi-query viral discovery uses public/browser-visible platform evidence, official APIs, or dry-run query plans.",
             "Official publishing still requires explicit approval, credentials, and platform authorization.",
             "No login, captcha bypass, cookie extraction, hidden token storage, or fabricated metrics.",

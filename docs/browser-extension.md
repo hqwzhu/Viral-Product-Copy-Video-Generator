@@ -33,6 +33,24 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 4. Select the repository folder `browser-extension`.
 5. Pin ENHE Promotion Manager in the toolbar.
 
+## Build Store Submission Package
+
+Build a Chrome/Edge submission zip from the repository root:
+
+```powershell
+python scripts\package_browser_extension.py --out-dir ".\dist"
+```
+
+The command writes:
+
+- `dist\enhe-promotion-manager-<version>.zip`
+- `dist\browser-extension-package-report.json`
+- `dist\browser-extension-package-report.md`
+
+Only upload the zip when `browser-extension-package-report.json` reports `status: ready`. The package check verifies MV3, bundled icons, local popup code, scoped permissions, and no remote code execution patterns.
+
+For Chrome Web Store and Microsoft Edge Add-ons listing steps, reviewer notes, privacy policy fields, and paid-subscription wording, see `docs/extension-store-submission.md`.
+
 ## Operator Flow
 
 1. Open a product page in Chrome.

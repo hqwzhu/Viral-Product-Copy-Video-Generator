@@ -69,6 +69,7 @@ SCRIPT_REQUIREMENTS = {
     "final_capability_readiness": "final_capability_readiness.py",
     "self_evolution_audit": "self_evolution_audit.py",
     "billing_contract_simulator": "billing_contract_simulator.py",
+    "package_browser_extension": "package_browser_extension.py",
 }
 
 
@@ -124,6 +125,9 @@ GITHUB_DOC_FILES = [
     "docs/usage.md",
     "docs/zh-CN/usage.md",
     "docs/browser-extension.md",
+    "docs/zh-CN/browser-extension.md",
+    "docs/extension-store-submission.md",
+    "docs/zh-CN/extension-store-submission.md",
     "docs/subscription-pricing.md",
     "docs/billing-backend-contract.md",
     "docs/final-capability-map.md",
@@ -136,6 +140,9 @@ BROWSER_EXTENSION_FILES = [
     "browser-extension/popup.html",
     "browser-extension/popup.css",
     "browser-extension/popup.js",
+    "browser-extension/icons/icon16.png",
+    "browser-extension/icons/icon48.png",
+    "browser-extension/icons/icon128.png",
 ]
 
 
@@ -572,12 +579,12 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, store submission package, listing tutorial, reference backend simulator, developer info, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, and reserve hosted usage credits; the local simulator proves the contract shape for license, usage, and webhook flows.",
+                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, reserve hosted usage credits, and build a Chrome/Edge submission zip; the local simulator proves the contract shape for license, usage, hosted run, and webhook flows.",
                 "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
@@ -631,7 +638,29 @@ def github_docs_status() -> dict[str, Any]:
         ],
         "docs/installation.md": ["Installation", "Install As A Codex Skill", "Verify"],
         "docs/usage.md": ["One Product URL", "Publishing", "Metrics And Next Round"],
-        "docs/browser-extension.md": ["Browser Extension", "Command types", "Subscription Flow", "Reference Simulator", "Developer Info"],
+        "docs/browser-extension.md": [
+            "Browser Extension",
+            "Command types",
+            "Subscription Flow",
+            "Build Store Submission Package",
+            "Reference Simulator",
+            "Developer Info",
+        ],
+        "docs/zh-CN/browser-extension.md": ["浏览器插件", "收费订阅", "打包成上架包", "开发者信息"],
+        "docs/extension-store-submission.md": [
+            "Extension Store Submission",
+            "Chrome Web Store Steps",
+            "Microsoft Edge Add-ons Steps",
+            "privacy policy",
+            "remote code",
+        ],
+        "docs/zh-CN/extension-store-submission.md": [
+            "浏览器插件上架指南",
+            "Chrome Web Store 上架步骤",
+            "Microsoft Edge Add-ons 上架步骤",
+            "privacy policy",
+            "remote code",
+        ],
         "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Browser publish session", "Plans"],
         "docs/billing-backend-contract.md": [
             "Billing Backend Contract",
@@ -668,6 +697,15 @@ def browser_extension_status() -> dict[str, Any]:
                 missing.append(f"scripts/billing_contract_simulator.py missing marker: {marker}")
     else:
         missing.append("scripts/billing_contract_simulator.py")
+    package_script_path = ROOT / "scripts/package_browser_extension.py"
+    if package_script_path.exists():
+        evidence.append(str(package_script_path))
+        package_script_text = safe_read(package_script_path)
+        for marker in ["browser-extension-package-report.json", "noRemoteExecutableCode", "icons/icon128.png"]:
+            if marker not in package_script_text:
+                missing.append(f"scripts/package_browser_extension.py missing marker: {marker}")
+    else:
+        missing.append("scripts/package_browser_extension.py")
     manifest_path = ROOT / "browser-extension/manifest.json"
     contract_path = ROOT / "browser-extension/billing-contract.json"
     popup_path = ROOT / "browser-extension/popup.html"
@@ -680,6 +718,15 @@ def browser_extension_status() -> dict[str, Any]:
         action = manifest.get("action") if isinstance(manifest.get("action"), dict) else {}
         if action.get("default_popup") != "popup.html":
             missing.append("browser-extension/manifest.json must declare popup.html as default_popup")
+        icons = manifest.get("icons") if isinstance(manifest.get("icons"), dict) else {}
+        action_icons = action.get("default_icon") if isinstance(action.get("default_icon"), dict) else {}
+        for size in ["16", "48", "128"]:
+            icon = str(icons.get(size) or "")
+            action_icon = str(action_icons.get(size) or "")
+            if not icon or not (ROOT / "browser-extension" / icon).exists():
+                missing.append(f"browser-extension/manifest.json missing packaged icon {size}")
+            if not action_icon or not (ROOT / "browser-extension" / action_icon).exists():
+                missing.append(f"browser-extension/manifest.json missing action icon {size}")
         csp = manifest.get("content_security_policy") if isinstance(manifest.get("content_security_policy"), dict) else {}
         if "script-src 'self'" not in str(csp.get("extension_pages", "")):
             missing.append("browser-extension/manifest.json must keep extension scripts local")
@@ -979,7 +1026,11 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         },
         {
             "purpose": "review_github_docs",
-            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/subscription-pricing.md docs/final-capability-map.md",
+            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/subscription-pricing.md docs/final-capability-map.md",
+        },
+        {
+            "purpose": "package_browser_extension",
+            "command": "python scripts/package_browser_extension.py --out-dir \"./dist\"",
         },
         {
             "purpose": "load_browser_extension",

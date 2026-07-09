@@ -35,7 +35,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, launch unlock packs, real evidence inbox setup/recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, launch unlock packs, real evidence inbox setup/recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. To build a Chrome/Edge submission zip, run `scripts/package_browser_extension.py --out-dir "./dist"` and review `docs/extension-store-submission.md`. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
 To validate the paid-subscription contract locally before deploying a backend:
 
@@ -63,6 +63,12 @@ python scripts/billing_contract_simulator.py demo-hosted-run \
   --workflow-type standard_run \
   --product-url "https://example.com/product" \
   --out-dir "./promotion-output"
+```
+
+To package the browser extension for Chrome Web Store or Microsoft Edge Add-ons submission:
+
+```bash
+python scripts/package_browser_extension.py --out-dir "./dist"
 ```
 
 For GitHub/open-source users, start with `README.md`, `docs/installation.md`, `docs/usage.md`, and `docs/final-capability-map.md`.
@@ -256,6 +262,8 @@ python scripts/product_url_reader.py \
   --url "https://example.com/product" \
   --out-dir "./promotion-output"
 ```
+
+If the local browser and static HTML fetch both fail for a public product URL, the reader falls back to a public web-text reader, saves `product-url-reader/<id>/web-reader-page.md`, and runs `product_intake.py --text-file` so the promotion cycle can continue from verified page text. Disable that third-party fallback with `--disable-web-text-fallback`, or pass Codex-provided page text with `--web-text-fallback-file`.
 
 To discover likely product URLs from a public website or tool-station entry page before Codex reads them:
 
@@ -911,7 +919,7 @@ The command writes:
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run.
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links, `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input.
-- `reports/promotion-manager/intake/product-url-reader.{json,md}` and `product-url-reader/<id>/structured-product-page.json` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots and product profiles.
+- `reports/promotion-manager/intake/product-url-reader.{json,md}`, `product-url-reader/<id>/structured-product-page.json`, and optionally `product-url-reader/<id>/web-reader-page.md` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots, static profiles, or public web-text fallback profiles.
 - `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `product-batch-runs/<id>/...` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization per product.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, optional follow-up capture, and optional video frame sampling as one standalone discovery pass. Its `coverage` records search captures, queued follow-up modes, imported deep records, browser-visible capture successes, and video sample frame counts.
@@ -954,7 +962,7 @@ The command writes:
 - `reports/promotion-manager/billing-simulator/billing-simulator.{json,md}` and `billing-simulator-state.json` when `scripts/billing_contract_simulator.py` validates the extension billing contract, hashed license storage, usage reservation, hosted run acceptance, usage commit, and simulated webhook flow.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
-- `README.md`, `docs/*.md`, and `browser-extension/*` as the public GitHub docs and browser extension MVP when syncing the installed Skill.
+- `README.md`, `docs/*.md`, `browser-extension/*`, and `scripts/package_browser_extension.py` as the public GitHub docs and store-ready browser extension package when syncing the installed Skill.
 
 ## Workflows
 
@@ -965,7 +973,7 @@ The command writes:
 - If a page cannot be read, ask for pasted product info.
 - Use `scripts/product_intake.py` for deterministic metadata extraction from public HTML, saved product pages, rendered page text, or structured page snapshots captured by Codex/browser tooling.
 - Use `scripts/browser_snapshot.py` or `scripts/run_promotion_workflow.py --browser-url` when the product page is dynamic or Codex needs rendered DOM evidence before intake.
-- Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command.
+- Use `scripts/product_url_reader.py` when the user sends one or more product URLs and wants Codex to read the rendered page first, write a structured snapshot, pass it into `product_intake.py`, and return a product profile plus the correct next workflow command. If browser and static intake both fail for a public URL, it may use public web-text fallback and pass the saved text file to the workflow; this source is marked `web_text_fallback` and can be disabled with `--disable-web-text-fallback`.
 - Use `scripts/product_url_discovery.py` when the user sends a website/homepage URL and wants the Skill to find likely product URLs first. It uses public HTML links, public `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input, filters obvious non-product pages, and writes `product-url-discovery/product-urls.txt` for follow-up reading.
 - Use `scripts/product_batch_runner.py` when the user sends multiple product URLs, a URL file, or a website URL via `--discover-from-url`, and wants the Skill to read each URL first, then run a guarded promotion cycle for every ready product. Add `--run-multi-query-viral-discovery` when each product should also derive multiple search queries and merge viral materials/creators after the cycle. Add `--sample-video-frames` for per-cycle follow-up video evidence, or `--multi-query-sample-video-frames` for the post-cycle multi-query discovery pass. Add `--run-next-round-optimization` with real published URLs, public/browser-visible metrics, comment evidence, or business exports when each product cycle should produce next-round recommendations.
 - Use `scripts/skill_entry.py` when the user sends one link and says to execute the Skill. It defaults to `--link-mode auto`, generates a real-run playbook, runs `scripts/final_capability_runner.py` with safe high-automation defaults, refreshes `scripts/final_capability_readiness.py`, and writes a manager-facing run summary.
@@ -1113,20 +1121,24 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `README.md`: GitHub-facing project introduction, quick start, install, usage, safety, and extension overview.
 - `docs/installation.md`: setup and Codex Skill sync tutorial.
 - `docs/usage.md`: operator commands for intake, research, publishing, metrics, and next-round optimization.
-- `docs/browser-extension.md`: Chrome extension load, subscription flow, and security notes.
+- `docs/browser-extension.md`: Chrome extension load, store package command, subscription flow, and security notes.
+- `docs/extension-store-submission.md`: Chrome Web Store and Microsoft Edge Add-ons submission checklist.
+- `docs/zh-CN/browser-extension.md`: Chinese browser extension operator guide.
+- `docs/zh-CN/extension-store-submission.md`: Chinese extension store submission guide.
 - `docs/subscription-pricing.md`: token-backed subscription pricing assumptions and credit model.
 - `docs/billing-backend-contract.md`: checkout, customer portal, license validation, usage ledger, webhook, and loss-control backend contract.
 - `docs/final-capability-map.md`: requirement-to-capability map and remaining external gates.
-- `browser-extension/manifest.json`: Chrome MV3 extension manifest.
+- `browser-extension/manifest.json`: Chrome MV3 extension manifest with packaged icon declarations.
 - `browser-extension/billing-contract.json`: machine-readable subscription backend contract for the extension and ENHE website.
 - `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, multi-command and periodic automation generator, subscription estimate, license validation, usage reservation, hosted run payload hooks, and ENHE website links.
+- `browser-extension/icons/*.png`: packaged extension icons for local loading and store submission.
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.
 - `scripts/browser_snapshot.py`: Playwright/HTML structured snapshot capturer for rendered product pages.
 - `scripts/browser_video_sampler.py`: browser-visible video metadata and frame screenshot sampler for public video pages.
 - `scripts/product_url_discovery.py`: public website link and sitemap scanner that finds likely product URLs and writes a URL file for Codex-first reading.
-- `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading.
+- `scripts/product_url_reader.py`: URL-to-structured-snapshot/product-profile runner for Codex-first product page reading with static and public web-text fallback.
 - `scripts/product_batch_runner.py`: batch URL runner that can discover product URLs from a site, invoke Codex-first reading, run one promotion cycle per ready product, optionally run per-product multi-query viral discovery, and optionally run next-round optimization from recovered evidence.
 - `scripts/product_intake.py`: public URL, saved HTML, rendered text, or structured snapshot product-profile extractor.
 - `scripts/competitor_discovery.py`: platform competitor search task generator with optional official API connectors.
@@ -1172,6 +1184,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.
 - `scripts/self_evolution_audit.py`: controlled self-evolution auditor for runtime gaps, repository status, installed Skill drift, platform-learning freshness, safe install candidates, and approved local Skill sync.
 - `scripts/billing_contract_simulator.py`: local reference backend simulator for browser-extension subscription plans, hashed licenses, quota authorization, hosted run acceptance, usage commits, and payment webhook state changes.
+- `scripts/package_browser_extension.py`: validates and builds the Chrome/Edge store submission zip plus `browser-extension-package-report`.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.

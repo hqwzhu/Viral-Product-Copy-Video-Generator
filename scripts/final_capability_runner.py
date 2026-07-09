@@ -285,13 +285,14 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
             command.append("--multi-query-live-official")
         if args.multi_query_run_creator_follow_up:
             command.append("--multi-query-run-creator-follow-up")
-        if args.multi_query_run_follow_up_captures:
+        if args.multi_query_run_follow_up_captures or args.run_follow_up_captures:
             command.append("--multi-query-run-follow-up-captures")
-        if args.multi_query_capture_browser_assisted_follow_ups:
+        if args.multi_query_capture_browser_assisted_follow_ups or args.capture_browser_assisted_follow_ups:
             command.append("--multi-query-capture-browser-assisted-follow-ups")
-        if args.multi_query_sample_video_frames:
+        if args.multi_query_sample_video_frames or args.sample_video_frames:
             command.append("--multi-query-sample-video-frames")
-            command.extend(["--multi-query-video-sample-count", str(args.multi_query_video_sample_count)])
+            video_sample_count = args.multi_query_video_sample_count if args.multi_query_sample_video_frames else args.video_sample_count
+            command.extend(["--multi-query-video-sample-count", str(video_sample_count)])
     append_many(command, "--published-url", args.published_url)
     append_many(command, "--metrics-github-repo", args.metrics_github_repo)
     append_many(command, "--metrics-youtube-video-id", args.metrics_youtube_video_id)

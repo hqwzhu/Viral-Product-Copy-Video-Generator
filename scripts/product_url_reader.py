@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import urllib.parse
+import urllib.request
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ SCRIPTS = ROOT / "scripts"
 BROWSER_SNAPSHOT = SCRIPTS / "browser_snapshot.py"
 PRODUCT_INTAKE = SCRIPTS / "product_intake.py"
 TODAY = date.today().isoformat()
+USER_AGENT = "Mozilla/5.0 (compatible; ViralProductPromotionSkill/1.0; +https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator)"
+DEFAULT_WEB_TEXT_FALLBACK_TEMPLATE = "https://r.jina.ai/{url}"
 
 
 def main() -> None:
@@ -45,6 +48,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-ms", type=int, default=30000)
     parser.add_argument("--wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--screenshot", action="store_true", help="Save browser screenshots next to structured snapshots.")
+    parser.add_argument("--disable-web-text-fallback", action="store_true", help="Disable public web-reader text fallback after browser/static intake failures.")
+    parser.add_argument("--web-text-fallback-url-template", default=DEFAULT_WEB_TEXT_FALLBACK_TEMPLATE, help="Fallback text reader URL template. Supports {url} and {encoded_url}.")
+    parser.add_argument("--web-text-fallback-file", default="", help="Local text/Markdown fallback file, mainly for Codex-provided page text or tests.")
     return parser.parse_args()
 
 
@@ -73,8 +79,9 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
     intake_dir = item_dir / "intake"
 
     browser_status: dict[str, Any] = {"status": "skipped", "reason": "--skip-browser was supplied."}
-    profile_status: dict[str, Any]
-    source_mode = "static_url_fallback"
+    web_text_status: dict[str, Any] = {"status": "skipped", "reason": "No fallback was needed."}
+    profile_status: dict[str, Any] = {"status": "blocked", "profile": "", "markdown": ""}
+    source_mode = "unavailable"
 
     if not args.skip_browser:
         browser_command = [
@@ -112,7 +119,9 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
             "--out-dir",
             str(intake_dir),
         ]
-        source_mode = "browser_structured_snapshot"
+        profile_status = run_intake_command(steps, intake_dir, intake_command)
+        if profile_status.get("status") == "ready":
+            source_mode = "browser_structured_snapshot"
     elif args.no_static_fallback:
         intake_command = []
     else:
@@ -124,18 +133,26 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
             "--out-dir",
             str(intake_dir),
         ]
+        profile_status = run_intake_command(steps, intake_dir, intake_command)
+        if profile_status.get("status") == "ready":
+            source_mode = "static_url_fallback"
 
-    if intake_command:
-        intake_step = run_command("product_intake", intake_command)
-        steps.append(intake_step)
-        profile_path = intake_dir / "product-profile.json"
-        profile_status = {
-            "status": "ready" if intake_step["exitCode"] == 0 and profile_path.exists() else "error",
-            "profile": str(profile_path) if profile_path.exists() else "",
-            "markdown": str(intake_dir / "product-profile.md") if (intake_dir / "product-profile.md").exists() else "",
-            "exitCode": intake_step["exitCode"],
-        }
-    else:
+    if profile_status.get("status") != "ready" and not args.disable_web_text_fallback:
+        web_text_status = fetch_web_text_fallback(args, item_dir, url)
+        steps.append(web_text_status.get("_step", {}))
+        if web_text_status.get("status") == "ready":
+            intake_command = [
+                sys.executable,
+                str(PRODUCT_INTAKE),
+                "--text-file",
+                str(web_text_status["textFile"]),
+                "--out-dir",
+                str(intake_dir),
+            ]
+            profile_status = run_intake_command(steps, intake_dir, intake_command)
+            if profile_status.get("status") == "ready":
+                source_mode = "web_text_fallback"
+    elif not intake_command and profile_status.get("status") != "ready":
         profile_status = {
             "status": "blocked",
             "profile": "",
@@ -151,11 +168,115 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
         "sourceMode": source_mode if profile_status.get("status") == "ready" else "unavailable",
         "workspace": str(item_dir),
         "browser": browser_status,
+        "webText": public_web_text_status(web_text_status),
         "intake": profile_status,
         "product": summarize_profile(profile),
-        "nextWorkflowCommand": next_workflow_command(url, source_mode, snapshot_path, out_dir, profile_status),
+        "nextWorkflowCommand": next_workflow_command(url, source_mode, snapshot_path, Path(str(web_text_status.get("textFile", ""))), out_dir, profile_status),
         "steps": steps,
     }
+
+
+def run_intake_command(steps: list[dict[str, Any]], intake_dir: Path, intake_command: list[str]) -> dict[str, Any]:
+    intake_step = run_command("product_intake", intake_command)
+    steps.append(intake_step)
+    profile_path = intake_dir / "product-profile.json"
+    return {
+        "status": "ready" if intake_step["exitCode"] == 0 and profile_path.exists() else "error",
+        "profile": str(profile_path) if profile_path.exists() else "",
+        "markdown": str(intake_dir / "product-profile.md") if (intake_dir / "product-profile.md").exists() else "",
+        "exitCode": intake_step["exitCode"],
+    }
+
+
+def fetch_web_text_fallback(args: argparse.Namespace, item_dir: Path, url: str) -> dict[str, Any]:
+    text_path = item_dir / "web-reader-page.md"
+    if args.web_text_fallback_file:
+        source = str(Path(args.web_text_fallback_file))
+        step = {
+            "name": "web_text_fallback",
+            "command": ["read-file", source],
+            "exitCode": 0,
+            "stdoutTail": "",
+            "stderrTail": "",
+        }
+        try:
+            text = Path(args.web_text_fallback_file).read_text(encoding="utf-8-sig")
+        except OSError as exc:
+            step["exitCode"] = 1
+            step["stderrTail"] = str(exc)
+            return {"status": "error", "source": source, "textFile": "", "error": str(exc), "_step": step}
+    else:
+        if not is_public_http_url(url):
+            reason = "Web text fallback only reads public http/https URLs."
+            return {
+                "status": "blocked",
+                "source": "",
+                "textFile": "",
+                "reason": reason,
+                "_step": {
+                    "name": "web_text_fallback",
+                    "command": [],
+                    "exitCode": 1,
+                    "stdoutTail": "",
+                    "stderrTail": reason,
+                },
+            }
+        source = build_web_text_url(args.web_text_fallback_url_template, url)
+        step = {
+            "name": "web_text_fallback",
+            "command": ["web-text-fetch", source],
+            "exitCode": 0,
+            "stdoutTail": "",
+            "stderrTail": "",
+        }
+        try:
+            request = urllib.request.Request(
+                source,
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Accept": "text/markdown,text/plain,text/html;q=0.8,*/*;q=0.5",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=30) as response:
+                charset = response.headers.get_content_charset() or "utf-8"
+                text = response.read(2_000_000).decode(charset, errors="replace")
+        except Exception as exc:  # noqa: BLE001 - fallback errors are reported, not raised.
+            step["exitCode"] = 1
+            step["stderrTail"] = str(exc)
+            return {"status": "error", "source": source, "textFile": "", "error": str(exc), "_step": step}
+
+    text_path.write_text(text, encoding="utf-8")
+    step["stdoutTail"] = f"Web text fallback written to: {text_path}"
+    return {
+        "status": "ready",
+        "source": source,
+        "textFile": str(text_path),
+        "bytes": len(text.encode("utf-8")),
+        "_step": step,
+    }
+
+
+def public_web_text_status(status: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in status.items() if key != "_step"}
+
+
+def build_web_text_url(template: str, url: str) -> str:
+    return template.format(url=url, encoded_url=urllib.parse.quote(url, safe=""))
+
+
+def is_public_http_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    if host in {"localhost"} or host.startswith("127.") or host.startswith("0."):
+        return False
+    private_prefixes = ("10.", "192.168.", "169.254.")
+    if host.startswith(private_prefixes):
+        return False
+    if re.match(r"^172\.(1[6-9]|2\d|3[01])\.", host):
+        return False
+    return True
 
 
 def build_report(args: argparse.Namespace, out_dir: Path, records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -171,11 +292,13 @@ def build_report(args: argparse.Namespace, out_dir: Path, records: list[dict[str
             "blocked": sum(1 for item in records if item["status"] == "blocked"),
             "browserStructuredProfiles": sum(1 for item in records if item["sourceMode"] == "browser_structured_snapshot"),
             "staticFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "static_url_fallback"),
+            "webTextFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "web_text_fallback"),
         },
         "recommendedNextCommand": "Use records[].nextWorkflowCommand for the correct structured or static intake mode.",
         "guardrails": [
             "Read browser-visible product page evidence before product intake whenever Chromium is available.",
             "Static URL intake is only a fallback and may miss dynamic page content.",
+            "Public web-reader text fallback is used only after browser/static intake fails and records its source.",
             "Do not extract cookies, passwords, hidden tokens, private endpoints, or bypass login/captcha/risk controls.",
             "Treat pricing, testimonials, customer counts, and legal claims as assumptions unless the product page proves them.",
         ],
@@ -198,6 +321,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Requested URLs: {report['summary']['requestedUrls']}",
         f"- Browser structured profiles: {report['summary']['browserStructuredProfiles']}",
         f"- Static fallback profiles: {report['summary']['staticFallbackProfiles']}",
+        f"- Web text fallback profiles: {report['summary']['webTextFallbackProfiles']}",
         "",
         "## Records",
     ]
@@ -213,6 +337,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Product: {product.get('productName', 'unknown')}",
                 f"- Profile: {record['intake'].get('profile', '')}",
                 f"- Snapshot: {record['browser'].get('snapshot', '')}",
+                f"- Web text: {record.get('webText', {}).get('textFile', '')}",
                 f"- Next workflow: `{record.get('nextWorkflowCommand', '')}`",
             ]
         )
@@ -263,12 +388,17 @@ def summarize_profile(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def next_workflow_command(url: str, source_mode: str, snapshot_path: Path, out_dir: Path, profile_status: dict[str, Any]) -> str:
+def next_workflow_command(url: str, source_mode: str, snapshot_path: Path, text_path: Path, out_dir: Path, profile_status: dict[str, Any]) -> str:
     if profile_status.get("status") != "ready":
         return ""
     if source_mode == "browser_structured_snapshot" and snapshot_path.exists():
         return (
             f"python scripts/run_promotion_workflow.py --structured-json \"{snapshot_path}\" "
+            f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
+        )
+    if source_mode == "web_text_fallback" and text_path.exists():
+        return (
+            f"python scripts/run_promotion_workflow.py --text-file \"{text_path}\" "
             f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
         )
     return (

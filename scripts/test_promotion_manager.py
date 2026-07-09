@@ -71,6 +71,7 @@ BILLING_CONTRACT_SIMULATOR = ROOT / "scripts" / "billing_contract_simulator.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
+PACKAGE_BROWSER_EXTENSION = ROOT / "scripts" / "package_browser_extension.py"
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
 BROWSER_EXTENSION = ROOT / "browser-extension"
@@ -580,6 +581,70 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertEqual(record["product"]["sourceType"], "html")
             self.assertIn("--product-url", record["nextWorkflowCommand"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/intake/product-url-reader.md").exists())
+
+    def test_product_url_reader_uses_web_text_fallback_after_browser_and_static_fail(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-web-fallback-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        fallback = out_dir / "fallback.md"
+        fallback.write_text(
+            "\n".join(
+                [
+                    "Product: LumiOS AI",
+                    "URL: https://www.enhe-tech.com.cn/software/windows-ai",
+                    "Description: Windows AI workspace that remembers work context and helps operators write, research, and organize tasks.",
+                    "Pricing: unknown",
+                    "Audience: AI tool users, content operators",
+                    "Pain points: fragmented AI chat windows, repeated context setup",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_URL_READER),
+                "--url",
+                "https://127.0.0.1:9/unreachable-product",
+                "--skip-browser",
+                "--web-text-fallback-file",
+                str(fallback),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/intake/product-url-reader.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(report["status"], "partial_ready")
+        self.assertEqual(record["sourceMode"], "web_text_fallback")
+        self.assertEqual(record["webText"]["status"], "ready")
+        self.assertTrue(Path(record["webText"]["textFile"]).exists())
+        self.assertEqual(record["product"]["productName"], "LumiOS AI")
+        self.assertEqual(record["product"]["sourceType"], "text")
+        self.assertIn("--text-file", record["nextWorkflowCommand"])
+
+    def test_product_batch_runner_routes_web_text_fallback_to_text_file_cycle(self) -> None:
+        module = load_script_module(PRODUCT_BATCH_RUNNER)
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-web-fallback-source-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        text_file = out_dir / "web-reader-page.md"
+        text_file.write_text("Product: LumiOS AI\nDescription: Windows AI workspace.", encoding="utf-8")
+        source = module.workflow_source(
+            {
+                "url": "https://example.invalid/product",
+                "sourceMode": "web_text_fallback",
+                "intake": {"status": "ready"},
+                "webText": {"status": "ready", "textFile": str(text_file)},
+            }
+        )
+
+        self.assertEqual(source["flag"], "--text-file")
+        self.assertEqual(source["value"], str(text_file))
+        self.assertEqual(source["sourceMode"], "web_text_fallback")
 
     def test_product_url_discovery_selects_product_links_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-url-discovery-test-"))
@@ -1252,6 +1317,34 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["productBatch"]["summary"]["discoveredUrls"], 1)
         self.assertTrue(Path(report["productBatch"]["discoveryReport"]).exists())
         self.assertEqual(report["cycleEvidence"][0]["product"]["productName"], "AI Prompt Kit")
+
+    def test_final_capability_runner_inherits_video_evidence_flags_for_multi_query_discovery(self) -> None:
+        module = load_script_module(FINAL_CAPABILITY_RUNNER)
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                str(FINAL_CAPABILITY_RUNNER),
+                "--url",
+                "https://example.com/product",
+                "--run-follow-up-captures",
+                "--capture-browser-assisted-follow-ups",
+                "--sample-video-frames",
+                "--video-sample-count",
+                "3",
+            ]
+            args = module.parse_args()
+        finally:
+            sys.argv = original_argv
+
+        command = [sys.executable, str(PRODUCT_BATCH_RUNNER), "--out-dir", "./promotion-output"]
+        module.append_common_batch_args(command, args)
+
+        self.assertIn("--run-multi-query-viral-discovery", command)
+        self.assertIn("--multi-query-run-follow-up-captures", command)
+        self.assertIn("--multi-query-capture-browser-assisted-follow-ups", command)
+        self.assertIn("--multi-query-sample-video-frames", command)
+        self.assertIn("--multi-query-video-sample-count", command)
+        self.assertEqual(command[command.index("--multi-query-video-sample-count") + 1], "3")
 
     def test_final_capability_runner_orchestrates_safe_full_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-capability-runner-test-"))
@@ -5937,6 +6030,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
+        self.assertEqual(manifest["icons"]["128"], "icons/icon128.png")
+        self.assertEqual(manifest["action"]["default_icon"]["48"], "icons/icon48.png")
         csp = manifest["content_security_policy"]["extension_pages"]
         self.assertIn("script-src 'self'", csp)
         self.assertNotIn("unsafe-eval", csp)
@@ -6026,6 +6121,55 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("checkout.session.completed", contract["requiredWebhookEvents"])
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
         self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
+
+    def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGE_BROWSER_EXTENSION),
+                "--out-dir",
+                str(out_dir / "dist"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        package_path = Path(report["package"])
+        self.assertTrue(package_path.exists())
+        self.assertTrue(report["checks"]["manifestV3"])
+        self.assertTrue(report["checks"]["icons"])
+        self.assertTrue(report["checks"]["noRemoteExecutableCode"])
+        with zipfile.ZipFile(package_path) as package:
+            names = set(package.namelist())
+        self.assertIn("manifest.json", names)
+        self.assertIn("popup.html", names)
+        self.assertIn("popup.css", names)
+        self.assertIn("popup.js", names)
+        self.assertIn("billing-contract.json", names)
+        self.assertIn("icons/icon16.png", names)
+        self.assertIn("icons/icon48.png", names)
+        self.assertIn("icons/icon128.png", names)
+
+    def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
+        english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
+        chinese = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
+        zh_extension = (DOCS / "zh-CN" / "browser-extension.md").read_text(encoding="utf-8")
+
+        for text in [english, chinese]:
+            self.assertIn("https://developer.chrome.com/docs/webstore/publish", text)
+            self.assertIn(
+                "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
+                text,
+            )
+            self.assertIn("browser-extension-package-report.json", text)
+            self.assertIn("privacy", text.lower())
+            self.assertIn("remote code", text.lower())
+        self.assertIn("收费订阅", zh_extension)
+        self.assertIn("上架", chinese)
 
     def test_billing_contract_simulator_runs_license_usage_and_webhook_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="billing-simulator-test-"))
@@ -6229,7 +6373,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/popup.html", files)
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
+        self.assertIn("browser-extension/icons/icon128.png", files)
         self.assertIn("scripts/billing_contract_simulator.py", files)
+        self.assertIn("scripts/package_browser_extension.py", files)
         self.assertIn("scripts/launch_unlock_pack.py", files)
 
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:

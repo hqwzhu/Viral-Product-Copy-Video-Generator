@@ -708,7 +708,7 @@ def build_action_queue(
                 82,
                 "complete_github_docs",
                 "Update README and docs so GitHub users can install, run, price, and understand the final capability boundaries.",
-                "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/subscription-pricing.md docs/final-capability-map.md",
+                "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/subscription-pricing.md docs/final-capability-map.md",
             )
         )
     if by_id["browser_extension_operator_ui_subscription"]["status"] != "ready":
@@ -716,8 +716,8 @@ def build_action_queue(
             action(
                 83,
                 "complete_browser_extension",
-                "Complete the Chrome MV3 extension files and subscription/license UI evidence.",
-                "review browser-extension/manifest.json browser-extension/popup.html browser-extension/popup.css browser-extension/popup.js",
+                "Complete the Chrome MV3 extension files, packaged icons, submission zip, subscription/license UI evidence, and listing guide.",
+                "python scripts/package_browser_extension.py --out-dir \"./dist\"",
             )
         )
     elif not (out_dir / "reports/promotion-manager/billing-simulator/billing-simulator.json").exists():

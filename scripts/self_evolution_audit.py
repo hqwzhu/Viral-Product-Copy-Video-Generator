@@ -305,7 +305,7 @@ def managed_skill_files(root: Path) -> list[Path]:
         "references": ["*.md"],
         "scripts": ["*.py"],
         "docs": ["*.md"],
-        "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt"],
+        "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt", "*.png"],
     }
     for folder, patterns in directory_patterns.items():
         directory = root / folder

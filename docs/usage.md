@@ -13,6 +13,8 @@ python scripts\skill_entry.py `
 
 The entry script builds a real-run playbook, runs the final capability runner, and writes a readiness matrix. After each major stage, use `reports\promotion-manager\final-readiness\final-capability-readiness.md` as the phase progress report: current stage, completed goals, unfinished goals, next plan, and estimated remaining time.
 
+For direct URL reading, `product_url_reader.py` tries browser structured capture first, then static HTML, then public web-text fallback for public pages that time out locally. Disable the third-party text fallback with `--disable-web-text-fallback`, or use `--web-text-fallback-file` when Codex has already saved page text.
+
 ## Website URL With Product Discovery
 
 ```powershell
