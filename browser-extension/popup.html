@@ -54,6 +54,7 @@
             <option value="skill_entry" selected>One-link Skill run</option>
             <option value="browser_publish_session">Browser publish session</option>
             <option value="real_evidence_inbox">Real evidence inbox</option>
+            <option value="performance_monitor">Performance monitor</option>
             <option value="final_readiness">Final readiness audit</option>
             <option value="automation_init">Schedule init</option>
             <option value="automation_run">Run scheduled jobs</option>
@@ -79,7 +80,7 @@
           <span>Publisher URL overrides</span>
           <textarea id="platformPublishUrls" spellcheck="false" placeholder="xiaohongshu=https://creator.xiaohongshu.com/"></textarea>
         </label>
-        <label class="field compact" data-command-scope="evidence">
+        <label class="field compact" data-command-scope="evidence-inbox">
           <span>Evidence inbox folder</span>
           <input id="evidenceInbox" type="text" value=".\promotion-evidence-inbox">
         </label>
@@ -112,11 +113,11 @@
             <input id="runFormFill" type="checkbox" checked>
             <span>Fill visible publisher fields</span>
           </label>
-          <label class="checkline" data-command-scope="publish evidence">
+          <label class="checkline" data-command-scope="publish evidence-inbox performance">
             <input id="captureBrowserEvidence" type="checkbox">
             <span>Use browser-visible capture</span>
           </label>
-          <label class="checkline" data-command-scope="publish evidence">
+          <label class="checkline" data-command-scope="publish evidence-inbox performance">
             <input id="allowLocalhost" type="checkbox">
             <span>Allow localhost test URLs</span>
           </label>

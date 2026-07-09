@@ -1,5 +1,7 @@
 # Installation
 
+中文版本: [docs/zh-CN/installation.md](zh-CN/installation.md)
+
 This project is a local Codex Skill plus scripts. It can run without a SaaS backend. Browser extension monetization needs a separate backend payment and license service.
 
 ## Requirements

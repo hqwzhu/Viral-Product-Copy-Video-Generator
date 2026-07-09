@@ -47,6 +47,7 @@ BROWSER_PUBLISH_SESSION = ROOT / "scripts" / "browser_publish_session.py"
 PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 POST_PUBLISH_METRICS_CAPTURE = ROOT / "scripts" / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
+PERFORMANCE_MONITOR = ROOT / "scripts" / "performance_monitor.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
@@ -5183,6 +5184,94 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(recovery["coverage"]["recordsWithMetrics"], 1)
         self.assertEqual(recovery["aggregates"]["totals"]["views"], 12000.0)
 
+    def test_performance_monitor_runs_post_publish_closed_loop(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="performance-monitor-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        site_dir = out_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "note.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>AI Prompt Kit launch note</title></head>
+<body>
+  <article>
+    <h1>AI Prompt Kit launch note</h1>
+    <p>views: 4,200 likes: 360 comments: 41 favorites: 80 shares: 12</p>
+    <section class="comments">
+      <p>Comment by Alice: How does pricing work? likes: 9</p>
+      <p>Bob: Need Zapier integration replies: 2</p>
+      <p>Carol: This solved our content workflow</p>
+    </section>
+  </article>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(site_dir), **kwargs)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def stop_server() -> None:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+        self.addCleanup(stop_server)
+        published_url = f"http://127.0.0.1:{server.server_address[1]}/note.html"
+        business_csv = out_dir / "orders.csv"
+        business_csv.write_text(
+            "\n".join(
+                [
+                    "orderId,utm_source,referrer,revenue,status",
+                    f"order-1,xiaohongshu,{published_url},99.00,paid",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(PERFORMANCE_MONITOR),
+                "--published-url",
+                f"xiaohongshu={published_url}",
+                "--business-csv",
+                str(business_csv),
+                "--allow-localhost",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads((out_dir / "reports/promotion-manager/performance-monitor/performance-monitor.json").read_text(encoding="utf-8"))
+        self.assertIn(report["status"], {"ready", "partial_ready"})
+        self.assertEqual(report["summary"]["capturedMetricRecords"], 1)
+        self.assertEqual(report["summary"]["commentCount"], 3)
+        self.assertEqual(report["summary"]["matchedBusinessRows"], 1)
+        self.assertIn(report["summary"]["nextRoundStatus"], {"ready", "partial_ready"})
+        self.assertEqual(
+            [step["id"] for step in report["steps"]],
+            [
+                "post_publish_metrics_capture",
+                "comment_evidence_capture",
+                "business_attribution",
+                "metrics_recovery",
+                "next_round_optimizer",
+            ],
+        )
+        history_path = out_dir / "reports/promotion-manager/performance-monitor/performance-monitor-history.jsonl"
+        self.assertTrue(history_path.exists())
+        self.assertEqual(len(history_path.read_text(encoding="utf-8").strip().splitlines()), 1)
+        self.assertTrue((out_dir / "reports/promotion-manager/optimization/next-round-optimization.json").exists())
+
     def test_metrics_intake_parses_chinese_units_and_currency(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-chinese-units-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -5779,6 +5868,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         readme = README.read_text(encoding="utf-8")
         for marker in [
             "ENHE Promotion Manager",
+            "README.zh-CN.md",
             "Quick Start",
             "Install",
             "Browser Extension",
@@ -5790,6 +5880,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         required_docs = [
             "installation.md",
             "usage.md",
+            "zh-CN/installation.md",
+            "zh-CN/usage.md",
             "browser-extension.md",
             "subscription-pricing.md",
             "billing-backend-contract.md",
@@ -5797,6 +5889,18 @@ Prompt templates for product copy, SEO content, and video scripts.
         ]
         for filename in required_docs:
             self.assertTrue((DOCS / filename).exists(), filename)
+        chinese_readme = ROOT / "README.zh-CN.md"
+        self.assertTrue(chinese_readme.exists())
+        chinese_readme_text = chinese_readme.read_text(encoding="utf-8")
+        self.assertIn("中文安装教程", chinese_readme_text)
+        self.assertIn("中文使用说明", chinese_readme_text)
+        self.assertIn("浏览器插件", chinese_readme_text)
+        self.assertIn("I_APPROVE_SKILL_SYNC", chinese_readme_text)
+        chinese_install = (DOCS / "zh-CN/installation.md").read_text(encoding="utf-8")
+        self.assertIn("安装为 Codex Skill", chinese_install)
+        chinese_usage = (DOCS / "zh-CN/usage.md").read_text(encoding="utf-8")
+        self.assertIn("单个产品 URL", chinese_usage)
+        self.assertIn("发布后性能监控", chinese_usage)
         pricing = (DOCS / "subscription-pricing.md").read_text(encoding="utf-8")
         self.assertIn("Credit Model", pricing)
         self.assertIn("Starter", pricing)
@@ -5825,6 +5929,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Command type", popup)
         self.assertIn("Browser publish session", popup)
         self.assertIn("Real evidence inbox", popup)
+        self.assertIn("Performance monitor", popup)
         self.assertIn("Final readiness audit", popup)
         self.assertIn("Schedule init", popup)
         self.assertIn("Run scheduled jobs", popup)
@@ -5859,10 +5964,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("skill_entry.py", script)
         self.assertIn("browser_publish_session.py", script)
         self.assertIn("real_evidence_inbox.py", script)
+        self.assertIn("performance_monitor.py", script)
         self.assertIn("final_capability_readiness.py", script)
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
         self.assertIn("real_evidence_inbox", script)
+        self.assertIn("performance_monitor", script)
         self.assertIn("automation_config_init", script)
         self.assertIn("automation_due_run", script)
         self.assertIn("automation_windows_task", script)
@@ -5878,6 +5985,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(contract["creditCosts"]["standard_run"], 4)
         self.assertIn("browser_publish_session", contract["creditCosts"])
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
+        self.assertIn("performance_monitor", contract["creditCosts"])
         self.assertIn("final_readiness_audit", contract["creditCosts"])
         self.assertIn("automation_config_init", contract["creditCosts"])
         self.assertIn("automation_due_run", contract["creditCosts"])
@@ -6085,7 +6193,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         module = load_script_module(SELF_EVOLUTION_AUDIT)
         files = {item.as_posix() for item in module.managed_skill_files(ROOT)}
         self.assertIn("README.md", files)
+        self.assertIn("README.zh-CN.md", files)
         self.assertIn("docs/installation.md", files)
+        self.assertIn("docs/zh-CN/installation.md", files)
+        self.assertIn("docs/zh-CN/usage.md", files)
         self.assertIn("docs/subscription-pricing.md", files)
         self.assertIn("docs/billing-backend-contract.md", files)
         self.assertIn("browser-extension/manifest.json", files)
@@ -6210,6 +6321,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
         self.assertTrue(report["scripts"]["real_evidence_inbox"]["exists"])
+        self.assertTrue(report["scripts"]["performance_monitor"]["exists"])
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
@@ -6227,11 +6339,16 @@ Prompt templates for product copy, SEO content, and video scripts.
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
         self.assertIn("real_evidence_inbox.py", metrics_evidence)
+        self.assertIn("performance_monitor.py", metrics_evidence)
         optimization_evidence = "\n".join(by_requirement["retrospective_next_round_optimization"]["evidence"])
         self.assertIn("next_round_optimizer.py", optimization_evidence)
+        self.assertIn("performance_monitor.py", optimization_evidence)
         docs_evidence = "\n".join(by_requirement["github_documentation_and_install_tutorial"]["evidence"]).replace("\\", "/")
         self.assertIn("README.md", docs_evidence)
+        self.assertIn("README.zh-CN.md", docs_evidence)
         self.assertIn("docs/installation.md", docs_evidence)
+        self.assertIn("docs/zh-CN/installation.md", docs_evidence)
+        self.assertIn("docs/zh-CN/usage.md", docs_evidence)
         extension_evidence = "\n".join(by_requirement["browser_extension_operator_ui_subscription"]["evidence"]).replace("\\", "/")
         self.assertIn("browser-extension/manifest.json", extension_evidence)
         self.assertIn("browser-extension/popup.js", extension_evidence)
@@ -6260,6 +6377,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "review_github_docs" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "load_browser_extension" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "billing_contract_simulator_demo" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "monitor_post_publish_performance" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "import_real_evidence_inbox" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
@@ -6500,6 +6618,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "monitor_post_publish_performance" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "import_real_evidence_inbox" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "run_xiaohongshu_browser_publish_session" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")

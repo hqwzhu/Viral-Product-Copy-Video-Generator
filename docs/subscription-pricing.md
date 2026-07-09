@@ -40,6 +40,7 @@ Use `safety_multiplier = 1.6` at launch until real logs are available.
 | Hosted MP4 add-on | Hosted render, storage, and download | No fixed token cost | Price separately if ENHE hosts compute |
 | Browser publish session | Payload preparation, visible-field form fill coordination, screenshots, and post-publish commands | Mostly local/browser automation plus hosted state | About 0.20 USD |
 | Real evidence inbox | Normalize published URLs, metric exports, comments, orders, revenue, and next-round recovery commands | Low hosted model usage unless ENHE adds hosted analysis | About 0.35 USD |
+| Performance monitor | Rerun public metric capture, comment evidence capture, optional attribution, recovery, next-round optimization, and history snapshot | Mostly local/browser-visible capture plus hosted orchestration state | About 0.35 USD |
 | Final readiness audit | Merge generated reports into the final capability matrix | No heavy hosted model call | About 0.10 USD |
 | Automation config init | Generate recurring job config and safe scheduler command pack | Low hosted model usage | About 0.10 USD |
 | Automation due run | Run one due scheduled promotion cycle with research, queue/evidence toggles, and reports | Same as a full promotion loop | About 0.80-1.40 USD before real usage logs |
@@ -58,6 +59,7 @@ Credits prevent heavy users from creating losses.
 | Hosted MP4 render | 3 |
 | Browser publish session | 2 |
 | Real evidence inbox | 2 |
+| Performance monitor | 2 |
 | Final readiness audit | 1 |
 | Automation config init | 1 |
 | Automation due run | 4 |

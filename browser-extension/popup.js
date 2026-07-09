@@ -18,6 +18,7 @@ const COMMAND_LABELS = {
   skill_entry: "Skill run",
   browser_publish_session: "Publish session",
   real_evidence_inbox: "Evidence inbox",
+  performance_monitor: "Performance monitor",
   final_readiness: "Readiness audit",
   automation_init: "Schedule init",
   automation_run: "Scheduled run",
@@ -175,6 +176,10 @@ function generateCommand() {
     generateRealEvidenceInboxCommand();
     return;
   }
+  if (commandType === "performance_monitor") {
+    generatePerformanceMonitorCommand();
+    return;
+  }
   if (commandType === "final_readiness") {
     generateFinalReadinessCommand();
     return;
@@ -271,6 +276,21 @@ function generateRealEvidenceInboxCommand() {
   const args = [
     "python scripts\\real_evidence_inbox.py",
     `--inbox-dir ${quote(inboxPath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  if (els.captureBrowserEvidence.checked) {
+    args.push("--capture-browser-assisted");
+  }
+  if (els.allowLocalhost.checked) {
+    args.push("--allow-localhost");
+  }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generatePerformanceMonitorCommand() {
+  const args = [
+    "python scripts\\performance_monitor.py",
     `--out-dir ${quote(outDir())}`
   ];
   if (els.captureBrowserEvidence.checked) {
@@ -679,6 +699,10 @@ function estimateCredits() {
     workflowType = "real_evidence_inbox";
     creditsPerRun = 2;
   }
+  if (commandType === "performance_monitor") {
+    workflowType = "performance_monitor";
+    creditsPerRun = 2;
+  }
   if (commandType === "final_readiness") {
     workflowType = "final_readiness_audit";
     creditsPerRun = 1;
@@ -725,7 +749,10 @@ function commandScope(commandType) {
     return "publish";
   }
   if (commandType === "real_evidence_inbox") {
-    return "evidence";
+    return "evidence-inbox";
+  }
+  if (commandType === "performance_monitor") {
+    return "performance";
   }
   if (commandType === "automation_init") {
     return "automation-init";

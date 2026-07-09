@@ -54,6 +54,7 @@ SCRIPT_REQUIREMENTS = {
     "comment_evidence_capture": "comment_evidence_capture.py",
     "business_attribution": "business_attribution.py",
     "real_evidence_inbox": "real_evidence_inbox.py",
+    "performance_monitor": "performance_monitor.py",
     "metrics_intake": "metrics_intake.py",
     "metric_parsing": "metric_parsing.py",
     "metrics_recovery": "metrics_recovery.py",
@@ -115,8 +116,11 @@ OFFICIAL_SOURCES = [
 
 GITHUB_DOC_FILES = [
     "README.md",
+    "README.zh-CN.md",
     "docs/installation.md",
+    "docs/zh-CN/installation.md",
     "docs/usage.md",
+    "docs/zh-CN/usage.md",
     "docs/browser-extension.md",
     "docs/subscription-pricing.md",
     "docs/billing-backend-contract.md",
@@ -396,6 +400,7 @@ def requirement_status(
             "comment_evidence_capture",
             "business_attribution",
             "real_evidence_inbox",
+            "performance_monitor",
             "metrics_intake",
             "metric_parsing",
             "metrics_recovery",
@@ -502,6 +507,7 @@ def requirement_status(
                     "comment_evidence_capture",
                     "business_attribution",
                     "real_evidence_inbox",
+                    "performance_monitor",
                     "metrics_intake",
                     "metric_parsing",
                     "metrics_recovery",
@@ -518,7 +524,7 @@ def requirement_status(
             "id": "retrospective_next_round_optimization",
             "label": "Turn real metrics, comments, orders, and revenue into next-round content and publish actions",
             "status": "ready" if optimization_ready else "not_ready",
-            "evidence": scripts_present(scripts, ["next_round_optimizer", "metrics_recovery", "comment_evidence_capture", "business_attribution"]),
+            "evidence": scripts_present(scripts, ["next_round_optimizer", "metrics_recovery", "comment_evidence_capture", "business_attribution", "performance_monitor"]),
             "missing": [] if optimization_ready else ["next_round_optimizer.py"],
             "limits": [
                 "The optimizer uses recovered evidence only and outputs waiting_real_data when metrics, comments, and business attribution are absent.",
@@ -663,6 +669,7 @@ def browser_extension_status() -> dict[str, Any]:
         for workflow in [
             "browser_publish_session",
             "real_evidence_inbox",
+            "performance_monitor",
             "final_readiness_audit",
             "automation_config_init",
             "automation_due_run",
@@ -701,6 +708,7 @@ def browser_extension_status() -> dict[str, Any]:
             "Command type",
             "Browser publish session",
             "Real evidence inbox",
+            "Performance monitor",
             "Final readiness audit",
             "Schedule init",
             "Run scheduled jobs",
@@ -741,10 +749,12 @@ def browser_extension_status() -> dict[str, Any]:
             "skill_entry.py",
             "browser_publish_session.py",
             "real_evidence_inbox.py",
+            "performance_monitor.py",
             "final_capability_readiness.py",
             "automation_scheduler.py",
             "browser_publish_session",
             "real_evidence_inbox",
+            "performance_monitor",
             "final_readiness_audit",
             "automation_config_init",
             "automation_due_run",
@@ -1034,6 +1044,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/metrics_recovery.py --metrics-structured-json \"{out_dir}/published-metrics-snapshot.json\" "
                 f"--out-dir \"{out_dir}\""
             ),
+        },
+        {
+            "purpose": "monitor_post_publish_performance",
+            "command": f"python scripts/performance_monitor.py --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "capture_public_post_publish_metrics",

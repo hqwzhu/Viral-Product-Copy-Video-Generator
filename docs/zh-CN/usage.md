@@ -1,8 +1,6 @@
-# Usage
+# 使用说明
 
-中文版本: [docs/zh-CN/usage.md](zh-CN/usage.md)
-
-## One Product URL
+## 单个产品 URL
 
 ```powershell
 python scripts\skill_entry.py `
@@ -11,9 +9,9 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-The entry script builds a real-run playbook, runs the final capability runner, and writes a readiness matrix.
+入口脚本会生成真实运行 playbook，执行最高自动化的安全流程，并写出最终 readiness 矩阵。
 
-## Website URL With Product Discovery
+## 网站 URL 自动发现产品页
 
 ```powershell
 python scripts\skill_entry.py `
@@ -24,9 +22,9 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-Use this for an AI tools directory, SaaS website, ecommerce site, or docs site where the Skill should discover candidate product pages first.
+适用于 AI 工具站、SaaS 官网、电商站或文档站。Skill 会先从公开链接和 sitemap 中发现候选产品页，再进入推广流程。
 
-## Competitor And Viral Research
+## 爆款竞品研究
 
 ```powershell
 python scripts\multi_query_viral_discovery.py `
@@ -36,9 +34,9 @@ python scripts\multi_query_viral_discovery.py `
   --out-dir ".\promotion-output"
 ```
 
-The Skill ranks public or browser-visible materials. It does not scrape private endpoints or hidden media tokens.
+该流程只使用公开或浏览器可见证据，不抓取私有接口，不提取隐藏媒体 token。
 
-## Content And Video
+## 生成文案和视频
 
 ```powershell
 python scripts\render_video.py `
@@ -47,7 +45,7 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-douyin.mp4"
 ```
 
-Optional voiceover:
+带口播音频：
 
 ```powershell
 python scripts\render_video.py `
@@ -57,9 +55,9 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
-## Publishing
+## 发布
 
-Build the guarded queue:
+生成受保护发布队列：
 
 ```powershell
 python scripts\publish_readiness_runner.py `
@@ -70,7 +68,7 @@ python scripts\publish_readiness_runner.py `
   --out-dir ".\promotion-output"
 ```
 
-Prepare browser/manual payloads:
+准备浏览器/手动发布包：
 
 ```powershell
 python scripts\browser_publish_assistant.py `
@@ -78,7 +76,7 @@ python scripts\browser_publish_assistant.py `
   --out-dir ".\promotion-output"
 ```
 
-Run a browser-assisted publish session. This prepares payloads, optionally fills visible fields, writes screenshots, and stops before the final publish action:
+浏览器辅助发布会准备 payload、可选填写可见字段、写截图，并在最终发布前停止：
 
 ```powershell
 python scripts\browser_publish_session.py `
@@ -88,7 +86,7 @@ python scripts\browser_publish_session.py `
   --out-dir ".\promotion-output"
 ```
 
-Official publishing only runs when credentials, targets, and approval are present:
+官方 API 发布只有在凭证、目标和审批都存在时才执行：
 
 ```powershell
 python scripts\publish_executor.py `
@@ -102,9 +100,9 @@ python scripts\publish_executor.py `
   --out-dir ".\promotion-output"
 ```
 
-## Periodic Automation
+## 周期自动化
 
-Create a recurring local job:
+创建本地周期任务配置：
 
 ```powershell
 python scripts\automation_scheduler.py init `
@@ -124,18 +122,18 @@ python scripts\automation_scheduler.py init `
   --enable-next-round-optimization
 ```
 
-Run due jobs manually or generate a Windows Task Scheduler registration script:
+运行到期任务或生成 Windows Task Scheduler 注册脚本：
 
 ```powershell
 python scripts\automation_scheduler.py run --config ".\promotion-automation.json" --force
 python scripts\automation_scheduler.py windows-task --config ".\promotion-automation.json" --out-file ".\register-enhe-promotion-task.ps1" --time "09:00"
 ```
 
-Scheduled jobs can prepare content, MP4s, publish queues, browser-assisted publish payloads, evidence recovery, and next-round optimization. They still cannot bypass credentials, platform review, `I_APPROVE_PUBLISH`, login, captcha, risk checks, or final browser publish review.
+周期任务仍然不会绕过凭证、平台审核、`I_APPROVE_PUBLISH`、登录、验证码、风控或最终浏览器发布确认。
 
-## Metrics And Next Round
+## 指标回收和下一轮优化
 
-Register a real published URL:
+登记真实发布 URL：
 
 ```powershell
 python scripts\published_items.py `
@@ -145,23 +143,15 @@ python scripts\published_items.py `
   --out-dir ".\promotion-output"
 ```
 
-Run the post-publish monitor after real URLs are registered:
+运行发布后性能监控：
 
 ```powershell
 python scripts\performance_monitor.py --out-dir ".\promotion-output"
 ```
 
-The monitor captures public/browser-visible metrics, visible comments and demand signals, optional business exports, metrics recovery, next-round optimization, and a history file. For manual step-by-step recovery:
+它会串联公开/浏览器可见指标抓取、评论和需求信号抓取、可选业务归因、指标合并、下一轮优化和历史快照。
 
-```powershell
-python scripts\post_publish_metrics_capture.py --out-dir ".\promotion-output"
-python scripts\metrics_recovery.py `
-  --metrics-json ".\promotion-output\reports\promotion-manager\post-publish-capture\post-publish-metrics-export.json" `
-  --business-csv ".\orders-and-revenue.csv" `
-  --out-dir ".\promotion-output"
-```
-
-Or recover a full local evidence inbox:
+多个证据文件可以使用本地收件箱：
 
 ```powershell
 python scripts\real_evidence_inbox.py `
@@ -169,16 +159,4 @@ python scripts\real_evidence_inbox.py `
   --out-dir ".\promotion-output"
 ```
 
-The inbox runner accepts exported or copied evidence such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, and JSON/text variants. It registers published URLs, imports metrics, captures comments, attributes orders/revenue, runs metrics recovery, and then runs `next_round_optimizer.py`. Use `--skip-post-publish-capture` when the inbox already contains platform metric exports and you do not want public URL fetch attempts.
-
-Optimize the next round:
-
-```powershell
-python scripts\next_round_optimizer.py `
-  --metrics-recovery-json ".\promotion-output\reports\promotion-manager\metrics-recovery\metrics-recovery.json" `
-  --comment-evidence-json ".\promotion-output\reports\promotion-manager\comment-evidence\comment-evidence-export.json" `
-  --business-attribution-json ".\promotion-output\reports\promotion-manager\business-attribution\business-attribution.json" `
-  --out-dir ".\promotion-output"
-```
-
-If no real metrics or business evidence exists, the optimizer outputs `waiting_real_data`.
+如果没有真实指标或业务证据，优化器会输出 `waiting_real_data`，不会编造表现。

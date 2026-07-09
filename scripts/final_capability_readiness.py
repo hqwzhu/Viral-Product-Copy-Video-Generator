@@ -503,6 +503,14 @@ def build_action_queue(
         actions.append(
             action(
                 60,
+                "monitor_post_publish_performance",
+                "Run the post-publish monitor to capture public metrics, comments, business attribution, recovery, and next-round recommendations.",
+                f"python scripts/performance_monitor.py --out-dir \"{out_dir}\"",
+            )
+        )
+        actions.append(
+            action(
+                61,
                 "import_real_evidence_inbox",
                 "Import a local folder of published URLs, platform metrics, comments, orders, and revenue evidence.",
                 f"python scripts/real_evidence_inbox.py --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
@@ -510,7 +518,7 @@ def build_action_queue(
         )
         actions.append(
             action(
-                61,
+                62,
                 "register_real_published_urls",
                 "Register real published URLs or evidence before metrics recovery.",
                 f"python scripts/published_items.py --platform xiaohongshu --published-url \"https://...\" --evidence \"./screenshots/published.png\" --out-dir \"{out_dir}\"",
@@ -518,7 +526,7 @@ def build_action_queue(
         )
         actions.append(
             action(
-                62,
+                63,
                 "import_business_exports",
                 "Provide business exports with URL, UTM, content id, orders, revenue, clicks, or leads.",
                 f"python scripts/business_attribution.py --business-csv \"./orders-and-revenue.csv\" --out-dir \"{out_dir}\"",
@@ -530,6 +538,14 @@ def build_action_queue(
             actions.append(
                 action(
                     60,
+                    "monitor_post_publish_performance",
+                    "Run the post-publish monitor to capture public metrics/comments, merge exports, and generate next-round recommendations.",
+                    f"python scripts/performance_monitor.py --out-dir \"{out_dir}\"",
+                )
+            )
+            actions.append(
+                action(
+                    61,
                     "import_real_evidence_inbox",
                     "Import a local evidence folder when several metric, comment, and business files already exist.",
                     f"python scripts/real_evidence_inbox.py --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
@@ -537,7 +553,7 @@ def build_action_queue(
             )
             actions.append(
                 action(
-                    61,
+                    62,
                     "capture_missing_social_evidence",
                     "Capture public/browser-visible published page metrics and comments for the missing social evidence fields.",
                     f"python scripts/post_publish_metrics_capture.py --out-dir \"{out_dir}\"",
@@ -545,7 +561,7 @@ def build_action_queue(
             )
             actions.append(
                 action(
-                    61,
+                    63,
                     "capture_missing_comment_evidence",
                     "Capture public/browser-visible comments or queue manual comment evidence.",
                     f"python scripts/comment_evidence_capture.py --out-dir \"{out_dir}\"",
@@ -753,7 +769,7 @@ def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
         },
         {
             "step": "recover_real_metrics",
-            "command": f"python scripts/real_evidence_inbox.py --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
+            "command": f"python scripts/performance_monitor.py --out-dir \"{out_dir}\"",
         },
         {
             "step": "optimize_next_round",

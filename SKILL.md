@@ -34,7 +34,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
 To validate the paid-subscription contract locally before deploying a backend:
 
@@ -80,7 +80,14 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-When the user has multiple real evidence files, put them into one folder and run the inbox orchestrator:
+When real published URLs are registered, run the post-publish monitor:
+
+```bash
+python scripts/performance_monitor.py \
+  --out-dir "./promotion-output"
+```
+
+Run the monitor after real published URLs are registered. It captures public/browser-visible metrics, captures visible comments and demand signals, attributes optional order/revenue exports, runs metrics recovery, writes a history file, and generates next-round recommendations. For multiple evidence files, use the inbox orchestrator:
 
 ```bash
 python scripts/real_evidence_inbox.py \
@@ -631,6 +638,13 @@ python scripts/comment_evidence_capture.py \
 To turn recovered metrics, comment demand signals, and business attribution into the next promotion round:
 
 ```bash
+python scripts/performance_monitor.py \
+  --out-dir "./promotion-output"
+```
+
+For manual step-by-step recovery:
+
+```bash
 python scripts/next_round_optimizer.py \
   --metrics-recovery-json "./promotion-output/reports/promotion-manager/metrics-recovery/metrics-recovery.json" \
   --comment-evidence-json "./promotion-output/reports/promotion-manager/comment-evidence/comment-evidence-export.json" \
@@ -890,6 +904,7 @@ The command writes:
 - `reports/promotion-manager/business-attribution/business-attribution.{json,md}` and `business-attribution-export.json` when `scripts/business_attribution.py` attributes real business exports to proven published content using URL, UTM content, referrer, or title/campaign evidence.
 - `reports/promotion-manager/metrics-recovery/metrics-recovery.{json,md}` when `scripts/metrics_recovery.py` coordinates official metrics connectors and business exports.
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` converts real metrics, comment demand signals, and business attribution into next-round content angles, platform actions, and copy-ready commands.
+- `reports/promotion-manager/performance-monitor/performance-monitor.{json,md}` and `performance-monitor-history.jsonl` when `scripts/performance_monitor.py` orchestrates public metric capture, comment capture, business attribution, metrics recovery, and next-round optimization for registered published URLs.
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs the workflow, publish queue, published item registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, optional next-round optimization, and metrics recovery as one local operating cycle.
 - `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1` when `scripts/real_run_playbook.py` generates a copy-ready live-run command pack, evidence checklist, platform gates, and approval gates for a real product cycle.
 - `reports/promotion-manager/skill-entry/skill-entry.{json,md}` when `scripts/skill_entry.py` runs the Codex-facing one-link entry through real-run playbook generation, final capability execution, and final readiness refresh.
@@ -1023,6 +1038,7 @@ Excel `.xlsx` platform and business exports are valid real-data inputs through `
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. It parses visible English/Chinese metric labels and common units/currency (`12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, `￥88.00`) from text and structured snapshots. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
 Use `scripts/real_evidence_inbox.py` when the user has a folder of real evidence files from several platforms. It discovers or reads an optional `inbox-manifest.json`, normalizes published URL evidence, then orchestrates `published_items.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py`, and `next_round_optimizer.py`.
+Use `scripts/performance_monitor.py` after published URLs are registered and the user wants a repeatable post-publish monitor. It orchestrates public/browser-visible metrics capture, comment evidence capture, optional business attribution files, metrics recovery, next-round optimization, and a history JSONL without fabricating missing values.
 Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.
 Run `scripts/comment_evidence_capture.py` after real published URLs or visible comment exports exist. It extracts public/browser-visible comments, likes/replies per comment when visible, and demand signals such as questions, pricing objections, integrations, feature requests, pain points, and CTA intent. Treat its manual evidence requests as missing evidence, not recovered comments.
 Run `scripts/business_attribution.py` when orders or revenue are exported from a business system with UTM fields, referrers, content IDs, or campaign/title fields. It attributes only rows that match proven published content and leaves weak platform-only rows unmatched.
@@ -1087,6 +1103,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/metrics_intake.py`: real metrics importer for exports and supported official API reads.
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/real_evidence_inbox.py`: local evidence inbox orchestrator that discovers published URL, metric, comment, order, and revenue files, runs the recovery scripts, and writes a single manager-facing report.
+- `scripts/performance_monitor.py`: post-publish monitor that reruns public metric capture, comment capture, optional business attribution, metrics recovery, next-round optimization, and history snapshots from registered published URLs.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
 - `scripts/publish_url_capture.py`: post-publish browser snapshot/HTML/text capturer that registers real published URLs.
 - `scripts/post_publish_metrics_capture.py`: public/browser-visible post-publish metrics capturer for registered URLs; writes a metrics export for recovery and manual evidence requests when metrics are hidden.

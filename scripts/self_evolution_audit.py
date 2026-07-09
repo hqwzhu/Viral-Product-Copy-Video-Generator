@@ -298,7 +298,7 @@ def installed_skill_dir() -> Path:
 
 def managed_skill_files(root: Path) -> list[Path]:
     files = [Path("SKILL.md")]
-    for standalone in ["README.md", "LICENSE", ".gitignore"]:
+    for standalone in ["README.md", "README.zh-CN.md", "LICENSE", ".gitignore"]:
         if (root / standalone).exists():
             files.append(Path(standalone))
     directory_patterns = {
