@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import urllib.error
@@ -766,6 +767,8 @@ def check_url(url: str) -> dict[str, Any]:
         return {"status": "unreachable", "reason": str(exc.reason)[:160], "checkedAt": checked_at}
     except TimeoutError:
         return {"status": "timeout", "checkedAt": checked_at}
+    except (http.client.RemoteDisconnected, ConnectionResetError, OSError) as exc:
+        return {"status": "unreachable", "reason": str(exc)[:160], "checkedAt": checked_at}
 
 
 def live_timestamp() -> str:

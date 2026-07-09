@@ -7037,6 +7037,23 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(zhihu_publish["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertEqual(zhihu_publish["searchedOfficialSources"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
 
+    def test_platform_access_live_check_handles_remote_disconnect(self) -> None:
+        module = load_script_module(PLATFORM_ACCESS_AUDIT)
+
+        def disconnected(_request: object, timeout: int = 10) -> object:
+            raise module.http.client.RemoteDisconnected("closed without response")
+
+        original_urlopen = module.urllib.request.urlopen
+        try:
+            module.urllib.request.urlopen = disconnected
+            result = module.check_url("https://developer.example.test/docs")
+        finally:
+            module.urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result["status"], "unreachable")
+        self.assertIn("closed without response", result["reason"])
+        self.assertIn("checkedAt", result)
+
     def test_viral_discovery_runner_builds_multiplatform_library_and_creator_tasks(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-runner-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
