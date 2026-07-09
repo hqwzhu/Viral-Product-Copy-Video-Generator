@@ -6816,7 +6816,11 @@ Prompt templates for product copy, SEO content, and video scripts.
                 {
                     "generatedAt": "2026-07-10",
                     "status": "partial_ready",
-                    "input": {"codexReadFirst": True, "platforms": "youtube,douyin,github"},
+                    "input": {
+                        "codexReadFirst": True,
+                        "platforms": "youtube,douyin,github",
+                        "urls": ["https://www.enhe-tech.com.cn/software/windows-ai"],
+                    },
                     "summary": {
                         "promotionRuns": 1,
                         "multiQueryDiscoveryRuns": 1,
@@ -6877,6 +6881,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         capture_action = next(item for item in report["actionQueue"] if item["id"] == "capture_missing_video_platform_evidence")
         self.assertIn("--platforms douyin,youtube", capture_action["command"])
         self.assertIn("--multi-query-sample-video-frames", capture_action["command"])
+        self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", capture_action["command"])
+        synthetic_action = next(item for item in report["actionQueue"] if item["id"] == "run_synthetic_evidence_validation")
+        self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", synthetic_action["command"])
+        final_step = next(item for item in report["operatingSequence"] if item["step"] == "run_final_capability")
+        self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", final_step["command"])
 
     def test_final_capability_readiness_distinguishes_field_level_real_evidence(self) -> None:
         root_dir = Path(tempfile.mkdtemp(prefix="final-readiness-fields-test-"))

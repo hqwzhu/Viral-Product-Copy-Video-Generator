@@ -11,6 +11,7 @@ from typing import Any
 
 
 TODAY = date.today().isoformat()
+DEFAULT_PRODUCT_URL = "https://example.com/product"
 VIDEO_RESEARCH_PLATFORMS = {"youtube", "douyin", "tiktok", "xiaohongshu"}
 OBJECTIVE_REQUIREMENTS = [
     {
@@ -158,7 +159,19 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         browser_extension_row(final_audit),
         phase_progress_reporting_row(final_audit),
     ]
-    action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, real_evidence_setup, self_evolution, platform_access)
+    product_url = product_url_from_final_run(final_run)
+    action_queue = build_action_queue(
+        out_dir,
+        rows,
+        final_run,
+        final_audit,
+        readiness,
+        setup,
+        real_evidence_setup,
+        self_evolution,
+        platform_access,
+        product_url,
+    )
     summary = summarize(rows, action_queue)
     return {
         "generatedAt": TODAY,
@@ -170,7 +183,7 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         "platformMatrix": platform_matrix(final_audit, readiness),
         "externalGates": external_gates(rows),
         "actionQueue": action_queue,
-        "operatingSequence": operating_sequence(out_dir),
+        "operatingSequence": operating_sequence(out_dir, product_url),
         "guardrails": [
             "This matrix uses report status and evidence paths only; it never writes credential values.",
             "Official publishing still requires platform credentials, account authorization, and exact approval.",
@@ -534,18 +547,19 @@ def build_action_queue(
     evidence_setup_reports: list[dict[str, Any]],
     self_evolution: dict[str, Any],
     platform_access: dict[str, Any],
+    product_url: str,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     by_id = {item["id"]: item for item in rows}
     if by_id["product_url_codex_structured_intake"]["status"] == "needs_real_run_evidence":
-        actions.append(action(10, "run_product_url_reading", "Run final capability runner on a real product URL.", final_runner_command(out_dir)))
+        actions.append(action(10, "run_product_url_reading", "Run final capability runner on a real product URL.", final_runner_command(out_dir, product_url)))
     if by_id["viral_creator_video_research"]["status"] == "needs_real_run_evidence":
         actions.append(
             action(
                 20,
                 "run_multi_query_viral_discovery",
                 "Run product-driven viral discovery and follow-up captures.",
-                final_runner_command(out_dir) + " --run-follow-up-captures --sample-video-frames",
+                final_runner_command(out_dir, product_url) + " --run-follow-up-captures --sample-video-frames",
             )
         )
     if by_id["viral_creator_video_research"]["status"] in {
@@ -558,7 +572,7 @@ def build_action_queue(
                 21,
                 "run_video_evidence_capture",
                 "Run multi-query viral discovery with follow-up captures and browser-visible video frame sampling.",
-                final_runner_command(out_dir) + " --multi-query-run-follow-up-captures --multi-query-sample-video-frames",
+                final_runner_command(out_dir, product_url) + " --multi-query-run-follow-up-captures --multi-query-sample-video-frames",
             )
         )
     missing_video_platforms = by_id["viral_creator_video_research"]["metrics"].get("missingVideoPlatformEvidence") or []
@@ -568,11 +582,11 @@ def build_action_queue(
                 22,
                 "capture_missing_video_platform_evidence",
                 "Rerun viral discovery scoped to requested video platforms that produced no captured material or video samples.",
-                video_platform_runner_command(out_dir, missing_video_platforms),
+                video_platform_runner_command(out_dir, missing_video_platforms, product_url),
             )
         )
     if "no MP4 generated" in " ".join(by_id["copy_and_real_video_generation"]["missing"]):
-        actions.append(action(30, "render_video", "Run without --skip-video or provide a voiceover file for MP4 rendering.", final_runner_command(out_dir)))
+        actions.append(action(30, "render_video", "Run without --skip-video or provide a voiceover file for MP4 rendering.", final_runner_command(out_dir, product_url)))
     publish_status = by_id["official_or_browser_assisted_publish"]["status"]
     if publish_status.startswith("partial_ready"):
         actions.extend(publish_actions(out_dir, readiness_reports, setup_reports))
@@ -617,7 +631,7 @@ def build_action_queue(
                     57,
                     "setup_real_evidence_inbox",
                     "Create a fillable local evidence inbox before or immediately after publishing.",
-                    f"python scripts/real_evidence_inbox_setup.py --product-url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
+                    f"python scripts/real_evidence_inbox_setup.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
                 )
             )
             actions.append(
@@ -641,7 +655,7 @@ def build_action_queue(
                 63,
                 "run_synthetic_evidence_validation",
                 "Generate clearly marked synthetic/demo evidence to validate the retrospective loop without treating it as real performance.",
-                f"python scripts/synthetic_evidence_generator.py --product-url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --run-recovery --out-dir \"{out_dir}/synthetic-validation\"",
+                f"python scripts/synthetic_evidence_generator.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --run-recovery --out-dir \"{out_dir}/synthetic-validation\"",
             )
         )
         actions.append(
@@ -894,15 +908,15 @@ def external_gates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return gates
 
 
-def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
+def operating_sequence(out_dir: Path, product_url: str) -> list[dict[str, str]]:
     return [
         {
             "step": "prepare_real_run_playbook",
-            "command": f"python scripts/real_run_playbook.py --url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\"",
+            "command": f"python scripts/real_run_playbook.py --url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\"",
         },
         {
             "step": "run_final_capability",
-            "command": final_runner_command(out_dir),
+            "command": final_runner_command(out_dir, product_url),
         },
         {
             "step": "review_readiness_matrix",
@@ -935,19 +949,19 @@ def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
     ]
 
 
-def final_runner_command(out_dir: Path) -> str:
+def final_runner_command(out_dir: Path, product_url: str = DEFAULT_PRODUCT_URL) -> str:
     return (
-        "python scripts/final_capability_runner.py --url \"https://example.com/product\" "
+        f"python scripts/final_capability_runner.py --url \"{product_url}\" "
         "--platforms youtube,zhihu,xiaohongshu,douyin,github --run-follow-up-captures "
         "--sample-video-frames --business-csv \"./orders-and-revenue.csv\" "
         f"--out-dir \"{out_dir}\""
     )
 
 
-def video_platform_runner_command(out_dir: Path, platforms: list[str]) -> str:
+def video_platform_runner_command(out_dir: Path, platforms: list[str], product_url: str = DEFAULT_PRODUCT_URL) -> str:
     platform_arg = ",".join(platforms)
     return (
-        "python scripts/final_capability_runner.py --url \"https://example.com/product\" "
+        f"python scripts/final_capability_runner.py --url \"{product_url}\" "
         f"--platforms {platform_arg} --run-follow-up-captures --capture-browser-assisted-follow-ups "
         "--sample-video-frames --multi-query-run-follow-up-captures "
         "--multi-query-capture-browser-assisted-follow-ups --multi-query-sample-video-frames "
@@ -971,6 +985,48 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
 
 def report_source(path: Path | None) -> dict[str, Any]:
     return {"path": str(path) if path else "", "exists": bool(path and path.exists())}
+
+
+def product_url_from_final_run(final_run: dict[str, Any]) -> str:
+    input_payload = final_run.get("input") if isinstance(final_run.get("input"), dict) else {}
+    for value in [
+        first_text(input_payload.get("urls")),
+        input_payload.get("url"),
+        input_payload.get("link"),
+        input_payload.get("browserUrl"),
+        input_payload.get("discoverFromUrl"),
+    ]:
+        text = first_text(value)
+        if text:
+            return text
+
+    product_batch = final_run.get("productBatch") if isinstance(final_run.get("productBatch"), dict) else {}
+    for run in list_records(product_batch, "promotionRuns"):
+        text = first_text(run.get("url"))
+        if text:
+            return text
+
+    for item in list_records(final_run, "cycleEvidence"):
+        text = first_text(item.get("url"))
+        if text:
+            return text
+        product = item.get("product") if isinstance(item.get("product"), dict) else {}
+        text = first_text(product.get("canonicalUrl"))
+        if text:
+            return text
+
+    return DEFAULT_PRODUCT_URL
+
+
+def first_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        for item in value:
+            text = first_text(item)
+            if text:
+                return text
+    return ""
 
 
 def requirement(final_audit: dict[str, Any], requirement_id: str) -> dict[str, Any]:
