@@ -40,6 +40,14 @@ OBJECTIVE_REQUIREMENTS = [
         "id": "controlled_self_evolution",
         "label": "Audit tools, learn from official/public sources, install allowlisted runtimes, and sync the installed Skill only with approval.",
     },
+    {
+        "id": "github_documentation_and_install_tutorial",
+        "label": "Keep GitHub-facing project intro, usage guide, install tutorial, and final capability map ready for open-source users.",
+    },
+    {
+        "id": "browser_extension_operator_ui_subscription",
+        "label": "Provide a Chrome extension operator UI with subscription estimate, license hook, developer info, and ENHE website traffic links.",
+    },
 ]
 
 
@@ -127,6 +135,8 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         metrics_row(final_run, final_audit, real_evidence_setup),
         optimization_row(final_run, final_audit),
         self_evolution_row(self_evolution, final_audit, platform_access),
+        github_docs_row(final_audit),
+        browser_extension_row(final_audit),
     ]
     action_queue = build_action_queue(out_dir, rows, final_run, final_audit, readiness, setup, real_evidence_setup, self_evolution, platform_access)
     summary = summarize(rows, action_queue)
@@ -374,6 +384,30 @@ def self_evolution_row(
     )
 
 
+def github_docs_row(final_audit: dict[str, Any]) -> dict[str, Any]:
+    audit_item = requirement(final_audit, "github_documentation_and_install_tutorial")
+    status = audit_item.get("status") or "unknown"
+    return row(
+        "github_documentation_and_install_tutorial",
+        status,
+        audit_item.get("evidence") or [],
+        audit_item.get("missing") or [],
+        audit_item.get("limits") or [],
+    )
+
+
+def browser_extension_row(final_audit: dict[str, Any]) -> dict[str, Any]:
+    audit_item = requirement(final_audit, "browser_extension_operator_ui_subscription")
+    status = audit_item.get("status") or "unknown"
+    return row(
+        "browser_extension_operator_ui_subscription",
+        status,
+        audit_item.get("evidence") or [],
+        audit_item.get("missing") or [],
+        audit_item.get("limits") or [],
+    )
+
+
 def row(
     requirement_id: str,
     status: str,
@@ -543,6 +577,24 @@ def build_action_queue(
                 "Sync reviewed repository files into the installed Codex Skill after explicit approval.",
                 installed.get("syncCommand") or "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC --out-dir \"./promotion-output\"",
                 approval="I_APPROVE_SKILL_SYNC",
+            )
+        )
+    if by_id["github_documentation_and_install_tutorial"]["status"] != "ready":
+        actions.append(
+            action(
+                82,
+                "complete_github_docs",
+                "Update README and docs so GitHub users can install, run, price, and understand the final capability boundaries.",
+                "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/subscription-pricing.md docs/final-capability-map.md",
+            )
+        )
+    if by_id["browser_extension_operator_ui_subscription"]["status"] != "ready":
+        actions.append(
+            action(
+                83,
+                "complete_browser_extension",
+                "Complete the Chrome MV3 extension files and subscription/license UI evidence.",
+                "review browser-extension/manifest.json browser-extension/popup.html browser-extension/popup.css browser-extension/popup.js",
             )
         )
     for item in final_audit.get("nextActions", []) if isinstance(final_audit.get("nextActions"), list) else []:

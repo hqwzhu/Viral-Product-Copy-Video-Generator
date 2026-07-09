@@ -34,6 +34,10 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates the safe `scripts/skill_entry.py` command for Codex. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+
+For GitHub/open-source users, start with `README.md`, `docs/installation.md`, `docs/usage.md`, and `docs/final-capability-map.md`.
+
 When real published URLs, platform exports, browser snapshots, comment evidence, or business exports already exist, pass them into the same one-link entry so the Skill can recover evidence and generate the next round:
 
 ```bash
@@ -827,6 +831,7 @@ The command writes:
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, platform-learning freshness, and approved Skill sync actions.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
+- `README.md`, `docs/*.md`, and `browser-extension/*` as the public GitHub docs and browser extension MVP when syncing the installed Skill.
 
 ## Workflows
 
@@ -977,6 +982,14 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 
 ## Bundled Resources
 
+- `README.md`: GitHub-facing project introduction, quick start, install, usage, safety, and extension overview.
+- `docs/installation.md`: setup and Codex Skill sync tutorial.
+- `docs/usage.md`: operator commands for intake, research, publishing, metrics, and next-round optimization.
+- `docs/browser-extension.md`: Chrome extension load, subscription flow, and security notes.
+- `docs/subscription-pricing.md`: token-backed subscription pricing assumptions and credit model.
+- `docs/final-capability-map.md`: requirement-to-capability map and remaining external gates.
+- `browser-extension/manifest.json`: Chrome MV3 extension manifest.
+- `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, command generator, subscription estimate, license hook, and ENHE website links.
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.

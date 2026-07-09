@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "ENHE Promotion Manager",
+  "short_name": "ENHE Promote",
+  "version": "0.1.0",
+  "description": "Capture a product page and build guarded Codex commands for viral product copy, video, publishing, and retrospective workflows.",
+  "action": {
+    "default_title": "ENHE Promotion Manager",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://www.enhe-tech.com.cn/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

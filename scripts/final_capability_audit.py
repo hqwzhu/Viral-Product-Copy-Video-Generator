@@ -110,6 +110,24 @@ OFFICIAL_SOURCES = [
 ]
 
 
+GITHUB_DOC_FILES = [
+    "README.md",
+    "docs/installation.md",
+    "docs/usage.md",
+    "docs/browser-extension.md",
+    "docs/subscription-pricing.md",
+    "docs/final-capability-map.md",
+]
+
+
+BROWSER_EXTENSION_FILES = [
+    "browser-extension/manifest.json",
+    "browser-extension/popup.html",
+    "browser-extension/popup.css",
+    "browser-extension/popup.js",
+]
+
+
 def main() -> None:
     args = parse_args()
     out_dir = Path(args.out_dir)
@@ -382,6 +400,8 @@ def requirement_status(
         scripts,
         ["promotion_cycle_runner", "automation_scheduler", "real_run_playbook", "skill_entry", "final_capability_runner", "next_round_optimizer"],
     )
+    docs = github_docs_status()
+    extension = browser_extension_status()
     full_platform_publish_ready = all(
         platforms[p]["directPublish"] == "ready" for p in ["youtube", "github", "zhihu", "xiaohongshu", "douyin"]
     )
@@ -512,6 +532,28 @@ def requirement_status(
             ),
         },
         {
+            "id": "github_documentation_and_install_tutorial",
+            "label": "Publish GitHub-facing project introduction, usage guide, installation tutorial, and final capability map",
+            "status": "ready" if docs["ready"] else "partial_ready",
+            "evidence": docs["evidence"],
+            "missing": docs["missing"],
+            "limits": [
+                "Documentation must be updated when platform access, pricing, or extension behavior changes.",
+                "Pricing assumptions must be recalculated from real token and infrastructure logs before public launch.",
+            ],
+        },
+        {
+            "id": "browser_extension_operator_ui_subscription",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription estimate, license hook, developer info, and ENHE website links",
+            "status": "ready" if extension["ready"] else "partial_ready",
+            "evidence": extension["evidence"],
+            "missing": extension["missing"],
+            "limits": [
+                "The extension can generate commands and validate a license endpoint, but secure paid usage enforcement requires a backend license and payment service.",
+                "Remote code is not allowed in the extension package; hosted services may return data only.",
+            ],
+        },
+        {
             "id": "fully_autonomous_self_evolution",
             "label": "Research, install tools, keep learning, and upgrade the Skill itself",
             "status": "blocked_by_safety_boundary",
@@ -525,6 +567,80 @@ def requirement_status(
             ],
         },
     ]
+
+
+def github_docs_status() -> dict[str, Any]:
+    missing = [path for path in GITHUB_DOC_FILES if not (ROOT / path).exists()]
+    evidence = [str(ROOT / path) for path in GITHUB_DOC_FILES if (ROOT / path).exists()]
+    required_markers = {
+        "README.md": [
+            "ENHE Promotion Manager",
+            "Quick Start",
+            "Browser Extension",
+            "Subscription Model",
+            "Safety Gates",
+            "Installation",
+        ],
+        "docs/installation.md": ["Installation", "Install As A Codex Skill", "Verify"],
+        "docs/usage.md": ["One Product URL", "Publishing", "Metrics And Next Round"],
+        "docs/browser-extension.md": ["Browser Extension", "Subscription Flow", "Developer Info"],
+        "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Plans"],
+        "docs/final-capability-map.md": ["Final Capability Map", "Acceptance Command"],
+    }
+    for path, markers in required_markers.items():
+        if not (ROOT / path).exists():
+            continue
+        text = safe_read(ROOT / path)
+        for marker in markers:
+            if marker not in text:
+                missing.append(f"{path} missing marker: {marker}")
+    return {
+        "ready": not missing,
+        "evidence": evidence,
+        "missing": missing,
+    }
+
+
+def browser_extension_status() -> dict[str, Any]:
+    missing = [path for path in BROWSER_EXTENSION_FILES if not (ROOT / path).exists()]
+    evidence = [str(ROOT / path) for path in BROWSER_EXTENSION_FILES if (ROOT / path).exists()]
+    manifest_path = ROOT / "browser-extension/manifest.json"
+    popup_path = ROOT / "browser-extension/popup.html"
+    script_path = ROOT / "browser-extension/popup.js"
+    style_path = ROOT / "browser-extension/popup.css"
+    manifest = read_json_file(manifest_path)
+    if manifest:
+        if manifest.get("manifest_version") != 3:
+            missing.append("browser-extension/manifest.json must use manifest_version 3")
+        action = manifest.get("action") if isinstance(manifest.get("action"), dict) else {}
+        if action.get("default_popup") != "popup.html":
+            missing.append("browser-extension/manifest.json must declare popup.html as default_popup")
+        csp = manifest.get("content_security_policy") if isinstance(manifest.get("content_security_policy"), dict) else {}
+        if "script-src 'self'" not in str(csp.get("extension_pages", "")):
+            missing.append("browser-extension/manifest.json must keep extension scripts local")
+    elif manifest_path.exists():
+        missing.append("browser-extension/manifest.json is invalid JSON")
+    if popup_path.exists():
+        popup_text = safe_read(popup_path)
+        for marker in ["ENHE AI", "Subscription estimate", "License key", "www.enhe-tech.com.cn", "popup.js"]:
+            if marker not in popup_text:
+                missing.append(f"browser-extension/popup.html missing marker: {marker}")
+        if 'src="https://' in popup_text or "src='https://" in popup_text:
+            missing.append("browser-extension/popup.html must not load remote scripts")
+    if script_path.exists():
+        script_text = safe_read(script_path)
+        for marker in ["chrome.storage.local", "validateLicense", "COST_PER_CREDIT", "skill_entry.py"]:
+            if marker not in script_text:
+                missing.append(f"browser-extension/popup.js missing marker: {marker}")
+    if style_path.exists():
+        style_text = safe_read(style_path)
+        if "--accent" not in style_text or "grid-template-columns" not in style_text:
+            missing.append("browser-extension/popup.css missing operator UI tokens or stable layout rules")
+    return {
+        "ready": not missing,
+        "evidence": evidence,
+        "missing": missing,
+    }
 
 
 def scripts_ready(scripts: dict[str, dict[str, Any]], keys: list[str]) -> bool:
@@ -691,6 +807,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "build_final_readiness_matrix",
             "command": f"python scripts/final_capability_readiness.py --out-dir \"{out_dir}\"",
+        },
+        {
+            "purpose": "review_github_docs",
+            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/subscription-pricing.md docs/final-capability-map.md",
+        },
+        {
+            "purpose": "load_browser_extension",
+            "command": "open chrome://extensions, enable Developer mode, click Load unpacked, select ./browser-extension",
         },
         {
             "purpose": "batch_product_url_cycles",
@@ -958,6 +1082,23 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def audit_dir(out_dir: Path) -> Path:
     return out_dir / "reports/promotion-manager/capability"
+
+
+def read_json_file(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def safe_read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return ""
 
 
 def tail(value: str, limit: int = 1200) -> str:

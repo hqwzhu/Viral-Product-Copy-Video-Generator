@@ -65,6 +65,9 @@ SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
+README = ROOT / "README.md"
+DOCS = ROOT / "docs"
+BROWSER_EXTENSION = ROOT / "browser-extension"
 
 
 def load_script_module(path: Path):
@@ -5711,6 +5714,69 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(cycle["commentEvidenceCapture"]["commentEvidenceExport"]).exists())
         self.assertTrue(Path(cycle["businessAttribution"]["businessAttributionExport"]).exists())
 
+    def test_github_docs_include_intro_usage_install_extension_and_pricing(self) -> None:
+        self.assertTrue(README.exists())
+        readme = README.read_text(encoding="utf-8")
+        for marker in [
+            "ENHE Promotion Manager",
+            "Quick Start",
+            "Install",
+            "Browser Extension",
+            "Subscription Model",
+            "Safety Gates",
+            "I_APPROVE_SKILL_SYNC",
+        ]:
+            self.assertIn(marker, readme)
+        required_docs = [
+            "installation.md",
+            "usage.md",
+            "browser-extension.md",
+            "subscription-pricing.md",
+            "final-capability-map.md",
+        ]
+        for filename in required_docs:
+            self.assertTrue((DOCS / filename).exists(), filename)
+        pricing = (DOCS / "subscription-pricing.md").read_text(encoding="utf-8")
+        self.assertIn("Credit Model", pricing)
+        self.assertIn("Starter", pricing)
+        self.assertIn("Growth", pricing)
+        self.assertIn("Scale", pricing)
+        self.assertIn("safety_multiplier", pricing)
+
+    def test_browser_extension_manifest_popup_and_subscription_ui_are_static_mv3(self) -> None:
+        manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["action"]["default_popup"], "popup.html")
+        csp = manifest["content_security_policy"]["extension_pages"]
+        self.assertIn("script-src 'self'", csp)
+        self.assertNotIn("unsafe-eval", csp)
+        popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
+        self.assertIn("ENHE AI", popup)
+        self.assertIn("Subscription estimate", popup)
+        self.assertIn("License key", popup)
+        self.assertIn("www.enhe-tech.com.cn", popup)
+        self.assertIn("popup.js", popup)
+        self.assertNotIn('src="https://', popup)
+        script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+        self.assertIn("chrome.storage.local", script)
+        self.assertIn("validateLicense", script)
+        self.assertIn("COST_PER_CREDIT", script)
+        self.assertIn("skill_entry.py", script)
+        css = (BROWSER_EXTENSION / "popup.css").read_text(encoding="utf-8")
+        self.assertIn("--accent", css)
+        self.assertIn("grid-template-columns", css)
+
+    def test_self_evolution_managed_files_include_docs_and_browser_extension(self) -> None:
+        module = load_script_module(SELF_EVOLUTION_AUDIT)
+        files = {item.as_posix() for item in module.managed_skill_files(ROOT)}
+        self.assertIn("README.md", files)
+        self.assertIn("docs/installation.md", files)
+        self.assertIn("docs/subscription-pricing.md", files)
+        self.assertIn("browser-extension/manifest.json", files)
+        self.assertIn("browser-extension/popup.html", files)
+        self.assertIn("browser-extension/popup.css", files)
+        self.assertIn("browser-extension/popup.js", files)
+
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -5804,6 +5870,8 @@ Prompt templates for product copy, SEO content, and video scripts.
             by_requirement["fully_autonomous_self_evolution"]["status"],
             "blocked_by_safety_boundary",
         )
+        self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
+        self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
         self.assertEqual(by_requirement["retrospective_next_round_optimization"]["status"], "ready")
         self.assertTrue(
             any("browser_video_sampler.py" in path for path in by_requirement["viral_creator_content_research"]["evidence"])
@@ -5839,6 +5907,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("business_attribution.py", metrics_evidence)
         optimization_evidence = "\n".join(by_requirement["retrospective_next_round_optimization"]["evidence"])
         self.assertIn("next_round_optimizer.py", optimization_evidence)
+        docs_evidence = "\n".join(by_requirement["github_documentation_and_install_tutorial"]["evidence"]).replace("\\", "/")
+        self.assertIn("README.md", docs_evidence)
+        self.assertIn("docs/installation.md", docs_evidence)
+        extension_evidence = "\n".join(by_requirement["browser_extension_operator_ui_subscription"]["evidence"]).replace("\\", "/")
+        self.assertIn("browser-extension/manifest.json", extension_evidence)
+        self.assertIn("browser-extension/popup.js", extension_evidence)
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
@@ -5858,6 +5932,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "final_capability_runner" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "one_link_skill_entry" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_final_readiness_matrix" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "review_github_docs" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "load_browser_extension" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
@@ -5958,6 +6034,18 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "status": "blocked_by_safety_boundary",
                             "evidence": ["scripts/self_evolution_audit.py"],
                             "missing": ["explicit review/approval"],
+                        },
+                        {
+                            "id": "github_documentation_and_install_tutorial",
+                            "status": "ready",
+                            "evidence": ["README.md", "docs/installation.md"],
+                            "missing": [],
+                        },
+                        {
+                            "id": "browser_extension_operator_ui_subscription",
+                            "status": "ready",
+                            "evidence": ["browser-extension/manifest.json", "browser-extension/popup.js"],
+                            "missing": [],
                         },
                     ],
                     "platforms": {
@@ -6077,6 +6165,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchStatus"], "unresolved_missing_official_docs")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchRecords"], 2)
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchMissingCapabilities"], 2)
+        self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
+        self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
         self.assertIn(
             "official platform doc gap research still has unresolved missing capabilities",
             by_requirement["controlled_self_evolution"]["missing"],

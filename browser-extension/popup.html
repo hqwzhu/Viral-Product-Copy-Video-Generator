@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ENHE Promotion Manager</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ENHE AI</p>
+          <h1>Promotion Manager</h1>
+        </div>
+        <span class="status" id="licenseStatus">Local</span>
+      </header>
+
+      <section class="panel">
+        <label class="field">
+          <span>Product or website URL</span>
+          <input id="productUrl" type="url" placeholder="https://example.com/product">
+        </label>
+        <div class="button-row">
+          <button id="useTab" type="button" class="secondary">Use current tab</button>
+          <button id="generate" type="button" class="primary">Generate command</button>
+        </div>
+        <p id="tabTitle" class="hint">Open a product page, then capture the current tab.</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Platforms</h2>
+          <button id="selectAll" type="button" class="ghost">All</button>
+        </div>
+        <div class="platform-grid" id="platforms">
+          <label><input type="checkbox" value="youtube" checked> YouTube</label>
+          <label><input type="checkbox" value="zhihu" checked> Zhihu</label>
+          <label><input type="checkbox" value="xiaohongshu" checked> Xiaohongshu</label>
+          <label><input type="checkbox" value="douyin" checked> Douyin</label>
+          <label><input type="checkbox" value="github" checked> GitHub</label>
+        </div>
+        <label class="field compact">
+          <span>Workflow depth</span>
+          <select id="workflowDepth">
+            <option value="full">Full promotion loop</option>
+            <option value="research">Research and copy</option>
+            <option value="playbook">Playbook only</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Subscription estimate</h2>
+          <span class="meter" id="creditMeter">0 credits</span>
+        </div>
+        <div class="estimate-grid">
+          <label class="field compact">
+            <span>Plan</span>
+            <select id="plan">
+              <option value="free">Free</option>
+              <option value="starter" selected>Starter</option>
+              <option value="growth">Growth</option>
+              <option value="scale">Scale</option>
+            </select>
+          </label>
+          <label class="field compact">
+            <span>Monthly runs</span>
+            <input id="monthlyRuns" type="number" min="0" value="20">
+          </label>
+          <label class="checkline">
+            <input id="deepReview" type="checkbox">
+            <span>Deep strategy review</span>
+          </label>
+          <label class="checkline">
+            <input id="hostedVideo" type="checkbox">
+            <span>Hosted MP4 add-on</span>
+          </label>
+        </div>
+        <p id="costSummary" class="hint">Estimated hosted cost appears here.</p>
+      </section>
+
+      <section class="panel">
+        <label class="field">
+          <span>License key</span>
+          <input id="licenseKey" type="password" placeholder="Paste ENHE license key">
+        </label>
+        <label class="field">
+          <span>License endpoint</span>
+          <input id="licenseEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/license">
+        </label>
+        <div class="button-row">
+          <button id="saveLicense" type="button" class="secondary">Save</button>
+          <button id="validateLicense" type="button" class="secondary">Validate</button>
+        </div>
+        <p id="licenseMessage" class="hint">Use ENHE website billing for production licenses.</p>
+      </section>
+
+      <section class="panel command-panel">
+        <div class="section-head">
+          <h2>Codex command</h2>
+          <button id="copyCommand" type="button" class="ghost">Copy</button>
+        </div>
+        <textarea id="commandOutput" readonly spellcheck="false"></textarea>
+        <p class="hint">Run this from the repository root. Publishing still requires credentials and approval.</p>
+      </section>
+
+      <footer class="footer">
+        <a href="https://www.enhe-tech.com.cn/" target="_blank" rel="noreferrer">ENHE AI</a>
+        <a href="https://www.enhe-tech.com.cn/promotion-manager" target="_blank" rel="noreferrer">Product page</a>
+        <a href="https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git" target="_blank" rel="noreferrer">GitHub</a>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

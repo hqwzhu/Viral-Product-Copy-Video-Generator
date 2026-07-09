@@ -298,11 +298,22 @@ def installed_skill_dir() -> Path:
 
 def managed_skill_files(root: Path) -> list[Path]:
     files = [Path("SKILL.md")]
-    for folder in ["references", "scripts"]:
+    for standalone in ["README.md", "LICENSE", ".gitignore"]:
+        if (root / standalone).exists():
+            files.append(Path(standalone))
+    directory_patterns = {
+        "references": ["*.md"],
+        "scripts": ["*.py"],
+        "docs": ["*.md"],
+        "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt"],
+    }
+    for folder, patterns in directory_patterns.items():
         directory = root / folder
-        if directory.exists():
-            files.extend(Path(folder) / item.name for item in sorted(directory.glob("*.md" if folder == "references" else "*.py")))
-    return files
+        if not directory.exists():
+            continue
+        for pattern in patterns:
+            files.extend(Path(folder) / item.relative_to(directory) for item in sorted(directory.rglob(pattern)))
+    return sorted(dict.fromkeys(files), key=lambda item: item.as_posix())
 
 
 def file_hash(path: Path) -> str:
