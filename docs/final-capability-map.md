@@ -4,7 +4,7 @@ This file maps the user's target requirements to the current Skill capability an
 
 | Requirement | Current implementation | Remaining gate |
 | --- | --- | --- |
-| Search YouTube, Zhihu, Xiaohongshu, Douyin, GitHub for viral creators and videos | `platform_search_browser.py`, `platform_search_capture.py`, `viral_discovery_runner.py`, `multi_query_viral_discovery.py`, `browser_video_sampler.py`, and follow-up capture scripts | Platform access, browser-visible evidence, official APIs where available |
+| Search YouTube, Zhihu, Xiaohongshu, Douyin, GitHub for viral creators and videos | `platform_search_browser.py`, `platform_search_capture.py`, `viral_discovery_runner.py`, `multi_query_viral_discovery.py`, `viral_evidence_inbox_setup.py`, `viral_evidence_inbox.py`, `browser_video_sampler.py`, and follow-up capture scripts | Platform access, browser-visible evidence, official APIs where available; user-filled inbox fallback when automation is blocked |
 | Parse all product URLs after Codex reads pages | `browser_snapshot.py`, `product_url_discovery.py`, `product_url_reader.py`, `product_batch_runner.py`, `product_intake.py` | Playwright browser runtime for dynamic pages; public web-text fallback when local browser/static fetch fails |
 | Generate copy, review packs, and real video files | `promotion_manager.py`, `competitor_content_enhancer.py`, `render_video.py` | ffmpeg for MP4 output, optional voiceover file; `promotion_manager.py review|all` also writes a cheat-on-content bridge pack for Codex `cheat-score` |
 | Auto-publish where possible, otherwise semi-auto | `publish_queue.py`, `publish_readiness_runner.py`, `launch_unlock_pack.py`, `publish_executor.py`, `youtube_oauth_publish.py`, `browser_publish_assistant.py`, `browser_publish_form_fill.py`, `browser_publish_session.py` | Credentials, app review, authorization, explicit `I_APPROVE_PUBLISH`, manual final publish for browser-assisted platforms |
@@ -43,6 +43,22 @@ python scripts\final_capability_runner.py `
   --multi-query-sample-video-frames `
   --out-dir ".\promotion-output\enhe-video-evidence-rerun"
 ```
+
+When risk-controlled platforms still do not expose enough public/browser-visible competitor evidence, create and import a viral evidence inbox:
+
+```powershell
+python scripts\viral_evidence_inbox_setup.py `
+  --product-url "https://www.enhe-tech.com.cn/software/windows-ai" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+
+python scripts\viral_evidence_inbox.py `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+This fallback accepts real competitor URLs, visible page text, transcripts, exports, or screenshot OCR text. It does not create fake creators or metrics; screenshot files alone stay marked as `manual_text_required`.
 
 ## Phase Progress Reporting
 

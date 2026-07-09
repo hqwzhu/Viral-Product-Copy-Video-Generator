@@ -446,6 +446,26 @@ python scripts/multi_query_viral_discovery.py \
   --out-dir "./promotion-output"
 ```
 
+When public platform search is blocked, unstable, or missing content because Zhihu, Xiaohongshu, Douyin, or similar platforms require browser-visible/manual evidence, initialize a fillable viral evidence inbox:
+
+```bash
+python scripts/viral_evidence_inbox_setup.py \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --inbox-dir "./viral-evidence-inbox" \
+  --out-dir "./promotion-output"
+```
+
+After adding real competitor URLs, visible text, transcripts, platform exports, or screenshot OCR text, import it into the same viral library and creator leaderboard:
+
+```bash
+python scripts/viral_evidence_inbox.py \
+  --inbox-dir "./viral-evidence-inbox" \
+  --out-dir "./promotion-output"
+```
+
+The viral evidence inbox is a fallback for real competitor evidence only. It does not seed fake creators or metrics, and screenshot files remain `manual_text_required` until OCR or copied visible text is supplied.
+
 To automatically collect competitor evidence through supported official/public connectors:
 
 ```bash
@@ -940,6 +960,8 @@ The command writes:
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, optional follow-up capture, and optional video frame sampling as one standalone discovery pass. Its `coverage` records search captures, queued follow-up modes, imported deep records, browser-visible capture successes, and video sample frame counts.
 - `reports/promotion-manager/competitors/multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}` when `scripts/multi_query_viral_discovery.py` runs product-driven multi-query discovery and merges ranked materials and creators. Its summary carries the per-query deep evidence and video sampling coverage up to product batch and final readiness reports.
+- `reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.{json,md}` and `viral-evidence-inbox/*` when `scripts/viral_evidence_inbox_setup.py` creates fillable competitor evidence files without seeding fake creators or metrics.
+- `reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.{json,md}` when `scripts/viral_evidence_inbox.py` imports user-provided competitor URLs, visible text, transcripts, exports, or OCR text into captured search reports, the viral content library, and the creator leaderboard.
 - `reports/promotion-manager/competitors/captured-search-results-<platform>.{json,md}` when `scripts/platform_search_capture.py` captures search evidence.
 - `reports/promotion-manager/competitors/viral-content-library.{json,md}` and `follow-up-capture-tasks.{json,md}` when `scripts/viral_content_library.py` ranks captured search evidence.
 - `reports/promotion-manager/competitors/creator-leaderboard.{json,md}` and `creator-follow-up-tasks.{json,md}` when `scripts/creator_leaderboard.py` groups viral materials by creator/account and creates safe tracking tasks.
@@ -1013,6 +1035,8 @@ The command writes:
 - Use `scripts/platform_search_browser.py` or `scripts/run_promotion_workflow.py --auto-search-competitors` to create browser-visible public search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
 - Use `scripts/viral_discovery_runner.py` when the user specifically asks to automatically find viral creators, posts, videos, or repositories from a keyword before product copy generation. It chains browser-visible platform search, normalized capture, ranked viral library creation, creator leaderboard generation, and optional follow-up queues.
 - Use `scripts/multi_query_viral_discovery.py` when one keyword is too narrow. It derives queries from the product profile, value proposition, keywords, audience, and pain points; runs or plans one discovery pass per query; then dedupes and ranks the merged viral materials and creator leaderboard.
+- Use `scripts/viral_evidence_inbox_setup.py` when automatic/browser search cannot reliably collect enough real competitor evidence from risk-controlled platforms. It creates empty templates and import commands only.
+- Use `scripts/viral_evidence_inbox.py` after real competitor URLs, visible text, transcripts, exports, or OCR text have been placed in the inbox. It normalizes the evidence into captured search reports and reruns the viral library and creator leaderboard. Screenshot files alone are recorded as `manual_text_required`.
 - Use `scripts/platform_search_capture.py` to normalize multi-result rendered search snapshots for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, or similar platforms. It parses visible English/Chinese metrics and creator audience labels from search evidence for ranking; missing metrics remain missing.
 - Use `scripts/viral_content_library.py` after search capture to rank top viral materials across platforms and create follow-up capture tasks. Public YouTube/GitHub URLs become safe capture candidates; Zhihu, Xiaohongshu, Douyin, and TikTok stay browser-assisted/user-export tasks unless official access is verified. Preserve `contentDeconstruction` as the primary hook/beat/video-architecture evidence for later copy and script generation.
 - Use `scripts/creator_leaderboard.py` after the viral library exists to identify high-signal creators/accounts, aggregate their observed public metrics, and create creator follow-up tasks. The full workflow does this automatically unless `--skip-creator-leaderboard` is supplied.

@@ -77,6 +77,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--publish-setup", action="append", default=[], help="Path to a publish-setup.json file. Can repeat.")
     parser.add_argument("--real-evidence-setup", action="append", default=[], help="Path to a real-evidence-setup.json file. Can repeat.")
     parser.add_argument("--real-evidence-inbox-setup", action="append", default=[], help="Path to a real-evidence-inbox-setup.json file. Can repeat.")
+    parser.add_argument("--viral-evidence-inbox-setup", action="append", default=[], help="Path to a viral-evidence-inbox-setup.json file. Can repeat.")
+    parser.add_argument("--viral-evidence-inbox", action="append", default=[], help="Path to a viral-evidence-inbox.json file. Can repeat.")
     return parser.parse_args()
 
 
@@ -113,6 +115,16 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         + glob_existing(out_dir, "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
     )
+    viral_evidence_inbox_setup_paths = unique_paths(
+        explicit_existing(args.viral_evidence_inbox_setup)
+        + glob_existing(out_dir, "reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json")
+        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json")
+    )
+    viral_evidence_inbox_paths = unique_paths(
+        explicit_existing(args.viral_evidence_inbox)
+        + glob_existing(out_dir, "reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json")
+        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json")
+    )
     launch_unlock_paths = unique_paths(
         glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
@@ -126,6 +138,8 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishSetupPaths": publish_setup_paths,
         "realEvidenceSetupPaths": real_evidence_setup_paths,
         "realEvidenceInboxSetupPaths": real_evidence_inbox_setup_paths,
+        "viralEvidenceInboxSetupPaths": viral_evidence_inbox_setup_paths,
+        "viralEvidenceInboxPaths": viral_evidence_inbox_paths,
         "launchUnlockPaths": launch_unlock_paths,
         "finalRun": read_json(final_run_path),
         "finalAudit": read_json(final_audit_path),
@@ -135,6 +149,8 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishSetup": [read_json(path) for path in publish_setup_paths],
         "realEvidenceSetup": [read_json(path) for path in real_evidence_setup_paths],
         "realEvidenceInboxSetup": [read_json(path) for path in real_evidence_inbox_setup_paths],
+        "viralEvidenceInboxSetup": [read_json(path) for path in viral_evidence_inbox_setup_paths],
+        "viralEvidenceInbox": [read_json(path) for path in viral_evidence_inbox_paths],
         "launchUnlock": [read_json(path) for path in launch_unlock_paths],
     }
 
@@ -149,7 +165,13 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
     real_evidence_setup = [*sources["realEvidenceSetup"], *sources["realEvidenceInboxSetup"]]
     rows = [
         product_intake_row(final_run, final_audit),
-        viral_research_row(final_run, final_audit),
+        viral_research_row(
+            final_run,
+            final_audit,
+            sources["viralEvidenceInboxSetup"],
+            sources["viralEvidenceInbox"],
+            [*sources["viralEvidenceInboxSetupPaths"], *sources["viralEvidenceInboxPaths"]],
+        ),
         copy_video_row(final_run, final_audit),
         publish_row(final_run, final_audit, readiness, setup),
         metrics_row(final_run, final_audit, real_evidence_setup),
@@ -217,12 +239,19 @@ def product_intake_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
     return row("product_url_codex_structured_intake", status, evidence, missing, [])
 
 
-def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
+def viral_research_row(
+    final_run: dict[str, Any],
+    final_audit: dict[str, Any],
+    viral_inbox_setup_reports: list[dict[str, Any]],
+    viral_inbox_reports: list[dict[str, Any]],
+    viral_inbox_paths: list[Path],
+) -> dict[str, Any]:
     audit_item = requirement(final_audit, "viral_creator_content_research")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     runs = int_value(summary.get("multiQueryDiscoveryRuns"))
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
+    inbox = viral_inbox_metrics(viral_inbox_setup_reports, viral_inbox_reports)
     requested = requested_platforms(final_run)
     requested_video_platforms = sorted(platform for platform in requested if platform in VIDEO_RESEARCH_PLATFORMS)
     observed_platforms = sorted(observed_multi_query_platforms(final_run))
@@ -248,6 +277,7 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
         "observedResearchPlatforms": observed_platforms,
         "observedVideoPlatforms": observed_video_platforms,
         "missingVideoPlatformEvidence": missing_video_platforms,
+        **inbox,
     }
     if final_run and runs == 0:
         status = "needs_real_run_evidence"
@@ -285,10 +315,18 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
     elif final_run and (metrics["mergedMaterials"] > 0 or metrics["searchCapturesReady"] > 0):
         status = "partial_ready_search_capture_only"
         missing.append("no deep competitor records or video frame samples were captured in the final run")
+    if metrics["viralInboxImportedRecords"] > 0 and status not in {"ready_with_video_evidence"}:
+        status = "partial_ready_user_inbox_evidence"
+        missing.append("viral evidence was imported from a user-filled inbox; run browser/official capture when platform access allows")
+    elif not final_run and metrics["viralInboxSetupReports"] > 0 and metrics["viralInboxImportedRecords"] == 0:
+        status = "partial_ready_viral_inbox_available"
+        missing.append("viral evidence inbox templates are ready but no real competitor evidence has been imported")
+    evidence = list(audit_item.get("evidence") or [])
+    evidence.extend(str(path) for path in viral_inbox_paths if path)
     return row(
         "viral_creator_video_research",
         status,
-        audit_item.get("evidence") or [],
+        evidence,
         missing or audit_item.get("missing") or [],
         audit_item.get("limits") or [],
         metrics,
@@ -566,6 +604,8 @@ def build_action_queue(
         "partial_ready_search_capture_only",
         "partial_ready_deep_content_evidence",
         "partial_ready_non_video_platform_evidence",
+        "partial_ready_user_inbox_evidence",
+        "partial_ready_viral_inbox_available",
     }:
         actions.append(
             action(
@@ -573,6 +613,32 @@ def build_action_queue(
                 "run_video_evidence_capture",
                 "Run multi-query viral discovery with follow-up captures and browser-visible video frame sampling.",
                 final_runner_command(out_dir, product_url) + " --multi-query-run-follow-up-captures --multi-query-sample-video-frames",
+            )
+        )
+    if by_id["viral_creator_video_research"]["status"] in {
+        "needs_real_run_evidence",
+        "partial_ready_search_capture_only",
+        "partial_ready_deep_content_evidence",
+        "partial_ready_non_video_platform_evidence",
+        "partial_ready_user_inbox_evidence",
+        "partial_ready_viral_inbox_available",
+    }:
+        viral_metrics = by_id["viral_creator_video_research"]["metrics"]
+        if int_value(viral_metrics.get("viralInboxSetupReports")) == 0:
+            actions.append(
+                action(
+                    23,
+                    "setup_viral_evidence_inbox",
+                    "Create a fillable inbox for real competitor/viral material evidence when public platform automation is incomplete.",
+                    f"python scripts/viral_evidence_inbox_setup.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./viral-evidence-inbox\" --out-dir \"{out_dir}\"",
+                )
+            )
+        actions.append(
+            action(
+                24,
+                "import_viral_evidence_inbox",
+                "Import user-provided competitor URLs, visible text, transcripts, exports, or OCR text into the viral library.",
+                f"python scripts/viral_evidence_inbox.py --inbox-dir \"./viral-evidence-inbox\" --out-dir \"{out_dir}\"",
             )
         )
     missing_video_platforms = by_id["viral_creator_video_research"]["metrics"].get("missingVideoPlatformEvidence") or []
@@ -919,6 +985,14 @@ def operating_sequence(out_dir: Path, product_url: str) -> list[dict[str, str]]:
             "command": final_runner_command(out_dir, product_url),
         },
         {
+            "step": "setup_viral_evidence_inbox_if_needed",
+            "command": f"python scripts/viral_evidence_inbox_setup.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./viral-evidence-inbox\" --out-dir \"{out_dir}\"",
+        },
+        {
+            "step": "import_viral_evidence_inbox",
+            "command": f"python scripts/viral_evidence_inbox.py --inbox-dir \"./viral-evidence-inbox\" --out-dir \"{out_dir}\"",
+        },
+        {
             "step": "review_readiness_matrix",
             "command": f"python scripts/final_capability_readiness.py --out-dir \"{out_dir}\"",
         },
@@ -982,6 +1056,8 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
         "publishSetup": [report_source(path) for path in sources.get("publishSetupPaths", [])],
         "realEvidenceSetup": [report_source(path) for path in sources.get("realEvidenceSetupPaths", [])],
         "realEvidenceInboxSetup": [report_source(path) for path in sources.get("realEvidenceInboxSetupPaths", [])],
+        "viralEvidenceInboxSetup": [report_source(path) for path in sources.get("viralEvidenceInboxSetupPaths", [])],
+        "viralEvidenceInbox": [report_source(path) for path in sources.get("viralEvidenceInboxPaths", [])],
         "launchUnlock": [report_source(path) for path in sources.get("launchUnlockPaths", [])],
     }
 
@@ -1090,6 +1166,44 @@ def real_evidence_metrics(summary: dict[str, Any]) -> dict[str, Any]:
         "hasAnySocialOrCommentEvidence": has_views or has_likes or has_comments or counts["favoritesEvidenceRecords"] > 0 or counts["sharesEvidenceRecords"] > 0,
         "hasAnyBusinessEvidence": has_orders or has_revenue,
         "hasFullFunnelEvidence": has_views and has_likes and has_comments and has_orders and has_revenue,
+    }
+
+
+def viral_inbox_metrics(setup_reports: list[dict[str, Any]], inbox_reports: list[dict[str, Any]]) -> dict[str, Any]:
+    imported_records = 0
+    capture_reports = 0
+    imported_sources = 0
+    screenshot_needing_text = 0
+    setup_files = 0
+    setup_platforms = 0
+    platforms: list[str] = []
+    library_ready = False
+    creator_leaderboard_ready = False
+    for report in setup_reports:
+        summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+        setup_files += int_value(summary.get("filesPrepared"))
+        setup_platforms += int_value(summary.get("platforms"))
+    for report in inbox_reports:
+        summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+        imported_records += int_value(summary.get("records"))
+        capture_reports += int_value(summary.get("captureReports"))
+        imported_sources += int_value(summary.get("importedSources"))
+        screenshot_needing_text += int_value(summary.get("screenshotEvidenceNeedingText"))
+        platforms.extend(split_platform_values(summary.get("platforms")))
+        library_ready = library_ready or bool(summary.get("libraryReady"))
+        creator_leaderboard_ready = creator_leaderboard_ready or bool(summary.get("creatorLeaderboardReady"))
+    return {
+        "viralInboxSetupReports": len(setup_reports),
+        "viralInboxImportReports": len(inbox_reports),
+        "viralInboxSetupFiles": setup_files,
+        "viralInboxSetupPlatforms": setup_platforms,
+        "viralInboxImportedSources": imported_sources,
+        "viralInboxImportedRecords": imported_records,
+        "viralInboxCaptureReports": capture_reports,
+        "viralInboxScreenshotEvidenceNeedingText": screenshot_needing_text,
+        "viralInboxPlatforms": sorted(set(platforms)),
+        "viralInboxLibraryReady": library_ready,
+        "viralInboxCreatorLeaderboardReady": creator_leaderboard_ready,
     }
 
 

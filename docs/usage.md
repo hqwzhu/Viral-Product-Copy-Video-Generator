@@ -40,6 +40,26 @@ python scripts\multi_query_viral_discovery.py `
 
 The Skill ranks public or browser-visible materials. It does not scrape private endpoints or hidden media tokens.
 
+If risk-controlled platforms do not expose enough stable public search evidence, create a fillable viral evidence inbox:
+
+```powershell
+python scripts\viral_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+Then add real competitor URLs, visible text, transcripts, exports, or screenshot OCR text and import them:
+
+```powershell
+python scripts\viral_evidence_inbox.py `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+The inbox runner writes platform `captured-search-results-*.json` reports, rebuilds the viral content library, and rebuilds the creator leaderboard. It keeps screenshots as `manual_text_required` until OCR or copied text is provided.
+
 ## Content And Video
 
 ```powershell

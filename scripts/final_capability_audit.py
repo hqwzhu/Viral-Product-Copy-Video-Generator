@@ -33,6 +33,8 @@ SCRIPT_REQUIREMENTS = {
     "competitor_collector": "competitor_collector.py",
     "viral_discovery_runner": "viral_discovery_runner.py",
     "multi_query_viral_discovery": "multi_query_viral_discovery.py",
+    "viral_evidence_inbox_setup": "viral_evidence_inbox_setup.py",
+    "viral_evidence_inbox": "viral_evidence_inbox.py",
     "viral_content_library": "viral_content_library.py",
     "creator_leaderboard": "creator_leaderboard.py",
     "creator_follow_up_runner": "creator_follow_up_runner.py",
@@ -381,6 +383,8 @@ def requirement_status(
             "multi_query_viral_discovery",
             "platform_search_browser",
             "platform_search_capture",
+            "viral_evidence_inbox_setup",
+            "viral_evidence_inbox",
             "viral_content_library",
             "creator_leaderboard",
             "creator_follow_up_runner",
@@ -461,6 +465,8 @@ def requirement_status(
                     "multi_query_viral_discovery",
                     "platform_search_browser",
                     "platform_search_capture",
+                    "viral_evidence_inbox_setup",
+                    "viral_evidence_inbox",
                     "viral_content_library",
                     "creator_leaderboard",
                     "creator_follow_up_runner",
@@ -473,6 +479,7 @@ def requirement_status(
                 "YouTube and GitHub can use official/public connectors.",
                 "Zhihu, Xiaohongshu, Douyin, and TikTok require browser-visible evidence or official access; no private endpoint or anti-bot bypass is allowed.",
                 "Video sampling captures browser-visible video metadata and frame screenshots only; it does not download private media streams or extract hidden media tokens.",
+                "When platform search is blocked or unstable, viral_evidence_inbox_setup.py and viral_evidence_inbox.py provide a user-filled evidence fallback without fabricating metrics.",
             ],
         },
         {
@@ -1077,6 +1084,21 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
                 f"python scripts/multi_query_viral_discovery.py --workflow-manifest "
                 f"\"{out_dir}/reports/promotion-manager/agent-run/workflow-manifest.json\" "
                 f"--platforms youtube,zhihu,xiaohongshu,douyin,github --top-n 20 --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "setup_viral_evidence_inbox",
+            "command": (
+                "python scripts/viral_evidence_inbox_setup.py --product-url \"https://example.com/product\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./viral-evidence-inbox\" "
+                f"--out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "import_viral_evidence_inbox",
+            "command": (
+                f"python scripts/viral_evidence_inbox.py --inbox-dir \"./viral-evidence-inbox\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {

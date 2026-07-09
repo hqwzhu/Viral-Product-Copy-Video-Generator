@@ -18,6 +18,8 @@ const COMMAND_LABELS = {
   skill_entry: "Skill run",
   browser_publish_session: "Publish session",
   launch_unlock_pack: "Launch unlock pack",
+  viral_evidence_inbox_setup: "Viral evidence setup",
+  viral_evidence_inbox: "Viral evidence inbox",
   real_evidence_inbox_setup: "Evidence inbox setup",
   real_evidence_inbox: "Evidence inbox",
   performance_monitor: "Performance monitor",
@@ -178,6 +180,14 @@ function generateCommand() {
     generateLaunchUnlockPackCommand();
     return;
   }
+  if (commandType === "viral_evidence_inbox_setup") {
+    generateViralEvidenceInboxSetupCommand();
+    return;
+  }
+  if (commandType === "viral_evidence_inbox") {
+    generateViralEvidenceInboxCommand();
+    return;
+  }
   if (commandType === "real_evidence_inbox_setup") {
     generateRealEvidenceInboxSetupCommand();
     return;
@@ -316,6 +326,48 @@ function generateRealEvidenceInboxCommand() {
   if (els.allowLocalhost.checked) {
     args.push("--allow-localhost");
   }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateViralEvidenceInboxCommand() {
+  const inboxPath = els.evidenceInbox.value.trim();
+  if (!inboxPath) {
+    els.commandOutput.value = "Enter an evidence inbox folder first.";
+    return;
+  }
+  const args = [
+    "python scripts\\viral_evidence_inbox.py",
+    `--inbox-dir ${quote(inboxPath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateViralEvidenceInboxSetupCommand() {
+  const url = els.productUrl.value.trim();
+  const inboxPath = els.evidenceInbox.value.trim();
+  const platforms = selectedPlatforms();
+  if (!url) {
+    els.commandOutput.value = "Enter a product or website URL first.";
+    return;
+  }
+  if (!inboxPath) {
+    els.commandOutput.value = "Enter an evidence inbox folder first.";
+    return;
+  }
+  if (!platforms.length) {
+    els.commandOutput.value = "Select at least one platform.";
+    return;
+  }
+  const args = [
+    "python scripts\\viral_evidence_inbox_setup.py",
+    `--product-url ${quote(url)}`,
+    `--platforms ${platforms.join(",")}`,
+    `--inbox-dir ${quote(inboxPath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
   els.commandOutput.value = args.join(" ");
   updateEstimate();
 }
@@ -629,7 +681,15 @@ async function buildHostedRunPayload() {
   if ((els.commandType.value === "browser_publish_session" || els.commandType.value === "launch_unlock_pack") && !els.publishQueue.value.trim()) {
     throw new Error("Enter a publish-queue.json path first.");
   }
-  if ((els.commandType.value === "real_evidence_inbox" || els.commandType.value === "real_evidence_inbox_setup") && !els.evidenceInbox.value.trim()) {
+  if (
+    (
+      els.commandType.value === "real_evidence_inbox" ||
+      els.commandType.value === "real_evidence_inbox_setup" ||
+      els.commandType.value === "viral_evidence_inbox" ||
+      els.commandType.value === "viral_evidence_inbox_setup"
+    ) &&
+    !els.evidenceInbox.value.trim()
+  ) {
     throw new Error("Enter an evidence inbox folder first.");
   }
   generateCommand();
@@ -701,11 +761,21 @@ function hostedRunOptions() {
 }
 
 function requiresProductUrl(commandType) {
-  return commandType === "skill_entry" || commandType === "automation_init" || commandType === "real_evidence_inbox_setup";
+  return (
+    commandType === "skill_entry" ||
+    commandType === "automation_init" ||
+    commandType === "real_evidence_inbox_setup" ||
+    commandType === "viral_evidence_inbox_setup"
+  );
 }
 
 function requiresPlatforms(commandType) {
-  return commandType === "skill_entry" || commandType === "automation_init" || commandType === "real_evidence_inbox_setup";
+  return (
+    commandType === "skill_entry" ||
+    commandType === "automation_init" ||
+    commandType === "real_evidence_inbox_setup" ||
+    commandType === "viral_evidence_inbox_setup"
+  );
 }
 
 async function openCheckout() {
@@ -756,6 +826,14 @@ function estimateCredits() {
   }
   if (commandType === "launch_unlock_pack") {
     workflowType = "launch_unlock_pack";
+    creditsPerRun = 2;
+  }
+  if (commandType === "viral_evidence_inbox_setup") {
+    workflowType = "viral_evidence_inbox_setup";
+    creditsPerRun = 1;
+  }
+  if (commandType === "viral_evidence_inbox") {
+    workflowType = "viral_evidence_inbox";
     creditsPerRun = 2;
   }
   if (commandType === "real_evidence_inbox_setup") {
@@ -815,7 +893,12 @@ function commandScope(commandType) {
   if (commandType === "browser_publish_session" || commandType === "launch_unlock_pack") {
     return "publish";
   }
-  if (commandType === "real_evidence_inbox" || commandType === "real_evidence_inbox_setup") {
+  if (
+    commandType === "real_evidence_inbox" ||
+    commandType === "real_evidence_inbox_setup" ||
+    commandType === "viral_evidence_inbox" ||
+    commandType === "viral_evidence_inbox_setup"
+  ) {
     return "evidence-inbox";
   }
   if (commandType === "performance_monitor") {

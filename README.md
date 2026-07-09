@@ -284,6 +284,26 @@ python scripts\viral_discovery_runner.py `
   --out-dir ".\promotion-output"
 ```
 
+Viral evidence inbox fallback for risk-controlled platforms:
+
+```powershell
+python scripts\viral_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+After adding real competitor URLs, visible page text, transcripts, exports, or screenshot OCR text:
+
+```powershell
+python scripts\viral_evidence_inbox.py `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+This inbox is for real competitor evidence only. It does not seed fake creators or metrics; screenshots are recorded as needing OCR/copied text before import.
+
 Render MP4:
 
 ```powershell

@@ -60,6 +60,8 @@ AUTOMATION_SCHEDULER = ROOT / "scripts" / "automation_scheduler.py"
 PLATFORM_SEARCH_CAPTURE = ROOT / "scripts" / "platform_search_capture.py"
 PLATFORM_SEARCH_BROWSER = ROOT / "scripts" / "platform_search_browser.py"
 VIRAL_CONTENT_LIBRARY = ROOT / "scripts" / "viral_content_library.py"
+VIRAL_EVIDENCE_INBOX_SETUP = ROOT / "scripts" / "viral_evidence_inbox_setup.py"
+VIRAL_EVIDENCE_INBOX = ROOT / "scripts" / "viral_evidence_inbox.py"
 FOLLOW_UP_CAPTURE_RUNNER = ROOT / "scripts" / "follow_up_capture_runner.py"
 COMPETITOR_CONTENT_ENHANCER = ROOT / "scripts" / "competitor_content_enhancer.py"
 CREATOR_LEADERBOARD = ROOT / "scripts" / "creator_leaderboard.py"
@@ -2550,6 +2552,121 @@ Prompt templates for product copy, SEO content, and video scripts.
         library = json.loads((out_dir / "output/reports/promotion-manager/competitors/viral-content-library.json").read_text(encoding="utf-8"))
         self.assertEqual(library["recordCount"], 1)
         self.assertEqual(library["materials"][0]["title"], "AI launch video teardown")
+
+    def test_viral_evidence_inbox_setup_creates_empty_templates_without_fake_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-evidence-inbox-setup-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        inbox_dir = out_dir / "viral-inbox"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_EVIDENCE_INBOX_SETUP),
+                "--product-url",
+                "https://www.enhe-tech.com.cn/software/windows-ai",
+                "--product-name",
+                "ENHE Windows AI",
+                "--platforms",
+                "youtube,xiaohongshu,douyin",
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["platforms"], 3)
+        self.assertEqual(report["summary"]["realCompetitorRecordsSeeded"], 0)
+        self.assertEqual(report["summary"]["realMetricsSeeded"], 0)
+        artifacts = {key: Path(value["path"]) for key, value in report["artifacts"].items()}
+        for path in artifacts.values():
+            self.assertTrue(path.exists(), path)
+        source_csv = artifacts["sourceCsv"].read_text(encoding="utf-8-sig")
+        copied_text = artifacts["copiedText"].read_text(encoding="utf-8")
+        example = json.loads(artifacts["structuredExample"].read_text(encoding="utf-8"))
+        self.assertIn("views", source_csv)
+        self.assertEqual(len([line for line in source_csv.splitlines() if line.strip()]), 1)
+        self.assertEqual(copied_text, "")
+        self.assertTrue(example["exampleOnly"])
+        self.assertTrue(example["doNotImportAsEvidence"])
+        self.assertIn("viral_evidence_inbox.py", artifacts["importCommands"].read_text(encoding="utf-8"))
+
+    def test_viral_evidence_inbox_imports_csv_and_keeps_screenshots_manual(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-evidence-inbox-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        inbox_dir = out_dir / "viral-inbox"
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_EVIDENCE_INBOX_SETUP),
+                "--product-url",
+                "https://www.enhe-tech.com.cn/software/windows-ai",
+                "--platforms",
+                "youtube,xiaohongshu,douyin",
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        (inbox_dir / "viral-sources.csv").write_text(
+            "\n".join(
+                [
+                    "platform,url,title,creatorName,contentFormat,hook,description,content,views,likes,favorites,comments,shares,subscribers,stars,forks,evidence,notes",
+                    "youtube,https://www.youtube.com/watch?v=viral001,AI launch video teardown,Launch Lab,video,This product page became 30 videos,Observed breakdown,Hook proof CTA,120000,9000,,500,200,,,,public page,real visible metrics",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note001,AI 工具种草笔记,Growth Notes,note,别再手写产品介绍,Visible note text,痛点 对比 CTA,38000,4200,1600,260,90,,,,browser visible text,real copied note",
+                    "douyin,https://www.douyin.com/video/7123456789012345678,30秒AI工具脚本,Shorts Lab,video,3秒说清产品价值,Visible video caption,开场 痛点 演示 CTA,98000,7800,1200,430,310,,,,OCR text,real copied caption",
+                ]
+            )
+            + "\n",
+            encoding="utf-8-sig",
+        )
+        (inbox_dir / "douyin-screenshot.png").write_bytes(b"not a real screenshot for unit test")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_EVIDENCE_INBOX),
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["records"], 3)
+        self.assertEqual(report["summary"]["captureReports"], 3)
+        self.assertEqual(report["summary"]["screenshotEvidenceNeedingText"], 1)
+        self.assertTrue(report["summary"]["libraryReady"])
+        self.assertTrue(report["summary"]["creatorLeaderboardReady"])
+        self.assertTrue(any(item["status"] == "manual_text_required" for item in report["sources"]))
+        youtube_capture = json.loads(
+            (out_dir / "reports/promotion-manager/competitors/captured-search-results-youtube.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(youtube_capture["recordCount"], 1)
+        self.assertEqual(youtube_capture["records"][0]["creatorName"], "Launch Lab")
+        library = json.loads((out_dir / "reports/promotion-manager/competitors/viral-content-library.json").read_text(encoding="utf-8"))
+        leaderboard = json.loads((out_dir / "reports/promotion-manager/competitors/creator-leaderboard.json").read_text(encoding="utf-8"))
+        self.assertEqual(library["recordCount"], 3)
+        self.assertGreaterEqual(leaderboard["creatorCount"], 3)
 
     def test_creator_leaderboard_groups_viral_materials_by_creator(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="creator-leaderboard-test-"))
@@ -6689,6 +6806,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["performance_monitor"]["exists"])
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
         self.assertTrue(report["scripts"]["multi_query_viral_discovery"]["exists"])
+        self.assertTrue(report["scripts"]["viral_evidence_inbox_setup"]["exists"])
+        self.assertTrue(report["scripts"]["viral_evidence_inbox"]["exists"])
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["real_run_playbook"]["exists"])
         self.assertTrue(report["scripts"]["skill_entry"]["exists"])
@@ -6697,6 +6816,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
+        self.assertIn("viral_evidence_inbox_setup.py", viral_evidence)
+        self.assertIn("viral_evidence_inbox.py", viral_evidence)
         publish_evidence = "\n".join(by_requirement["all_platform_auto_publish"]["evidence"])
         self.assertIn("publish_setup_assistant.py", publish_evidence)
         self.assertIn("browser_publish_form_fill.py", publish_evidence)
@@ -6728,6 +6849,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "run_browser_publish_session" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "multi_query_viral_discovery" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "setup_viral_evidence_inbox" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "import_viral_evidence_inbox" for item in report["recommendedCommands"]))
         self.assertTrue(
             any(
                 item["purpose"] == "batch_product_url_cycles_with_multi_query_viral_discovery"
@@ -7079,6 +7202,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--multi-query-browser-search-wait-until domcontentloaded", capture_action["command"])
         self.assertIn("--multi-query-video-sample-count 2", capture_action["command"])
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", capture_action["command"])
+        self.assertTrue(any(item["id"] == "setup_viral_evidence_inbox" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "import_viral_evidence_inbox" for item in report["actionQueue"]))
         synthetic_action = next(item for item in report["actionQueue"] if item["id"] == "run_synthetic_evidence_validation")
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", synthetic_action["command"])
         final_step = next(item for item in report["operatingSequence"] if item["step"] == "run_final_capability")
@@ -7118,6 +7243,9 @@ Prompt templates for product copy, SEO content, and video scripts.
                     }
                 ]
             },
+            [],
+            [],
+            [],
         )
 
         self.assertEqual(row["metrics"]["observedVideoPlatforms"], ["youtube"])

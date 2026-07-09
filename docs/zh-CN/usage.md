@@ -231,3 +231,24 @@ python scripts\synthetic_evidence_generator.py `
 生成结果会带有 `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT` 标记，只能用于本地流程验证，不能当作真实播放量、订单或收入数据汇报。
 
 如果没有真实指标或业务证据，优化器会输出 `waiting_real_data`，不会编造表现。
+## 爆款证据收件箱 fallback
+
+当知乎、小红书、抖音等平台自动搜索不稳定，或者只能拿到浏览器可见内容时，先创建空模板：
+
+```powershell
+python scripts\viral_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+填入真实对标链接、可见正文、口播稿、平台导出或截图 OCR 文本后导入：
+
+```powershell
+python scripts\viral_evidence_inbox.py `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+导入器会生成 `captured-search-results-*.json`、爆款内容库和博主榜单；只有截图而没有 OCR/复制文本时会标记为 `manual_text_required`。

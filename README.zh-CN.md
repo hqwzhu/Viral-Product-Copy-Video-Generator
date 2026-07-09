@@ -154,3 +154,25 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
 - [中文插件上架指南](docs/zh-CN/extension-store-submission.md)
 - [English browser extension guide](docs/browser-extension.md)
 - [English extension store submission guide](docs/extension-store-submission.md)
+
+## 爆款证据收件箱 fallback
+
+当知乎、小红书、抖音等平台自动搜索不稳定，或者只能拿到浏览器可见内容时，先创建空模板：
+
+```powershell
+python scripts\viral_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+填入真实对标链接、可见正文、口播稿、平台导出或截图 OCR 文本后导入：
+
+```powershell
+python scripts\viral_evidence_inbox.py `
+  --inbox-dir ".\viral-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+该收件箱不会预置虚假博主、播放量或点赞数；截图文件必须补充 OCR/复制文本后才会进入爆款库。
