@@ -203,10 +203,18 @@
           <span>Usage authorization endpoint</span>
           <input id="usageAuthorizeEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize">
         </label>
+        <label class="field">
+          <span>Hosted run endpoint</span>
+          <input id="hostedRunEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/run">
+        </label>
         <div class="button-row">
           <button id="saveLicense" type="button" class="secondary">Save</button>
           <button id="validateLicense" type="button" class="secondary">Validate</button>
           <button id="authorizeUsage" type="button" class="secondary">Reserve credits</button>
+        </div>
+        <div class="button-row">
+          <button id="copyHostedPayload" type="button" class="secondary">Copy hosted payload</button>
+          <button id="startHostedRun" type="button" class="primary">Start hosted run</button>
         </div>
         <div class="button-row">
           <button id="openCheckout" type="button" class="primary">Open checkout</button>
@@ -214,6 +222,7 @@
         </div>
         <p id="licenseMessage" class="hint">Use ENHE website billing for production licenses.</p>
         <p id="usageMessage" class="hint">Reserve hosted credits only before a hosted ENHE run.</p>
+        <p id="hostedRunMessage" class="hint">Hosted runs require a backend quota check and never click final platform publish.</p>
       </section>
 
       <section class="panel command-panel">

@@ -645,7 +645,14 @@ def browser_extension_status() -> dict[str, Any]:
         missing.append("browser-extension/manifest.json is invalid JSON")
     contract = read_json_file(contract_path)
     if contract:
-        for key in ["checkoutUrl", "customerPortalUrl", "licenseEndpoint", "usageAuthorizeEndpoint", "usageCommitEndpoint"]:
+        for key in [
+            "checkoutUrl",
+            "customerPortalUrl",
+            "licenseEndpoint",
+            "usageAuthorizeEndpoint",
+            "usageCommitEndpoint",
+            "hostedRunEndpoint",
+        ]:
             if not contract.get(key):
                 missing.append(f"browser-extension/billing-contract.json missing key: {key}")
         credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
@@ -669,6 +676,13 @@ def browser_extension_status() -> dict[str, Any]:
             for key in ["licenseKey", "workflowType", "estimatedCredits", "idempotencyKey", "commandType"]:
                 if key not in usage_body:
                     missing.append(f"browser-extension/billing-contract.json usageAuthorizeRequest missing key: {key}")
+        hosted_run_body = (contract.get("hostedRunRequest") or {}).get("body") if isinstance(contract.get("hostedRunRequest"), dict) else {}
+        if not isinstance(hosted_run_body, dict):
+            missing.append("browser-extension/billing-contract.json must include hostedRunRequest.body")
+        else:
+            for key in ["licenseKey", "usageId", "workflowType", "estimatedCredits", "commandType", "productUrl", "platforms", "localCommand", "safety"]:
+                if key not in hosted_run_body:
+                    missing.append(f"browser-extension/billing-contract.json hostedRunRequest missing key: {key}")
         events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
         for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
             if event not in events:
@@ -693,6 +707,9 @@ def browser_extension_status() -> dict[str, Any]:
             "License key",
             "Usage authorization endpoint",
             "Reserve credits",
+            "Hosted run endpoint",
+            "Copy hosted payload",
+            "Start hosted run",
             "Open checkout",
             "Billing portal",
             "www.enhe-tech.com.cn",
@@ -710,7 +727,10 @@ def browser_extension_status() -> dict[str, Any]:
             "openCheckout",
             "openPortal",
             "authorizeUsage",
+            "buildHostedRunPayload",
+            "startHostedRun",
             "usageAuthorizeEndpoint",
+            "hostedRunEndpoint",
             "idempotencyKey",
             "estimatedMonthlyCredits",
             "COST_PER_CREDIT",

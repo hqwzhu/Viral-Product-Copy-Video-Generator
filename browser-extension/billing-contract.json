@@ -1,6 +1,6 @@
 {
   "name": "ENHE Promotion Manager Billing Contract",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "provider": "stripe_or_equivalent_subscription_provider",
   "website": "https://www.enhe-tech.com.cn/",
   "checkoutUrl": "https://www.enhe-tech.com.cn/promotion-manager/checkout",
@@ -8,6 +8,7 @@
   "licenseEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/license",
   "usageAuthorizeEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize",
   "usageCommitEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/usage/commit",
+  "hostedRunEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/run",
   "webhookEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/stripe",
   "plans": {
     "free": {
@@ -41,7 +42,7 @@
   },
   "creditCosts": {
     "command_only": 0,
-    "standard_run": 1,
+    "standard_run": 4,
     "research_run": 3,
     "deep_strategy_review": 15,
     "hosted_mp4_render": 3,
@@ -90,6 +91,34 @@
     "creditsReserved": "number",
     "creditsRemainingAfterReservation": "number",
     "reason": "quota_exceeded|inactive_license|ok"
+  },
+  "hostedRunRequest": {
+    "method": "POST",
+    "body": {
+      "licenseKey": "string",
+      "usageId": "string",
+      "workflowType": "command_only|standard_run|research_run|deep_strategy_review|hosted_mp4_render|browser_publish_session|real_evidence_inbox|final_readiness_audit|automation_config_init|automation_due_run|automation_windows_task",
+      "estimatedCredits": "number",
+      "commandType": "skill_entry|browser_publish_session|real_evidence_inbox|final_readiness|automation_init|automation_run|automation_windows_task",
+      "extensionVersion": "string",
+      "website": "string",
+      "requestSource": "chrome_extension",
+      "idempotencyKey": "string",
+      "productUrl": "string",
+      "platforms": "string[]",
+      "workflowDepth": "full|research|playbook",
+      "localCommand": "string",
+      "options": "object",
+      "safety": "object"
+    }
+  },
+  "hostedRunResponse": {
+    "accepted": "boolean",
+    "runId": "string",
+    "status": "queued|running|succeeded|failed|blocked",
+    "dashboardUrl": "string",
+    "reportUrl": "string",
+    "reason": "quota_required|inactive_license|missing_usage_reservation|ok"
   },
   "requiredWebhookEvents": [
     "checkout.session.completed",

@@ -1,6 +1,7 @@
 const ENHE_SITE = "https://www.enhe-tech.com.cn/";
 const DEFAULT_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/license";
 const DEFAULT_USAGE_AUTHORIZE_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize";
+const DEFAULT_HOSTED_RUN_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/run";
 const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
 
@@ -64,13 +65,17 @@ const els = {
   licenseKey: document.getElementById("licenseKey"),
   licenseEndpoint: document.getElementById("licenseEndpoint"),
   usageAuthorizeEndpoint: document.getElementById("usageAuthorizeEndpoint"),
+  hostedRunEndpoint: document.getElementById("hostedRunEndpoint"),
   saveLicense: document.getElementById("saveLicense"),
   validateLicense: document.getElementById("validateLicense"),
   authorizeUsage: document.getElementById("authorizeUsage"),
+  copyHostedPayload: document.getElementById("copyHostedPayload"),
+  startHostedRun: document.getElementById("startHostedRun"),
   openCheckout: document.getElementById("openCheckout"),
   openPortal: document.getElementById("openPortal"),
   licenseMessage: document.getElementById("licenseMessage"),
   usageMessage: document.getElementById("usageMessage"),
+  hostedRunMessage: document.getElementById("hostedRunMessage"),
   commandOutput: document.getElementById("commandOutput"),
   copyCommand: document.getElementById("copyCommand")
 };
@@ -83,6 +88,8 @@ els.copyCommand.addEventListener("click", copyCommand);
 els.saveLicense.addEventListener("click", saveLicense);
 els.validateLicense.addEventListener("click", validateLicense);
 els.authorizeUsage.addEventListener("click", authorizeUsage);
+els.copyHostedPayload.addEventListener("click", copyHostedPayload);
+els.startHostedRun.addEventListener("click", startHostedRun);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
 els.plan.addEventListener("change", updateEstimate);
@@ -112,12 +119,14 @@ async function init() {
     "licenseKey",
     "licenseEndpoint",
     "usageAuthorizeEndpoint",
+    "hostedRunEndpoint",
     "licensePlan",
     "licenseActive"
   ]);
   els.licenseKey.value = stored.licenseKey || "";
   els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
   els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
+  els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
   if (stored.licensePlan) {
     const planKey = String(stored.licensePlan).toLowerCase();
     if (PLANS[planKey]) {
@@ -376,6 +385,7 @@ async function saveLicense() {
     licenseKey: els.licenseKey.value.trim(),
     licenseEndpoint: els.licenseEndpoint.value.trim() || DEFAULT_ENDPOINT,
     usageAuthorizeEndpoint: els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT,
+    hostedRunEndpoint: els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
     licensePlan: els.plan.value
   });
   els.licenseMessage.textContent = "License settings saved locally.";
@@ -421,7 +431,9 @@ async function authorizeUsage() {
       usageAuthorizeEndpoint: endpoint,
       lastUsageId: payload.usageId || "",
       lastUsageWorkflowType: estimate.workflowType,
-      lastUsageCreditsReserved: payload.creditsReserved ?? estimate.creditsPerRun
+      lastUsageCreditsReserved: payload.creditsReserved ?? estimate.creditsPerRun,
+      lastUsageCommandType: els.commandType.value,
+      lastUsageIdempotencyKey: idempotencyKey
     });
     els.usageMessage.textContent = `Reserved ${payload.creditsReserved ?? estimate.creditsPerRun} credits. Remaining: ${payload.creditsRemainingAfterReservation ?? "unknown"}.`;
   } catch (error) {
@@ -459,11 +471,13 @@ async function validateLicense() {
     await chrome.storage.local.set({
       licenseKey,
       licenseEndpoint: endpoint,
+      hostedRunEndpoint: payload.hostedRunEndpoint || els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
       licensePlan: String(payload.plan || els.plan.value).toLowerCase(),
       licenseActive: active,
       checkoutUrl: payload.checkoutUrl || CHECKOUT_URL,
       customerPortalUrl: payload.customerPortalUrl || CUSTOMER_PORTAL_URL
     });
+    els.hostedRunEndpoint.value = payload.hostedRunEndpoint || els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT;
     setLicenseStatus(active ? "Active" : "Inactive", active ? "active" : "error");
     els.licenseMessage.textContent = active
       ? `Plan ${payload.plan || els.plan.value}, credits ${payload.creditsRemaining ?? "unknown"}.`
@@ -473,6 +487,146 @@ async function validateLicense() {
     setLicenseStatus("Offline", "error");
     els.licenseMessage.textContent = `License API not reachable. Manage billing on ENHE website. ${error.message}`;
   }
+}
+
+async function copyHostedPayload() {
+  try {
+    const payload = await buildHostedRunPayload();
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    els.hostedRunMessage.textContent = "Hosted run payload copied.";
+  } catch (error) {
+    els.hostedRunMessage.textContent = error.message;
+  }
+}
+
+async function startHostedRun() {
+  const endpoint = els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT;
+  let payload;
+  try {
+    payload = await buildHostedRunPayload();
+  } catch (error) {
+    els.hostedRunMessage.textContent = error.message;
+    return;
+  }
+  if (payload.estimatedCredits > 0 && !payload.usageId) {
+    els.hostedRunMessage.textContent = "Reserve credits before starting a hosted run.";
+    return;
+  }
+  els.hostedRunMessage.textContent = "Submitting hosted run request...";
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const result = await response.json();
+    await chrome.storage.local.set({
+      hostedRunEndpoint: endpoint,
+      lastHostedRunId: result.runId || "",
+      lastHostedRunStatus: result.status || ""
+    });
+    els.hostedRunMessage.textContent = `Hosted run ${result.status || "accepted"}${result.runId ? `: ${result.runId}` : ""}.`;
+  } catch (error) {
+    els.hostedRunMessage.textContent = `Hosted run API not reachable. Copy the payload or run locally. ${error.message}`;
+  }
+}
+
+async function buildHostedRunPayload() {
+  const licenseKey = els.licenseKey.value.trim();
+  const estimate = estimateCredits();
+  const url = els.productUrl.value.trim();
+  if (!licenseKey) {
+    throw new Error("Paste a license key before creating a hosted run payload.");
+  }
+  if (requiresProductUrl(els.commandType.value) && !url) {
+    throw new Error("Enter a product or website URL first.");
+  }
+  if (requiresPlatforms(els.commandType.value) && !selectedPlatforms().length) {
+    throw new Error("Select at least one platform.");
+  }
+  if (els.commandType.value === "browser_publish_session" && !els.publishQueue.value.trim()) {
+    throw new Error("Enter a publish-queue.json path first.");
+  }
+  if (els.commandType.value === "real_evidence_inbox" && !els.evidenceInbox.value.trim()) {
+    throw new Error("Enter an evidence inbox folder first.");
+  }
+  generateCommand();
+  const localCommand = els.commandOutput.value.trim();
+  if (!localCommand || /^(Enter|Select)/.test(localCommand)) {
+    throw new Error(localCommand || "Generate a command first.");
+  }
+  const stored = await chrome.storage.local.get([
+    "lastUsageId",
+    "lastUsageWorkflowType",
+    "lastUsageCreditsReserved",
+    "lastUsageCommandType"
+  ]);
+  const usageMatches =
+    stored.lastUsageWorkflowType === estimate.workflowType &&
+    stored.lastUsageCommandType === els.commandType.value &&
+    Number(stored.lastUsageCreditsReserved || 0) >= estimate.creditsPerRun;
+  return {
+    licenseKey,
+    usageId: usageMatches ? stored.lastUsageId || "" : "",
+    workflowType: estimate.workflowType,
+    estimatedCredits: estimate.creditsPerRun,
+    commandType: els.commandType.value,
+    extensionVersion: chrome.runtime.getManifest().version,
+    website: ENHE_SITE,
+    requestSource: "chrome_extension",
+    idempotencyKey: createIdempotencyKey(),
+    productUrl: url,
+    platforms: selectedPlatforms(),
+    workflowDepth: els.workflowDepth.value,
+    localCommand,
+    options: hostedRunOptions(),
+    safety: {
+      approvalRequiredForOfficialPublish: true,
+      finalPublishNotClickedByExtension: true,
+      noPlatformSecretsInPayload: true,
+      noCaptchaBypass: true
+    }
+  };
+}
+
+function hostedRunOptions() {
+  return {
+    outputDir: outDir(),
+    publishQueue: els.publishQueue.value.trim(),
+    publisherUrlOverrides: parseList(els.platformPublishUrls.value),
+    evidenceInbox: els.evidenceInbox.value.trim(),
+    automationConfig: automationConfig(),
+    automationOutputRoot: automationOutputRoot(),
+    automationJobId: els.automationJobId.value.trim() || "product-weekly",
+    automationIntervalDays: positiveInt(els.automationIntervalDays.value, 7),
+    windowsTaskScript: els.windowsTaskScript.value.trim() || ".\\register-enhe-promotion-task.ps1",
+    windowsTaskTime: els.windowsTaskTime.value.trim() || "09:00",
+    runFormFill: els.runFormFill.checked,
+    captureBrowserEvidence: els.captureBrowserEvidence.checked,
+    allowLocalhost: els.allowLocalhost.checked,
+    autoSearchCompetitors: els.autoSearchCompetitors.checked,
+    enableMultiQueryDiscovery: els.enableMultiQueryDiscovery.checked,
+    browserFollowUps: els.browserFollowUps.checked,
+    enablePublishQueue: els.enablePublishQueue.checked,
+    enableBrowserPublishAssistant: els.enableBrowserPublishAssistant.checked,
+    enableBrowserFormFill: els.enableBrowserFormFill.checked,
+    enableMetricsRecovery: els.enableMetricsRecovery.checked,
+    enableNextRoundOptimization: els.enableNextRoundOptimization.checked,
+    alsoWindowsTask: els.alsoWindowsTask.checked,
+    deepReview: els.deepReview.checked,
+    hostedVideo: els.hostedVideo.checked
+  };
+}
+
+function requiresProductUrl(commandType) {
+  return commandType === "skill_entry" || commandType === "automation_init";
+}
+
+function requiresPlatforms(commandType) {
+  return commandType === "skill_entry" || commandType === "automation_init";
 }
 
 async function openCheckout() {

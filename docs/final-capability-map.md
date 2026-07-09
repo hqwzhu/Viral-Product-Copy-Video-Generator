@@ -12,7 +12,7 @@ This file maps the user's target requirements to the current Skill capability an
 | Self-evolve | `final_capability_audit.py`, `platform_access_audit.py`, `self_evolution_audit.py` | Only allowlisted runtime installs and approved Skill sync. No silent unreviewed self-replacement |
 | Sync installed Codex Skill | `self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC` | Explicit approval and reviewed clean files |
 | GitHub docs, intro, usage, install tutorial | `README.md` and `docs/*.md` | Keep docs updated with each capability change |
-| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, usage credit reservation, one-link run command, browser publish session command, evidence inbox command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, usage commit, and admin operations |
+| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, usage credit reservation, hosted run payload/endpoint handoff, one-link run command, browser publish session command, evidence inbox command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, usage commit, hosted worker fleet, and admin operations |
 
 ## Acceptance Command
 

@@ -34,8 +34,8 @@ Use `safety_multiplier = 1.6` at launch until real logs are available.
 | Run type | Included work | Token plan | Estimated gross cost |
 | --- | --- | --- | ---: |
 | Command only | Capture tab and build Codex command | No hosted model call | 0.00 |
-| Standard run | Product intake, copy, scripts, basic platform plan | 90K input, 35K output on mini tier | About 0.20 USD |
-| Research run | Standard run plus viral discovery summary | 180K input, 65K output on mini tier | About 0.45 USD |
+| Standard run | Full Skill run with product intake, copy, scripts, publish-pack setup, and hosted orchestration buffer | 220K input, 80K output on mini tier | About 0.75 USD |
+| Research run | Research and copy workflow without the full publish/video operating loop | 180K input, 65K output on mini tier | About 0.45 USD |
 | Deep strategy run | Research run plus high-quality strategic review | 250K input, 80K output on GPT-5.5 tier | About 5.90 USD |
 | Hosted MP4 add-on | Hosted render, storage, and download | No fixed token cost | Price separately if ENHE hosts compute |
 | Browser publish session | Payload preparation, visible-field form fill coordination, screenshots, and post-publish commands | Mostly local/browser automation plus hosted state | About 0.20 USD |
@@ -52,7 +52,7 @@ Credits prevent heavy users from creating losses.
 | Action | Credits |
 | --- | ---: |
 | Command generation | 0 |
-| Standard run | 1 |
+| Standard run | 4 |
 | Research run | 3 |
 | Deep strategy run | 15 |
 | Hosted MP4 render | 3 |
@@ -110,7 +110,7 @@ python scripts\billing_contract_simulator.py demo --plan growth --workflow-type 
 
 Use it to verify that a plan's included credits, workflow credit costs, usage reservation, usage commit, and renewal webhook behavior match the pricing model before building the production backend.
 
-The browser extension can call the usage authorization endpoint before a hosted run to reserve the selected workflow's estimated credits. The hosted backend should commit actual token and rendering usage after completion; local command generation does not need a reservation.
+The browser extension can call the usage authorization endpoint before a hosted run to reserve the selected workflow's estimated credits, then copy or submit a hosted run payload to the ENHE hosted run endpoint. The hosted backend should require a matching usage reservation before paid model calls and commit actual token and rendering usage after completion; local command generation does not need a reservation.
 
 ## Launch Rule
 

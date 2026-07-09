@@ -50,7 +50,7 @@ Request:
 {
   "licenseKey": "pm_live_xxx",
   "requestedPlan": "growth",
-  "extensionVersion": "0.4.0",
+  "extensionVersion": "0.5.0",
   "website": "https://www.enhe-tech.com.cn/",
   "commandType": "skill_entry",
   "estimatedMonthlyCredits": 120
@@ -78,8 +78,8 @@ The backend should keep these credit costs in sync with `browser-extension/billi
 | Workflow type | Credits | Notes |
 | --- | ---: | --- |
 | `command_only` | 0 | Local command generation only. |
-| `standard_run` | 1 | Product intake, copy, scripts, and basic platform plan. |
-| `research_run` | 3 | Standard run plus viral discovery summary. |
+| `standard_run` | 4 | Full Skill run with product intake, copy, scripts, publish-pack setup, and hosted orchestration buffer. |
+| `research_run` | 3 | Research and copy workflow without the full publish/video operating loop. |
 | `deep_strategy_review` | 15 | Higher-cost strategy review. |
 | `hosted_mp4_render` | 3 | Hosted render/storage add-on. |
 | `browser_publish_session` | 2 | Browser/manual publish payloads, optional visible-field fill coordination, screenshots, and follow-up commands. |
@@ -107,7 +107,7 @@ Request:
   "estimatedCredits": 3,
   "idempotencyKey": "uuid",
   "commandType": "skill_entry",
-  "extensionVersion": "0.4.0",
+  "extensionVersion": "0.5.0",
   "website": "https://www.enhe-tech.com.cn/"
 }
 ```
@@ -120,6 +120,59 @@ Response:
   "usageId": "usage_123",
   "creditsReserved": 3,
   "creditsRemainingAfterReservation": 117,
+  "reason": "ok"
+}
+```
+
+### Hosted Run
+
+The hosted run endpoint accepts the already-authorized run request. It must fail closed when a paid workflow is missing a matching usage reservation.
+
+```http
+POST https://www.enhe-tech.com.cn/api/promotion-manager/run
+content-type: application/json
+```
+
+Request:
+
+```json
+{
+  "licenseKey": "pm_live_xxx",
+  "usageId": "usage_123",
+  "workflowType": "research_run",
+  "estimatedCredits": 3,
+  "commandType": "skill_entry",
+  "extensionVersion": "0.5.0",
+  "website": "https://www.enhe-tech.com.cn/",
+  "requestSource": "chrome_extension",
+  "idempotencyKey": "uuid",
+  "productUrl": "https://example.com/product",
+  "platforms": ["youtube", "zhihu", "xiaohongshu", "douyin", "github"],
+  "workflowDepth": "full",
+  "localCommand": "python scripts\\skill_entry.py --link \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \".\\promotion-output\"",
+  "options": {
+    "outputDir": ".\\promotion-output",
+    "enablePublishQueue": true,
+    "enableMetricsRecovery": true
+  },
+  "safety": {
+    "approvalRequiredForOfficialPublish": true,
+    "finalPublishNotClickedByExtension": true,
+    "noPlatformSecretsInPayload": true,
+    "noCaptchaBypass": true
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "runId": "run_123",
+  "status": "queued",
+  "dashboardUrl": "https://www.enhe-tech.com.cn/promotion-manager/runs/run_123",
+  "reportUrl": "",
   "reason": "ok"
 }
 ```
@@ -215,6 +268,7 @@ Minimum tables:
 - Show current plan, credits, and renewal date.
 - Estimate credits before the operator starts a hosted run.
 - Reserve hosted credits by calling the usage authorization endpoint with workflow type, estimated credits, and an idempotency key.
+- Build the hosted run payload from visible extension state and either copy it for backend debugging or submit it to the hosted run endpoint.
 - Never store provider secret keys or webhook secrets.
 
 ## Backend Responsibilities
@@ -224,4 +278,5 @@ Minimum tables:
 - Issue and hash license keys.
 - Track credits, usage reservations, and usage commits.
 - Block hosted runs when quota or subscription state is invalid.
+- Reject paid hosted runs unless the `usageId`, workflow type, and reserved credits match the submitted request.
 - Keep Stripe price IDs, secret keys, webhook secrets, and tax/payment rules on the server.

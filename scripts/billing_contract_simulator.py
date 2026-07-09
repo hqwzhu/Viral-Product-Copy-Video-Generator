@@ -202,6 +202,7 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         "licenseEndpoint",
         "usageAuthorizeEndpoint",
         "usageCommitEndpoint",
+        "hostedRunEndpoint",
         "webhookEndpoint",
         "plans",
         "creditCosts",
@@ -251,6 +252,23 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         for key in ["licenseKey", "workflowType", "estimatedCredits", "idempotencyKey", "commandType"]:
             if key not in usage_body:
                 missing.append(f"usageAuthorizeRequest.body.{key}")
+    hosted_run_body = (contract.get("hostedRunRequest") or {}).get("body") if isinstance(contract.get("hostedRunRequest"), dict) else {}
+    if not isinstance(hosted_run_body, dict):
+        missing.append("hostedRunRequest.body")
+    else:
+        for key in [
+            "licenseKey",
+            "usageId",
+            "workflowType",
+            "estimatedCredits",
+            "commandType",
+            "productUrl",
+            "platforms",
+            "localCommand",
+            "safety",
+        ]:
+            if key not in hosted_run_body:
+                missing.append(f"hostedRunRequest.body.{key}")
     return {
         "status": "ready" if not missing else "invalid",
         "missing": missing,
