@@ -11,6 +11,8 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 - Estimates token-backed subscription usage before the operator starts a hosted run.
 - Stores a license key locally.
 - Can validate the license against a configurable ENHE license endpoint when a backend is deployed.
+- Opens the ENHE checkout URL with the selected plan and estimated monthly credits.
+- Opens the ENHE customer billing portal.
 - Links to ENHE website and project documentation for traffic.
 
 ## What It Does Not Do
@@ -44,13 +46,21 @@ Chrome Web Store Payments is deprecated, so use a third-party payment provider a
 
 Recommended flow:
 
-1. User clicks Manage subscription.
+1. User clicks Open checkout.
 2. ENHE website handles checkout and account login.
 3. Backend creates a license key with plan, quota, renewal date, and status.
 4. Extension stores the license key in `chrome.storage.local`.
 5. Extension calls the license API to check status and remaining credits.
 6. Hosted API refuses runs that exceed credits.
 7. Local Codex command generation remains free or trial-limited.
+
+Customer self-service billing uses the Billing portal button. The extension opens:
+
+```text
+https://www.enhe-tech.com.cn/promotion-manager/billing?source=extension
+```
+
+The full server contract is in `docs/billing-backend-contract.md`; the extension copy is in `browser-extension/billing-contract.json`.
 
 Default planned endpoint:
 
@@ -78,6 +88,7 @@ The extension follows MV3 constraints:
 - JavaScript and CSS are bundled inside the extension.
 - Remote services are used for data only, not remote code.
 - No API secrets are stored in the extension.
+- Payment provider secret keys, webhook signing secrets, price IDs, and usage-ledger writes stay on the backend.
 
 Google's Manifest V3 docs require extension logic to be part of the extension package and not remotely hosted. The implementation keeps local code in `popup.js` and `popup.css`.
 

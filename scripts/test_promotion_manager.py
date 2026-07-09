@@ -5732,6 +5732,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             "usage.md",
             "browser-extension.md",
             "subscription-pricing.md",
+            "billing-backend-contract.md",
             "final-capability-map.md",
         ]
         for filename in required_docs:
@@ -5742,6 +5743,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Growth", pricing)
         self.assertIn("Scale", pricing)
         self.assertIn("safety_multiplier", pricing)
+        billing = (DOCS / "billing-backend-contract.md").read_text(encoding="utf-8")
+        self.assertIn("Usage Authorization", billing)
+        self.assertIn("checkout.session.completed", billing)
+        self.assertIn("customer.subscription.updated", billing)
+        self.assertIn("invoice.payment_failed", billing)
+        self.assertIn("Loss-Control Rules", billing)
 
     def test_browser_extension_manifest_popup_and_subscription_ui_are_static_mv3(self) -> None:
         manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
@@ -5754,17 +5761,30 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("ENHE AI", popup)
         self.assertIn("Subscription estimate", popup)
         self.assertIn("License key", popup)
+        self.assertIn("Open checkout", popup)
+        self.assertIn("Billing portal", popup)
         self.assertIn("www.enhe-tech.com.cn", popup)
         self.assertIn("popup.js", popup)
         self.assertNotIn('src="https://', popup)
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
         self.assertIn("chrome.storage.local", script)
         self.assertIn("validateLicense", script)
+        self.assertIn("openCheckout", script)
+        self.assertIn("openPortal", script)
+        self.assertIn("estimatedMonthlyCredits", script)
         self.assertIn("COST_PER_CREDIT", script)
         self.assertIn("skill_entry.py", script)
         css = (BROWSER_EXTENSION / "popup.css").read_text(encoding="utf-8")
         self.assertIn("--accent", css)
         self.assertIn("grid-template-columns", css)
+        contract = json.loads((BROWSER_EXTENSION / "billing-contract.json").read_text(encoding="utf-8"))
+        self.assertIn("checkoutUrl", contract)
+        self.assertIn("customerPortalUrl", contract)
+        self.assertIn("usageAuthorizeEndpoint", contract)
+        self.assertIn("usageCommitEndpoint", contract)
+        self.assertIn("checkout.session.completed", contract["requiredWebhookEvents"])
+        self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
+        self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
 
     def test_self_evolution_managed_files_include_docs_and_browser_extension(self) -> None:
         module = load_script_module(SELF_EVOLUTION_AUDIT)
@@ -5772,7 +5792,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("README.md", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/subscription-pricing.md", files)
+        self.assertIn("docs/billing-backend-contract.md", files)
         self.assertIn("browser-extension/manifest.json", files)
+        self.assertIn("browser-extension/billing-contract.json", files)
         self.assertIn("browser-extension/popup.html", files)
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)

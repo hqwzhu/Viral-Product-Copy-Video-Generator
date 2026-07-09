@@ -1,5 +1,7 @@
 const ENHE_SITE = "https://www.enhe-tech.com.cn/";
 const DEFAULT_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/license";
+const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
+const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
 
 const PLANS = {
   free: { label: "Free", credits: 5, price: 0 },
@@ -28,6 +30,8 @@ const els = {
   licenseEndpoint: document.getElementById("licenseEndpoint"),
   saveLicense: document.getElementById("saveLicense"),
   validateLicense: document.getElementById("validateLicense"),
+  openCheckout: document.getElementById("openCheckout"),
+  openPortal: document.getElementById("openPortal"),
   licenseMessage: document.getElementById("licenseMessage"),
   commandOutput: document.getElementById("commandOutput"),
   copyCommand: document.getElementById("copyCommand")
@@ -40,6 +44,8 @@ els.selectAll.addEventListener("click", selectAllPlatforms);
 els.copyCommand.addEventListener("click", copyCommand);
 els.saveLicense.addEventListener("click", saveLicense);
 els.validateLicense.addEventListener("click", validateLicense);
+els.openCheckout.addEventListener("click", openCheckout);
+els.openPortal.addEventListener("click", openPortal);
 els.plan.addEventListener("change", updateEstimate);
 els.monthlyRuns.addEventListener("input", updateEstimate);
 els.deepReview.addEventListener("change", updateEstimate);
@@ -160,7 +166,8 @@ async function validateLicense() {
         licenseKey,
         requestedPlan: els.plan.value,
         extensionVersion: chrome.runtime.getManifest().version,
-        website: ENHE_SITE
+        website: ENHE_SITE,
+        estimatedMonthlyCredits: estimateCredits().credits
       })
     });
     if (!response.ok) {
@@ -172,7 +179,9 @@ async function validateLicense() {
       licenseKey,
       licenseEndpoint: endpoint,
       licensePlan: String(payload.plan || els.plan.value).toLowerCase(),
-      licenseActive: active
+      licenseActive: active,
+      checkoutUrl: payload.checkoutUrl || CHECKOUT_URL,
+      customerPortalUrl: payload.customerPortalUrl || CUSTOMER_PORTAL_URL
     });
     setLicenseStatus(active ? "Active" : "Inactive", active ? "active" : "error");
     els.licenseMessage.textContent = active
@@ -185,7 +194,35 @@ async function validateLicense() {
   }
 }
 
+async function openCheckout() {
+  const estimate = estimateCredits();
+  const url = new URL(CHECKOUT_URL);
+  url.searchParams.set("plan", els.plan.value);
+  url.searchParams.set("source", "extension");
+  url.searchParams.set("credits", String(estimate.credits));
+  url.searchParams.set("runs", String(estimate.runs));
+  await chrome.tabs.create({ url: url.toString() });
+}
+
+async function openPortal() {
+  const stored = await chrome.storage.local.get(["customerPortalUrl"]);
+  const url = new URL(stored.customerPortalUrl || CUSTOMER_PORTAL_URL);
+  url.searchParams.set("source", "extension");
+  await chrome.tabs.create({ url: url.toString() });
+}
+
 function updateEstimate() {
+  const estimate = estimateCredits();
+  const plan = PLANS[els.plan.value] || PLANS.free;
+  const estimatedCost = estimate.credits * COST_PER_CREDIT;
+  els.creditMeter.textContent = `${estimate.credits} credits`;
+  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at USD ${plan.price}/month. Planned use: ${estimate.credits} credits, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
+  if (estimate.credits > plan.credits && plan.price > 0) {
+    els.costSummary.textContent += " Add prepaid credits or reduce automation depth.";
+  }
+}
+
+function estimateCredits() {
   const runs = Math.max(0, Number.parseInt(els.monthlyRuns.value || "0", 10));
   const depth = els.workflowDepth.value;
   let creditsPerRun = depth === "playbook" ? 0 : depth === "research" ? 3 : 4;
@@ -195,14 +232,7 @@ function updateEstimate() {
   if (els.hostedVideo.checked) {
     creditsPerRun += 3;
   }
-  const credits = runs * creditsPerRun;
-  const plan = PLANS[els.plan.value] || PLANS.free;
-  const estimatedCost = credits * COST_PER_CREDIT;
-  els.creditMeter.textContent = `${credits} credits`;
-  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at USD ${plan.price}/month. Planned use: ${credits} credits, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
-  if (credits > plan.credits && plan.price > 0) {
-    els.costSummary.textContent += " Add prepaid credits or reduce automation depth.";
-  }
+  return { runs, creditsPerRun, credits: runs * creditsPerRun };
 }
 
 function setLicenseStatus(label, className) {

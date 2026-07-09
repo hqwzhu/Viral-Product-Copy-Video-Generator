@@ -987,8 +987,10 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `docs/usage.md`: operator commands for intake, research, publishing, metrics, and next-round optimization.
 - `docs/browser-extension.md`: Chrome extension load, subscription flow, and security notes.
 - `docs/subscription-pricing.md`: token-backed subscription pricing assumptions and credit model.
+- `docs/billing-backend-contract.md`: checkout, customer portal, license validation, usage ledger, webhook, and loss-control backend contract.
 - `docs/final-capability-map.md`: requirement-to-capability map and remaining external gates.
 - `browser-extension/manifest.json`: Chrome MV3 extension manifest.
+- `browser-extension/billing-contract.json`: machine-readable subscription backend contract for the extension and ENHE website.
 - `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, command generator, subscription estimate, license hook, and ENHE website links.
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.

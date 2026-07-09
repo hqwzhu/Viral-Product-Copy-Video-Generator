@@ -89,6 +89,8 @@ Production components:
 6. Extension license validation endpoint.
 7. Admin dashboard for refunds, quota adjustments, and abuse review.
 
+The concrete API contract is in `docs/billing-backend-contract.md` and `browser-extension/billing-contract.json`.
+
 ## Launch Rule
 
 Before public release, collect real usage logs for at least 50 workflows:

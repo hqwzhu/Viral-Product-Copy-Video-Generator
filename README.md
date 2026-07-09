@@ -113,6 +113,8 @@ The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/
 - Generates a Codex command for `scripts/skill_entry.py`.
 - Estimates token-backed subscription usage from planned runs.
 - Stores a license key locally and can call a configurable ENHE license endpoint.
+- Opens ENHE checkout and customer billing portal URLs.
+- Documents the backend license, usage ledger, and webhook contract needed for real paid hosted runs.
 - Shows developer and website links for ENHE traffic.
 
 Load it in Chrome:
@@ -126,7 +128,7 @@ Full guide: [docs/browser-extension.md](docs/browser-extension.md)
 
 ## Subscription Model
 
-The extension includes a pricing calculator and subscription UI, but real billing must be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
+The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, and a machine-readable backend contract. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
 
 The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
 
@@ -135,7 +137,7 @@ The starter commercial model is in [docs/subscription-pricing.md](docs/subscript
 - Growth: USD 99/month for repeated product promotion.
 - Scale: USD 299/month for agencies or teams.
 
-The docs include the formulas and the cost assumptions used for the initial launch model. Recalculate the numbers from real usage logs before public launch.
+The docs include the formulas, cost assumptions, and backend usage-control contract used for the initial launch model. Recalculate the numbers from real usage logs before public launch.
 
 ## Safety Gates
 
@@ -225,6 +227,7 @@ python scripts\metrics_recovery.py `
 - [Usage](docs/usage.md)
 - [Browser extension](docs/browser-extension.md)
 - [Subscription pricing](docs/subscription-pricing.md)
+- [Billing backend contract](docs/billing-backend-contract.md)
 - [Final capability map](docs/final-capability-map.md)
 
 ## License

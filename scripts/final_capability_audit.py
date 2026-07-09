@@ -116,12 +116,14 @@ GITHUB_DOC_FILES = [
     "docs/usage.md",
     "docs/browser-extension.md",
     "docs/subscription-pricing.md",
+    "docs/billing-backend-contract.md",
     "docs/final-capability-map.md",
 ]
 
 
 BROWSER_EXTENSION_FILES = [
     "browser-extension/manifest.json",
+    "browser-extension/billing-contract.json",
     "browser-extension/popup.html",
     "browser-extension/popup.css",
     "browser-extension/popup.js",
@@ -585,6 +587,7 @@ def github_docs_status() -> dict[str, Any]:
         "docs/usage.md": ["One Product URL", "Publishing", "Metrics And Next Round"],
         "docs/browser-extension.md": ["Browser Extension", "Subscription Flow", "Developer Info"],
         "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Plans"],
+        "docs/billing-backend-contract.md": ["Billing Backend Contract", "Usage Authorization", "Webhooks", "Loss-Control Rules"],
         "docs/final-capability-map.md": ["Final Capability Map", "Acceptance Command"],
     }
     for path, markers in required_markers.items():
@@ -605,6 +608,7 @@ def browser_extension_status() -> dict[str, Any]:
     missing = [path for path in BROWSER_EXTENSION_FILES if not (ROOT / path).exists()]
     evidence = [str(ROOT / path) for path in BROWSER_EXTENSION_FILES if (ROOT / path).exists()]
     manifest_path = ROOT / "browser-extension/manifest.json"
+    contract_path = ROOT / "browser-extension/billing-contract.json"
     popup_path = ROOT / "browser-extension/popup.html"
     script_path = ROOT / "browser-extension/popup.js"
     style_path = ROOT / "browser-extension/popup.css"
@@ -620,16 +624,27 @@ def browser_extension_status() -> dict[str, Any]:
             missing.append("browser-extension/manifest.json must keep extension scripts local")
     elif manifest_path.exists():
         missing.append("browser-extension/manifest.json is invalid JSON")
+    contract = read_json_file(contract_path)
+    if contract:
+        for key in ["checkoutUrl", "customerPortalUrl", "licenseEndpoint", "usageAuthorizeEndpoint", "usageCommitEndpoint"]:
+            if not contract.get(key):
+                missing.append(f"browser-extension/billing-contract.json missing key: {key}")
+        events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
+        for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
+            if event not in events:
+                missing.append(f"browser-extension/billing-contract.json missing webhook event: {event}")
+    elif contract_path.exists():
+        missing.append("browser-extension/billing-contract.json is invalid JSON")
     if popup_path.exists():
         popup_text = safe_read(popup_path)
-        for marker in ["ENHE AI", "Subscription estimate", "License key", "www.enhe-tech.com.cn", "popup.js"]:
+        for marker in ["ENHE AI", "Subscription estimate", "License key", "Open checkout", "Billing portal", "www.enhe-tech.com.cn", "popup.js"]:
             if marker not in popup_text:
                 missing.append(f"browser-extension/popup.html missing marker: {marker}")
         if 'src="https://' in popup_text or "src='https://" in popup_text:
             missing.append("browser-extension/popup.html must not load remote scripts")
     if script_path.exists():
         script_text = safe_read(script_path)
-        for marker in ["chrome.storage.local", "validateLicense", "COST_PER_CREDIT", "skill_entry.py"]:
+        for marker in ["chrome.storage.local", "validateLicense", "openCheckout", "openPortal", "estimatedMonthlyCredits", "COST_PER_CREDIT", "skill_entry.py"]:
             if marker not in script_text:
                 missing.append(f"browser-extension/popup.js missing marker: {marker}")
     if style_path.exists():
