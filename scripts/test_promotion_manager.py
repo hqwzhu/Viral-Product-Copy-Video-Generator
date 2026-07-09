@@ -1534,6 +1534,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 str(business_xlsx),
                 "--comment-evidence-html-file",
                 str(comment_html),
+                "--comment-evidence-install-browser-if-missing",
                 "--skip-platform-access-audit",
                 "--skip-final-capability-audit",
                 "--skip-self-evolution-audit",
@@ -1585,6 +1586,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn(str(business_xlsx), final_command)
         self.assertIn("--comment-evidence-html-file", final_command)
         self.assertIn(str(comment_html), final_command)
+        self.assertIn("--comment-evidence-install-browser-if-missing", final_command)
         self.assertGreaterEqual(report["summary"]["capturedMetricRecords"], 1)
         self.assertGreaterEqual(report["summary"]["commentCount"], 2)
         self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())

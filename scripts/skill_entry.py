@@ -113,6 +113,7 @@ def parse_args() -> argparse.Namespace:
     evidence.add_argument("--comment-evidence-text-file", default="")
     evidence.add_argument("--comment-evidence-allow-localhost", action="store_true")
     evidence.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
+    evidence.add_argument("--comment-evidence-install-browser-if-missing", action="store_true")
 
     audits = parser.add_argument_group("Audits")
     audits.add_argument("--skip-platform-access-audit", action="store_true")
@@ -267,6 +268,8 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
         command.append("--comment-evidence-allow-localhost")
     if args.comment_evidence_capture_browser_assisted:
         command.append("--comment-evidence-capture-browser-assisted")
+    if args.comment_evidence_install_browser_if_missing:
+        command.append("--comment-evidence-install-browser-if-missing")
 
     if args.skip_platform_access_audit:
         command.append("--skip-platform-access-audit")

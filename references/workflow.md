@@ -194,7 +194,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/skill-entry/skill-entry.{json,md}` after generating the real-run playbook, running the final capability runner, and refreshing the final readiness matrix. The default `--link-mode auto` treats the link as both a product candidate and a public product-discovery seed.
+This writes `reports/promotion-manager/skill-entry/skill-entry.{json,md}` after generating the real-run playbook, running the final capability runner, and refreshing the final readiness matrix. The default `--link-mode auto` treats the link as both a product candidate and a public product-discovery seed. For real evidence recovery, `scripts/skill_entry.py` passes post-publish metrics, comment evidence, and business export files through to the final runner; use `--comment-evidence-install-browser-if-missing` only on a trusted machine where the official Playwright Chromium runtime may be installed for browser-visible comment capture.
 
 Use the final capability runner when Codex should execute the highest-automation safe path in one command:
 
