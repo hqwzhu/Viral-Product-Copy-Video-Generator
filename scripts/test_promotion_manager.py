@@ -1502,6 +1502,20 @@ Prompt templates for product copy, SEO content, and video scripts.
                 product_page.as_uri(),
                 "--link-mode",
                 "auto",
+                "--discovery-top-n",
+                "3",
+                "--discovery-min-score",
+                "1.5",
+                "--discovery-max-pages",
+                "2",
+                "--discovery-max-depth",
+                "0",
+                "--discovery-max-sitemap-urls",
+                "4",
+                "--discovery-timeout",
+                "5",
+                "--discovery-skip-sitemaps",
+                "--discovery-allow-localhost",
                 "--skip-browser",
                 "--platforms",
                 "xiaohongshu",
@@ -1550,6 +1564,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn(report["status"], {"partial_ready", "partial_ready_blocked_by_platform_or_safety_limits", "partial_ready_waiting_external_evidence"})
         self.assertEqual(report["input"]["linkMode"], "auto")
         self.assertTrue(report["input"]["codexReadFirst"])
+        self.assertEqual(report["input"]["discovery"]["topN"], 3)
+        self.assertEqual(report["input"]["discovery"]["minScore"], 1.5)
+        self.assertEqual(report["input"]["discovery"]["maxPages"], 2)
+        self.assertEqual(report["input"]["discovery"]["maxDepth"], 0)
+        self.assertEqual(report["input"]["discovery"]["maxSitemapUrls"], 4)
+        self.assertEqual(report["input"]["discovery"]["timeout"], 5.0)
+        self.assertTrue(report["input"]["discovery"]["skipSitemaps"])
+        self.assertTrue(report["input"]["discovery"]["allowLocalhost"])
         self.assertEqual(report["summary"]["promotionRuns"], 1)
         self.assertTrue(report["input"]["publishExecutionRequested"])
         self.assertTrue(report["summary"]["publishExecutionRequested"])
@@ -1561,9 +1583,19 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(report["readiness"]["report"]).exists())
         step_names = [item["name"] for item in report["steps"]]
         self.assertEqual(step_names, ["real_run_playbook", "final_capability_runner", "final_capability_readiness"])
+        playbook_command = report["steps"][0]["command"]
+        self.assertIn("--discovery-top-n", playbook_command)
+        self.assertIn("3", playbook_command)
+        self.assertIn("--discovery-skip-sitemaps", playbook_command)
         final_command = report["steps"][1]["command"]
         self.assertIn("--url", final_command)
         self.assertIn("--discover-from-url", final_command)
+        self.assertIn("--discovery-top-n", final_command)
+        self.assertIn("3", final_command)
+        self.assertIn("--discovery-max-depth", final_command)
+        self.assertIn("0", final_command)
+        self.assertIn("--discovery-skip-sitemaps", final_command)
+        self.assertIn("--discovery-allow-localhost", final_command)
         self.assertIn("--capture-browser-assisted-follow-ups", final_command)
         self.assertIn("--execute-publish", final_command)
         self.assertIn("--approval", final_command)
@@ -1702,6 +1734,31 @@ Prompt templates for product copy, SEO content, and video scripts.
                 str(REAL_RUN_PLAYBOOK),
                 "--url",
                 "https://example.com/ai-prompt-kit",
+                "--discover-from-url",
+                "https://example.com/tools",
+                "--discovery-html-file",
+                "./catalog.html",
+                "--discovery-sitemap-url",
+                "https://example.com/sitemap.xml",
+                "--discovery-sitemap-file",
+                "./sitemap.xml",
+                "--discovery-base-url",
+                "https://example.com",
+                "--discovery-top-n",
+                "7",
+                "--discovery-min-score",
+                "2.5",
+                "--discovery-max-pages",
+                "9",
+                "--discovery-max-depth",
+                "3",
+                "--discovery-max-sitemap-urls",
+                "11",
+                "--discovery-timeout",
+                "4.5",
+                "--discovery-include-external",
+                "--discovery-skip-sitemaps",
+                "--discovery-allow-localhost",
                 "--platforms",
                 "youtube,zhihu,xiaohongshu,douyin,github",
                 "--github-repo",
@@ -1732,6 +1789,20 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn(secret_value, report_text)
         report = json.loads(report_text)
         self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["input"]["discoverFromUrl"], "https://example.com/tools")
+        self.assertEqual(report["input"]["discovery"]["htmlFile"], "./catalog.html")
+        self.assertEqual(report["input"]["discovery"]["sitemapUrl"], "https://example.com/sitemap.xml")
+        self.assertEqual(report["input"]["discovery"]["sitemapFile"], "./sitemap.xml")
+        self.assertEqual(report["input"]["discovery"]["baseUrl"], "https://example.com")
+        self.assertEqual(report["input"]["discovery"]["topN"], 7)
+        self.assertEqual(report["input"]["discovery"]["minScore"], 2.5)
+        self.assertEqual(report["input"]["discovery"]["maxPages"], 9)
+        self.assertEqual(report["input"]["discovery"]["maxDepth"], 3)
+        self.assertEqual(report["input"]["discovery"]["maxSitemapUrls"], 11)
+        self.assertEqual(report["input"]["discovery"]["timeout"], 4.5)
+        self.assertTrue(report["input"]["discovery"]["includeExternal"])
+        self.assertTrue(report["input"]["discovery"]["skipSitemaps"])
+        self.assertTrue(report["input"]["discovery"]["allowLocalhost"])
         self.assertEqual(report["input"]["businessXlsx"], ["./orders-and-revenue.xlsx"])
         self.assertEqual(report["input"]["platformPublishUrl"], ["xiaohongshu=https://creator.example.test/publish"])
         self.assertTrue(report["input"]["runBrowserFormFill"])
@@ -1742,6 +1813,20 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("controlled_self_evolution", phase_ids)
         commands = "\n".join(command["command"] for phase in report["phases"] for command in phase["commands"])
         self.assertIn("scripts/final_capability_runner.py", commands)
+        self.assertIn("--discover-from-url https://example.com/tools", commands)
+        self.assertIn("--discovery-html-file ./catalog.html", commands)
+        self.assertIn("--discovery-sitemap-url https://example.com/sitemap.xml", commands)
+        self.assertIn("--discovery-sitemap-file ./sitemap.xml", commands)
+        self.assertIn("--discovery-base-url https://example.com", commands)
+        self.assertIn("--discovery-top-n 7", commands)
+        self.assertIn("--discovery-min-score 2.5", commands)
+        self.assertIn("--discovery-max-pages 9", commands)
+        self.assertIn("--discovery-max-depth 3", commands)
+        self.assertIn("--discovery-max-sitemap-urls 11", commands)
+        self.assertIn("--discovery-timeout 4.5", commands)
+        self.assertIn("--discovery-include-external", commands)
+        self.assertIn("--discovery-skip-sitemaps", commands)
+        self.assertIn("--discovery-allow-localhost", commands)
         self.assertIn("--auto-search-competitors", commands)
         self.assertIn("--run-follow-up-captures", commands)
         self.assertIn("--capture-browser-assisted-follow-ups", commands)

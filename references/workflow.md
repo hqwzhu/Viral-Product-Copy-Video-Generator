@@ -196,6 +196,8 @@ python scripts/skill_entry.py \
 
 This writes `reports/promotion-manager/skill-entry/skill-entry.{json,md}` after generating the real-run playbook, running the final capability runner, and refreshing the final readiness matrix. The default `--link-mode auto` treats the link as both a product candidate and a public product-discovery seed. For real evidence recovery, `scripts/skill_entry.py` passes post-publish metrics, comment evidence, and business export files through to the final runner; use `--comment-evidence-install-browser-if-missing` only on a trusted machine where the official Playwright Chromium runtime may be installed for browser-visible comment capture.
 
+When the link is a website, directory, or tool-station page rather than one exact product URL, `scripts/skill_entry.py` forwards the same discovery controls supported by the final runner: `--discovery-html-file`, `--discovery-sitemap-url`, `--discovery-sitemap-file`, `--discovery-base-url`, `--discovery-top-n`, `--discovery-min-score`, `--discovery-max-pages`, `--discovery-max-depth`, `--discovery-max-sitemap-urls`, `--discovery-timeout`, `--discovery-include-external`, `--discovery-skip-sitemaps`, and `--discovery-allow-localhost`.
+
 Use the final capability runner when Codex should execute the highest-automation safe path in one command:
 
 ```bash
@@ -232,6 +234,8 @@ Generate a live-run command pack before executing a real product cycle:
 ```bash
 python scripts/real_run_playbook.py \
   --url "https://example.com/product" \
+  --discover-from-url "https://example.com/tools" \
+  --discovery-sitemap-url "https://example.com/sitemap.xml" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --github-repo owner/repo \
   --business-csv "./orders-and-revenue.csv" \
@@ -240,7 +244,7 @@ python scripts/real_run_playbook.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1`. The playbook sequences final capability runner, publish readiness/setup, browser-assisted publishing, approved official publishing, real URL registration, public metric/comment capture, business attribution, metrics recovery, next-round optimization, periodic operation, and controlled self-evolution. It is a command pack and evidence checklist; it does not execute platform writes.
+This writes `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1`. The playbook sequences final capability runner, publish readiness/setup, browser-assisted publishing, approved official publishing, real URL registration, public metric/comment capture, business attribution, metrics recovery, next-round optimization, periodic operation, and controlled self-evolution. It forwards product URL discovery controls into the final runner command pack so sitemap, saved HTML, crawl limit, depth, score, and external-link decisions are preserved. It is a command pack and evidence checklist; it does not execute platform writes.
 
 When browser-assisted publishing should be prepared as far as possible without clicking final publish, add:
 

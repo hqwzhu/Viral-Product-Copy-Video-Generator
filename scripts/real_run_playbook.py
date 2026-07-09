@@ -29,6 +29,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", action="append", default=[], help="Product URL. Can be repeated.")
     parser.add_argument("--urls-file", default="", help="Text file with one product URL per line.")
     parser.add_argument("--discover-from-url", default="", help="Website URL to discover product URLs from.")
+    parser.add_argument("--discovery-html-file", default="", help="Saved public website HTML to discover product URLs from.")
+    parser.add_argument("--discovery-sitemap-url", default="", help="Public sitemap.xml or sitemap index URL to discover product URLs from.")
+    parser.add_argument("--discovery-sitemap-file", default="", help="Saved sitemap.xml, sitemap index, or .xml.gz file to discover product URLs from.")
+    parser.add_argument("--discovery-base-url", default="", help="Base URL for resolving links in --discovery-html-file.")
+    parser.add_argument("--discovery-top-n", type=int, default=50)
+    parser.add_argument("--discovery-min-score", type=float, default=3.0)
+    parser.add_argument("--discovery-max-pages", type=int, default=20)
+    parser.add_argument("--discovery-max-depth", type=int, default=1)
+    parser.add_argument("--discovery-max-sitemap-urls", type=int, default=1000)
+    parser.add_argument("--discovery-timeout", type=float, default=20.0)
+    parser.add_argument("--discovery-include-external", action="store_true")
+    parser.add_argument("--discovery-skip-sitemaps", action="store_true")
+    parser.add_argument("--discovery-allow-localhost", action="store_true")
     parser.add_argument("--platforms", default=DEFAULT_PLATFORMS)
     parser.add_argument("--goal", default="leads")
     parser.add_argument("--language", default="zh-CN")
@@ -78,6 +91,7 @@ def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "urls": args.url,
             "urlsFile": args.urls_file,
             "discoverFromUrl": args.discover_from_url,
+            "discovery": discovery_input(args),
             "platforms": args.platforms,
             "goal": args.goal,
             "language": args.language,
@@ -417,6 +431,7 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     append_many(command, "--url", args.url)
     append_if(command, "--urls-file", args.urls_file)
     append_if(command, "--discover-from-url", args.discover_from_url)
+    append_discovery_args(command, args)
     command.extend(
         [
             "--platforms",
@@ -470,6 +485,53 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     append_many(command, "--published-url", args.published_url)
     command.extend(["--out-dir", str(out_dir)])
     return command
+
+
+def append_discovery_args(command: list[str], args: argparse.Namespace) -> None:
+    append_if(command, "--discovery-html-file", args.discovery_html_file)
+    append_if(command, "--discovery-sitemap-url", args.discovery_sitemap_url)
+    append_if(command, "--discovery-sitemap-file", args.discovery_sitemap_file)
+    append_if(command, "--discovery-base-url", args.discovery_base_url)
+    command.extend(
+        [
+            "--discovery-top-n",
+            str(args.discovery_top_n),
+            "--discovery-min-score",
+            str(args.discovery_min_score),
+            "--discovery-max-pages",
+            str(args.discovery_max_pages),
+            "--discovery-max-depth",
+            str(args.discovery_max_depth),
+            "--discovery-max-sitemap-urls",
+            str(args.discovery_max_sitemap_urls),
+            "--discovery-timeout",
+            str(args.discovery_timeout),
+        ]
+    )
+    if args.discovery_include_external:
+        command.append("--discovery-include-external")
+    if args.discovery_skip_sitemaps:
+        command.append("--discovery-skip-sitemaps")
+    if args.discovery_allow_localhost:
+        command.append("--discovery-allow-localhost")
+
+
+def discovery_input(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "htmlFile": args.discovery_html_file,
+        "sitemapUrl": args.discovery_sitemap_url,
+        "sitemapFile": args.discovery_sitemap_file,
+        "baseUrl": args.discovery_base_url,
+        "topN": args.discovery_top_n,
+        "minScore": args.discovery_min_score,
+        "maxPages": args.discovery_max_pages,
+        "maxDepth": args.discovery_max_depth,
+        "maxSitemapUrls": args.discovery_max_sitemap_urls,
+        "timeout": args.discovery_timeout,
+        "includeExternal": bool(args.discovery_include_external),
+        "skipSitemaps": bool(args.discovery_skip_sitemaps),
+        "allowLocalhost": bool(args.discovery_allow_localhost),
+    }
 
 
 def publish_readiness_command(args: argparse.Namespace, run_root: Path) -> list[str]:

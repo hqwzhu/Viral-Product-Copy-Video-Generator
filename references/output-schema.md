@@ -74,7 +74,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/optimization/next-round-optimization.{json,md}` when `scripts/next_round_optimizer.py` turns real retrospective evidence into next-round content and platform actions
 - `reports/promotion-manager/cycle/promotion-cycle.{json,md}` when `scripts/promotion_cycle_runner.py` runs generation, guarded publish queue, published URL registration, optional post-publish metrics capture, optional comment evidence capture, optional business attribution, metrics recovery, and optional next-round optimization as one operating cycle
 - `reports/promotion-manager/real-run-playbook/real-run-playbook.{json,md}` and `real-run-commands.ps1` when `scripts/real_run_playbook.py` generates a live-run command pack, evidence checklist, platform gates, and approval gates before a real product cycle
-- `reports/promotion-manager/skill-entry/skill-entry.{json,md}` when `scripts/skill_entry.py` runs the Codex-facing one-link entry through real-run playbook generation, final capability execution, and final readiness refresh
+- `reports/promotion-manager/skill-entry/skill-entry.{json,md}` when `scripts/skill_entry.py` runs the Codex-facing one-link entry through real-run playbook generation, final capability execution, and final readiness refresh, including forwarded product URL discovery controls
 - `reports/promotion-manager/final-run/final-capability-run.{json,md}` when `scripts/final_capability_runner.py` orchestrates product batch runs, viral discovery, publish readiness, publish setup kits, browser-assisted publish payloads, metrics/comment/business recovery, next-round optimization, and audits
 - `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` turns final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into an end-state acceptance matrix and action queue
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks final-agent readiness, local tools, credentials, platform limits, and self-evolution guardrails
@@ -157,7 +157,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `final-capability-run.json` includes:
 
 - `status`: `partial_ready`, `partial_ready_with_errors`, or `blocked`
-- `input`: product URLs, URL file, optional discovery website/HTML source, platform targets, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
+- `input`: product URLs, URL file, optional discovery website/HTML/sitemap source, discovery base URL, scoring thresholds, crawl limits, sitemap limits, external-link/sitemap/localhost flags, platform targets, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
 - `summary`: product batch status, promotion run count, content artifacts, generated MP4 count, publish execution request/approval flags, publish queue count, publish setup count, real evidence setup count/targets, published item reports, public metric captures, comment evidence captures, business attribution runs, metrics recovery runs, multi-query discovery runs, multi-query deep/video evidence counters, and next-round optimization runs
 - `productBatch`: path, summary, and per-product cycle records from `product_batch_runner.py`
 - `cycleEvidence[]`: per-product manager-facing rollup with content JSON, publish pack, competitor-informed artifacts, viral library, creator leaderboard, video generation results, publish queue, published URL registration, post-publish metrics capture, comment evidence capture, business attribution, metrics recovery, next-round optimization, and evidence counts
@@ -177,7 +177,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `skill-entry.json` includes:
 
 - `status`: the final readiness status when available, or `blocked` when the playbook/final runner failed
-- `input`: links, optional links file, link mode, platforms, goal, language, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
+- `input`: links, optional links file, link mode, forwarded discovery controls, platforms, goal, language, `codexReadFirst`, `publishExecutionRequested`, and `publishApprovalProvided`
 - `summary`: playbook, final run, and readiness statuses plus publish execution request/approval flags, promotion runs, content artifacts, video files, publish queues, public metric records, comments, and matched business rows
 - `playbook`: real-run playbook report path and generated artifact paths
 - `finalRun`: final capability run report path and summary
@@ -235,7 +235,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 `real-run-playbook.json` includes:
 
 - `status`: `ready`
-- `input`: product URLs, URL file, optional discovery website, platforms, targets, platform publisher URL overrides, browser form-fill request flag, known published URLs, business exports, and metric snapshot source
+- `input`: product URLs, URL file, optional discovery website/HTML/sitemap source, discovery base URL, scoring thresholds, crawl limits, sitemap limits, external-link/sitemap/localhost flags, platforms, targets, platform publisher URL overrides, browser form-fill request flag, known published URLs, business exports, and metric snapshot source
 - `phases[]`: ordered live-run phases with copy-ready commands, required evidence, proof targets, output paths, and approval gates
 - `evidenceChecklist[]`: concrete evidence paths for structured product snapshots, viral material, generated copy/video, publish readiness, real published URLs, real metrics, next-round optimization, and final readiness
 - `platformGates[]`: platform-specific external authorization and evidence gates

@@ -62,6 +62,19 @@ python scripts/skill_entry.py \
 
 `--link-mode auto` is the default. It treats the link as a product candidate and also uses the first link as a public website discovery seed, then passes product pages through Codex/browser structured intake before generation.
 
+For website/tool-directory links, the one-link entry forwards the full product URL discovery controls to the playbook and final runner:
+
+```bash
+python scripts/skill_entry.py \
+  --link "https://example.com/tools" \
+  --discovery-sitemap-url "https://example.com/sitemap.xml" \
+  --discovery-top-n 25 \
+  --discovery-max-depth 2 \
+  --discovery-max-pages 50 \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --out-dir "./promotion-output"
+```
+
 Lower-level workflow:
 
 ```bash
@@ -103,6 +116,8 @@ Real run command pack before a live product cycle:
 ```bash
 python scripts/real_run_playbook.py \
   --url "https://example.com/product" \
+  --discover-from-url "https://example.com/tools" \
+  --discovery-sitemap-url "https://example.com/sitemap.xml" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --github-repo owner/repo \
   --business-csv "./orders-and-revenue.csv" \
