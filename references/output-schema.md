@@ -548,7 +548,7 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 
 - `status`: `ready`, `partial_ready`, `waiting_business_data`, `waiting_published_items`, or `waiting_content_level_attribution`
 - `summary`: published item count, order row count, matched/unmatched row counts, total orders/revenue, attributed orders/revenue, and platforms
-- `sources[]`: business CSV/JSON files loaded, with row counts
+- `sources[]`: business CSV, Excel `.xlsx`, or JSON files loaded, with row counts
 - `publishedItems[]`: proven published content records used as attribution targets
 - `attributions[]`: matched platform/content records with orders, revenue, optional clicks/leads, evidence paths, match rules, confidence, and matched order rows
 - `unmatchedRows[]`: rows that lacked enough content-level evidence to attribute safely

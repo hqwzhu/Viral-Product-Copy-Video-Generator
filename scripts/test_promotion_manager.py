@@ -1079,6 +1079,79 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--post-publish-metrics-allow-localhost", " ".join(run["command"]))
         self.assertIn("--comment-evidence-allow-localhost", " ".join(run["command"]))
 
+    def test_product_batch_runner_passes_xlsx_evidence_to_cycle(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-batch-xlsx-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        product_page = out_dir / "prompt-kit.html"
+        product_page.write_text(
+            """<!doctype html>
+<html>
+<head>
+  <title>AI Prompt Kit</title>
+  <meta name="description" content="Prompt templates for product copy, SEO content, and video scripts.">
+  <script type="application/ld+json">{"@type":"Product","name":"AI Prompt Kit","offers":{"price":"19"}}</script>
+</head>
+<body>
+  <h1>AI Prompt Kit</h1>
+  <p>Turn one product URL into platform-native promotion content.</p>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        metrics_xlsx = out_dir / "metrics.xlsx"
+        write_minimal_xlsx(
+            metrics_xlsx,
+            [
+                ["platform", "publishedUrl", "title", "view_count", "like_count", "comment_count", "evidence"],
+                ["xiaohongshu", "https://www.xiaohongshu.com/explore/note123", "Launch Note", "4200", "360", "41", "xhs-export.xlsx"],
+            ],
+        )
+        business_xlsx = out_dir / "orders.xlsx"
+        write_minimal_xlsx(
+            business_xlsx,
+            [
+                ["orderId", "utm_source", "utm_content", "revenue", "status"],
+                ["order-1", "xiaohongshu", "note123", "88.00", "paid"],
+            ],
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_BATCH_RUNNER),
+                "--url",
+                product_page.as_uri(),
+                "--skip-browser",
+                "--platforms",
+                "xiaohongshu",
+                "--skip-video",
+                "--skip-publish-queue",
+                "--published-url",
+                "xiaohongshu=https://www.xiaohongshu.com/explore/note123",
+                "--metrics-xlsx",
+                str(metrics_xlsx),
+                "--business-xlsx",
+                str(business_xlsx),
+                "--run-business-attribution",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads(
+            (out_dir / "output/reports/promotion-manager/batch/product-batch-runner.json").read_text(encoding="utf-8")
+        )
+        run = report["promotionRuns"][0]
+        command = " ".join(run["command"])
+        self.assertIn("--metrics-xlsx", command)
+        self.assertIn("--business-xlsx", command)
+        cycle = json.loads(Path(run["cycleReport"]).read_text(encoding="utf-8"))
+        self.assertEqual(cycle["businessAttribution"]["summary"]["matchedRows"], 1)
+        recovery = json.loads(Path(cycle["metricsRecovery"]["metricsRecovery"]).read_text(encoding="utf-8"))
+        self.assertEqual(recovery["metricSources"][0]["type"], "metrics_xlsx")
+        self.assertEqual(recovery["aggregates"]["totals"]["views"], 4200.0)
+        self.assertEqual(recovery["aggregates"]["totals"]["revenue"], 88.0)
+
     def test_final_capability_runner_discovers_products_from_site_url(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-capability-discovery-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -1393,6 +1466,14 @@ Prompt templates for product copy, SEO content, and video scripts.
 </html>""",
             encoding="utf-8",
         )
+        business_xlsx = out_dir / "orders.xlsx"
+        write_minimal_xlsx(
+            business_xlsx,
+            [
+                ["orderId", "utm_source", "utm_content", "revenue", "status"],
+                ["order-1", "xiaohongshu", "note123", "88.00", "paid"],
+            ],
+        )
 
         subprocess.run(
             [
@@ -1426,6 +1507,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "unlisted",
                 "--youtube-category-id",
                 "28",
+                "--business-xlsx",
+                str(business_xlsx),
                 "--skip-platform-access-audit",
                 "--skip-final-capability-audit",
                 "--skip-self-evolution-audit",
@@ -1469,6 +1552,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("unlisted", final_command)
         self.assertIn("--youtube-category-id", final_command)
         self.assertIn("28", final_command)
+        self.assertIn("--business-xlsx", final_command)
+        self.assertIn(str(business_xlsx), final_command)
         self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())
 
     def test_real_run_playbook_generates_end_to_end_command_pack_without_secret_values(self) -> None:
@@ -1487,6 +1572,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "owner/repo",
                 "--business-csv",
                 "./orders-and-revenue.csv",
+                "--business-xlsx",
+                "./orders-and-revenue.xlsx",
                 "--published-url",
                 "github=https://github.com/owner/repo/blob/main/PROMOTION.md",
                 "--out-dir",
@@ -1501,6 +1588,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn(secret_value, report_text)
         report = json.loads(report_text)
         self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["input"]["businessXlsx"], ["./orders-and-revenue.xlsx"])
         phase_ids = [item["id"] for item in report["phases"]]
         self.assertIn("real_full_run", phase_ids)
         self.assertIn("publish_preparation", phase_ids)
@@ -1511,6 +1599,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--auto-search-competitors", commands)
         self.assertIn("--run-follow-up-captures", commands)
         self.assertIn("--capture-browser-assisted-follow-ups", commands)
+        self.assertIn("--business-xlsx", commands)
+        self.assertIn("./orders-and-revenue.xlsx", commands)
         self.assertIn("--multi-query-run-follow-up-captures", commands)
         self.assertIn("scripts/publish_setup_assistant.py", commands)
         self.assertIn("scripts/metrics_recovery.py", commands)
@@ -3089,6 +3179,117 @@ Prompt templates for product copy, SEO content, and video scripts.
         optimization = run_report["records"][0]["nextRoundOptimization"]
         self.assertEqual(optimization["status"], "partial_ready")
         self.assertTrue(Path(optimization["report"]).exists())
+
+    def test_automation_scheduler_accepts_xlsx_evidence_sources(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-xlsx-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "url": "https://example.com/ai-prompt-kit",
+                    "title": "AI Prompt Kit",
+                    "description": "Prompt templates for product copy, SEO content, and video scripts.",
+                    "targetAudience": ["AI operators"],
+                    "painPoints": ["Slow launch content"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        published_items_path = out_dir / "published-items.json"
+        published_items_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "contentId": "note123",
+                            "title": "Launch Note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        metrics_xlsx = out_dir / "metrics.xlsx"
+        write_minimal_xlsx(
+            metrics_xlsx,
+            [
+                ["platform", "publishedUrl", "title", "view_count", "like_count", "comment_count", "evidence"],
+                ["xiaohongshu", "https://www.xiaohongshu.com/explore/note123", "Launch Note", "4200", "360", "41", "xhs-export.xlsx"],
+            ],
+        )
+        orders_xlsx = out_dir / "orders.xlsx"
+        write_minimal_xlsx(
+            orders_xlsx,
+            [
+                ["orderId", "utm_source", "utm_content", "revenue", "status"],
+                ["order-1", "xiaohongshu", "note123", "88.00", "paid"],
+                ["order-2", "xiaohongshu", "note123", "32.00", "paid"],
+            ],
+        )
+        config_path = out_dir / "automation.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "defaultOutputRoot": "./automation-output",
+                    "jobs": [
+                        {
+                            "id": "ai-prompt-kit-xlsx-weekly",
+                            "enabled": True,
+                            "schedule": {"intervalDays": 7},
+                            "input": {"structuredJson": "snapshot.json"},
+                            "platforms": ["xiaohongshu"],
+                            "topN": 1,
+                            "skipVideo": True,
+                            "metrics": {"xlsxFile": "metrics.xlsx"},
+                            "businessAttribution": {
+                                "enabled": True,
+                                "businessXlsx": "orders.xlsx",
+                                "publishedItemsJson": "published-items.json",
+                            },
+                            "metricsRecovery": {
+                                "enabled": True,
+                                "metricsXlsx": "metrics.xlsx",
+                                "publishedItemsJson": "published-items.json",
+                            },
+                        }
+                    ],
+                    "guardrails": ["No automatic publishing without approval."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_path = out_dir / "state.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "run",
+                "--config",
+                str(config_path),
+                "--state-file",
+                str(state_path),
+                "--now",
+                "2026-07-07T00:00:00+00:00",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
+        record = run_report["records"][0]
+        self.assertIn("--metrics-xlsx", record["command"])
+        self.assertIn("--business-xlsx", record["businessAttribution"]["command"])
+        self.assertIn("--metrics-xlsx", record["metricsRecovery"]["command"])
+        self.assertEqual(record["businessAttribution"]["summary"]["matchedRows"], 2)
+        self.assertEqual(record["metricsRecovery"]["summary"]["recordsWithMetrics"], 1)
+        attribution = json.loads(Path(record["businessAttribution"]["report"]).read_text(encoding="utf-8"))
+        self.assertEqual(attribution["sources"][0]["type"], "business_xlsx")
+        recovery = json.loads(Path(record["metricsRecovery"]["report"]).read_text(encoding="utf-8"))
+        self.assertEqual(recovery["metricSources"][0]["type"], "metrics_xlsx")
 
     def test_automation_scheduler_runs_post_publish_metrics_capture_before_recovery(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-post-metrics-test-"))
@@ -6230,6 +6431,59 @@ Prompt templates for product copy, SEO content, and video scripts.
         export = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json").read_text(encoding="utf-8"))
         self.assertEqual(len(export["records"]), 2)
         self.assertTrue((out_dir / "reports/promotion-manager/business-attribution/business-attribution.md").exists())
+
+    def test_business_attribution_imports_xlsx_orders_export(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="business-attribution-xlsx-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        (published_dir / "published-items.json").write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "contentId": "note123",
+                            "title": "Launch Note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        business_xlsx = out_dir / "orders.xlsx"
+        write_minimal_xlsx(
+            business_xlsx,
+            [
+                ["orderId", "utm_source", "utm_content", "revenue", "status"],
+                ["order-1", "xiaohongshu", "note123", "88.00", "paid"],
+                ["order-2", "xiaohongshu", "note123", "32.00", "paid"],
+                ["order-3", "email", "unknown", "50.00", "paid"],
+            ],
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(BUSINESS_ATTRIBUTION),
+                "--business-xlsx",
+                str(business_xlsx),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["sources"][0]["type"], "business_xlsx")
+        self.assertEqual(report["summary"]["orderRows"], 3)
+        self.assertEqual(report["summary"]["matchedRows"], 2)
+        self.assertEqual(report["summary"]["unmatchedRows"], 1)
+        self.assertEqual(report["summary"]["attributedOrders"], 2.0)
+        self.assertEqual(report["summary"]["attributedRevenue"], 120.0)
+        export = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json").read_text(encoding="utf-8"))
+        self.assertEqual(float(export["records"][0]["revenue"]), 120.0)
 
     def test_metrics_recovery_accepts_business_attribution_export(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="business-attribution-recovery-test-"))

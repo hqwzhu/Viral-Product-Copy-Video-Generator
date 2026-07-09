@@ -478,6 +478,14 @@ python scripts/business_attribution.py \
   --out-dir "./promotion-output"
 ```
 
+For Excel order exports:
+
+```bash
+python scripts/business_attribution.py \
+  --business-xlsx "./orders-and-revenue.xlsx" \
+  --out-dir "./promotion-output"
+```
+
 Then merge the attribution export:
 
 ```bash
@@ -911,8 +919,9 @@ Scheduled jobs can set `publish.douyin.videoFile` to pass a rendered MP4 into th
 If a scheduled job has `browserPublishAssistant.enabled: true`, the scheduler runs `scripts/browser_publish_assistant.py` after publish queue generation and records the browser/manual payload report path in state.
 If a scheduled job has `postPublishMetricsCapture.enabled: true`, the scheduler runs `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Captured metrics are passed into `scripts/metrics_recovery.py` as a JSON metrics source when `metricsRecovery.enabled` is also true.
 If a scheduled job has `commentEvidenceCapture.enabled: true`, the scheduler runs `scripts/comment_evidence_capture.py` after the workflow and records the public/browser-visible comment evidence report path in state.
-If a scheduled job has `businessAttribution.enabled: true`, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes `business-attribution-export.json` into `scripts/metrics_recovery.py` when recovery is enabled.
+If a scheduled job has `businessAttribution.enabled: true`, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes `business-attribution-export.json` into `scripts/metrics_recovery.py` when recovery is enabled. Use `businessAttribution.businessXlsx` when the order/revenue export is Excel.
 If a scheduled job has `metricsRecovery.enabled: true`, the scheduler runs `scripts/metrics_recovery.py` after the workflow and optional publish queue, then records the metrics recovery report path in state.
+Scheduled jobs can set `metrics.xlsxFile` for workflow-time metric intake, `metricsRecovery.metricsXlsx` for post-workflow platform metric exports, and `metricsRecovery.businessXlsx` for Excel business exports when business attribution is not run separately.
 If a scheduled job has `nextRoundOptimization.enabled: true`, the scheduler runs `scripts/next_round_optimizer.py` after metrics/comment/business recovery and records `lastNextRoundOptimization` in state.
 If a scheduled job has `multiQueryViralDiscovery.enabled: true`, the scheduler runs `scripts/multi_query_viral_discovery.py` after the workflow manifest is created and records the merged discovery report path in state. Use `multiQueryViralDiscovery.dryRun: true` for planning-only recurring research. Use `multiQueryViralDiscovery.sampleVideoFrames: true` and `multiQueryViralDiscovery.videoSampleCount: 5` to carry browser-visible video sampling into that recurring discovery stage.
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after the viral material library.

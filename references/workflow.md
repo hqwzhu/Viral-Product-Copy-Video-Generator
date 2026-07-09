@@ -797,6 +797,14 @@ python scripts/metrics_recovery.py \
   --out-dir "./promotion-output"
 ```
 
+For business exports that need attribution by UTM/content/referrer fields before recovery, Excel is accepted directly:
+
+```bash
+python scripts/business_attribution.py \
+  --business-xlsx "./orders-and-revenue.xlsx" \
+  --out-dir "./promotion-output"
+```
+
 The coordinator reads proven published URLs from the default `published-items` report, direct `--published-url` inputs, `--github-repo`, `--youtube-video-id`, and optional `--published-items-json` files. It automatically attempts only safe official/public connectors for GitHub and YouTube. It merges those records with CSV, JSON, text, or structured browser snapshots that contain clicks, leads, orders, revenue, or platform metrics:
 
 ```bash
@@ -876,7 +884,7 @@ Set `jobs[].publish.douyin.videoFile` to pass a rendered MP4 into the Douyin off
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.
 Set `jobs[].commentEvidenceCapture.enabled` to `true` to run `scripts/comment_evidence_capture.py` after the workflow. Use `publishedItemsJson`, `publishedUrls`, `structuredJson`, `htmlFile`, `textFile`, `captureBrowserAssisted`, and `allowLocalhost` for explicit public/browser-visible comment evidence sources. The scheduler records `lastCommentEvidenceCapture` in state.
-Set `jobs[].businessAttribution.enabled` to `true` to run `scripts/business_attribution.py` before metrics recovery. Use `businessCsv`, `businessJson`, `publishedItemsJson`, and `publishedUrls` to pass order/revenue exports and content evidence. The scheduler records `lastBusinessAttribution` in state and passes the attribution export to metrics recovery when `metricsRecovery.enabled` is true.
+Set `jobs[].businessAttribution.enabled` to `true` to run `scripts/business_attribution.py` before metrics recovery. Use `businessCsv`, `businessXlsx`, `businessJson`, `publishedItemsJson`, and `publishedUrls` to pass order/revenue exports and content evidence. The scheduler records `lastBusinessAttribution` in state and passes the attribution export to metrics recovery when `metricsRecovery.enabled` is true.
 Set `jobs[].nextRoundOptimization.enabled` to `true` to run `scripts/next_round_optimizer.py` after metrics recovery, comment evidence capture, and business attribution. The scheduler records `lastNextRoundOptimization` in state and includes the optimization report in `automation-run.json`.
 Scheduled jobs can set `installBrowserIfMissing: true` when browser-runtime installation is acceptable for that machine.
 Scheduled jobs can set `autoSearchCompetitors: true` to run browser-visible competitor search before content generation reports are finalized.
@@ -886,7 +894,7 @@ Scheduled jobs can set `followUpCapture.captureBrowserAssisted: true` to attempt
 Scheduled jobs can set `skipCreatorLeaderboard: true` to skip creator/account aggregation after viral material ranking.
 Scheduled jobs can set `creatorFollowUp.enabled: true` to run safe creator/account follow-up after the creator leaderboard is built. Use `creatorFollowUp.dryRun: true` for planning-only runs.
 Scheduled jobs can set `competitorInformedContent.enabled: true` to pass the explicit workflow flag or `false` to add `--skip-competitor-informed-content`.
-Scheduled jobs can set `metricsRecovery.enabled: true` to run `scripts/metrics_recovery.py` after the workflow and optional publish queue. Use `metricsRecovery.businessCsv`, `businessJson`, `businessText`, `publishedItemsJson`, `publishedUrls`, `githubRepos`, or `youtubeVideoIds` to pass evidence for automatic recovery.
+Scheduled jobs can set `metrics.xlsxFile` for workflow-time metric intake. Scheduled jobs can set `metricsRecovery.enabled: true` to run `scripts/metrics_recovery.py` after the workflow and optional publish queue. Use `metricsRecovery.metricsXlsx`, `businessCsv`, `businessXlsx`, `businessJson`, `businessText`, `publishedItemsJson`, `publishedUrls`, `githubRepos`, or `youtubeVideoIds` to pass evidence for automatic recovery.
 
 ## Phase 2 And Phase 3 Boundaries
 

@@ -111,7 +111,7 @@ def init_config(args: argparse.Namespace) -> None:
         "metrics": {},
         "postPublishMetricsCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
         "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
-        "businessAttribution": {"enabled": False, "businessCsv": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
+        "businessAttribution": {"enabled": False, "businessCsv": [], "businessXlsx": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
         "metricsRecovery": {"enabled": False},
         "nextRoundOptimization": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
@@ -567,6 +567,8 @@ def build_metrics_recovery_command(
     append_many(command, "--github-repo", recovery.get("githubRepos"))
     append_many(command, "--youtube-video-id", recovery.get("youtubeVideoIds"))
     append_many(command, "--business-csv", recovery.get("businessCsv"), base_dir)
+    append_many(command, "--business-xlsx", recovery.get("businessXlsx"), base_dir)
+    append_many(command, "--metrics-xlsx", recovery.get("metricsXlsx"), base_dir)
     append_many(command, "--business-json", recovery.get("businessJson"), base_dir)
     append_many(command, "--business-text", recovery.get("businessText"), base_dir)
     metric_export = (post_publish_capture_result or {}).get("metricExport")
@@ -667,6 +669,7 @@ def build_business_attribution_command(job: dict[str, Any], out_dir: Path, base_
         str(out_dir),
     ]
     append_many(command, "--business-csv", attribution.get("businessCsv"), base_dir)
+    append_many(command, "--business-xlsx", attribution.get("businessXlsx"), base_dir)
     append_many(command, "--business-json", attribution.get("businessJson"), base_dir)
     append_many(command, "--published-items-json", attribution.get("publishedItemsJson"), base_dir)
     append_many(command, "--published-url", attribution.get("publishedUrls"))
@@ -845,6 +848,7 @@ def build_workflow_command(job: dict[str, Any], out_dir: Path, base_dir: Path) -
     metrics = job.get("metrics") or {}
     for key, flag in [
         ("csvFile", "--metrics-csv"),
+        ("xlsxFile", "--metrics-xlsx"),
         ("jsonFile", "--metrics-json"),
         ("textFile", "--metrics-text"),
         ("publishedUrl", "--published-url"),

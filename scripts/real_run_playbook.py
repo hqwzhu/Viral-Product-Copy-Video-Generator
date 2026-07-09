@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--youtube-category-id", default="22")
     parser.add_argument("--douyin-video-file", default="")
     parser.add_argument("--business-csv", action="append", default=[], help="Business orders/revenue CSV export. Can repeat.")
+    parser.add_argument("--business-xlsx", action="append", default=[], help="Business orders/revenue Excel .xlsx export. Can repeat.")
     parser.add_argument("--published-url", action="append", default=[], help="Known published URL as platform=url. Can repeat.")
     parser.add_argument("--metrics-structured-json", default="./published-metrics-snapshot.json")
     parser.add_argument("--automation-config", default="./promotion-automation.json")
@@ -77,6 +78,7 @@ def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "youtubeCategoryId": args.youtube_category_id,
             "douyinVideoFile": args.douyin_video_file,
             "businessCsv": args.business_csv,
+            "businessXlsx": args.business_xlsx,
             "publishedUrl": args.published_url,
             "metricsStructuredJson": args.metrics_structured_json,
         },
@@ -425,6 +427,7 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     append_if(command, "--youtube-category-id", args.youtube_category_id)
     append_if(command, "--douyin-video-file", args.douyin_video_file)
     append_many(command, "--business-csv", args.business_csv)
+    append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--published-url", args.published_url)
     command.extend(["--out-dir", str(out_dir)])
     return command
@@ -475,6 +478,8 @@ def business_attribution_command(args: argparse.Namespace, run_root: Path) -> li
     command = ["python", "scripts/business_attribution.py", "--out-dir", str(run_root)]
     if args.business_csv:
         append_many(command, "--business-csv", args.business_csv)
+    elif args.business_xlsx:
+        append_many(command, "--business-xlsx", args.business_xlsx)
     else:
         command.extend(["--business-csv", "./orders-and-revenue.csv"])
     return command
@@ -496,6 +501,8 @@ def metrics_recovery_command(args: argparse.Namespace, run_root: Path) -> list[s
     append_if(command, "--metrics-structured-json", args.metrics_structured_json)
     if args.business_csv:
         append_many(command, "--business-csv", args.business_csv)
+    elif args.business_xlsx:
+        append_many(command, "--business-xlsx", args.business_xlsx)
     else:
         command.extend(["--business-csv", "./orders-and-revenue.csv"])
     return command

@@ -118,7 +118,9 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--published-url", action="append", default=[], help="Real published URL, optionally as platform=url.")
     metrics.add_argument("--metrics-github-repo", action="append", default=[])
     metrics.add_argument("--metrics-youtube-video-id", action="append", default=[])
+    metrics.add_argument("--metrics-xlsx", action="append", default=[])
     metrics.add_argument("--business-csv", action="append", default=[])
+    metrics.add_argument("--business-xlsx", action="append", default=[])
     metrics.add_argument("--business-json", action="append", default=[])
     metrics.add_argument("--business-text", action="append", default=[])
     metrics.add_argument("--run-post-publish-metrics-capture", action="store_true")
@@ -351,6 +353,7 @@ def run_business_attribution(args: argparse.Namespace, out_dir: Path, published:
         return {"status": "skipped", "reason": "--run-business-attribution was not supplied."}
     command = [sys.executable, str(BUSINESS_ATTRIBUTION), "--out-dir", str(out_dir)]
     append_many(command, "--business-csv", args.business_csv)
+    append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--business-json", args.business_json)
     items_path = existing_path(published.get("publishedItems", ""))
     if items_path:
@@ -397,6 +400,7 @@ def run_metrics_recovery(
         command.extend(["--published-url", url])
     append_many(command, "--github-repo", args.metrics_github_repo)
     append_many(command, "--youtube-video-id", args.metrics_youtube_video_id)
+    append_many(command, "--metrics-xlsx", args.metrics_xlsx)
     metric_export = post_publish_metrics.get("metricExport", "")
     if metric_export:
         command.extend(["--metrics-json", str(metric_export)])
@@ -405,6 +409,7 @@ def run_metrics_recovery(
         command.extend(["--business-json", str(attribution_export)])
     else:
         append_many(command, "--business-csv", args.business_csv)
+        append_many(command, "--business-xlsx", args.business_xlsx)
         append_many(command, "--business-json", args.business_json)
     append_many(command, "--business-text", args.business_text)
     step = run_command("metrics_recovery", command)

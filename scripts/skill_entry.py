@@ -91,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     evidence = parser.add_argument_group("Real evidence recovery")
     evidence.add_argument("--published-url", action="append", default=[], help="Known real published URL as platform=url.")
     evidence.add_argument("--business-csv", action="append", default=[])
+    evidence.add_argument("--business-xlsx", action="append", default=[])
     evidence.add_argument("--business-json", action="append", default=[])
     evidence.add_argument("--business-text", action="append", default=[])
     evidence.add_argument("--post-publish-metrics-allow-localhost", action="store_true")
@@ -119,6 +120,7 @@ def run_playbook(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, 
     append_if_present(command, "--youtube-category-id", args.youtube_category_id)
     append_if_present(command, "--douyin-video-file", args.douyin_video_file)
     append_many(command, "--business-csv", args.business_csv)
+    append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--published-url", args.published_url)
     if args.generate_voiceover:
         command.append("--generate-voiceover")
@@ -214,6 +216,7 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
 
     append_many(command, "--published-url", args.published_url)
     append_many(command, "--business-csv", args.business_csv)
+    append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--business-json", args.business_json)
     append_many(command, "--business-text", args.business_text)
     if args.post_publish_metrics_allow_localhost:

@@ -31,6 +31,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Attribute real order/revenue exports to published promotion content.")
     parser.add_argument("--business-csv", action="append", default=[], help="CSV export containing order/revenue rows.")
+    parser.add_argument("--business-xlsx", action="append", default=[], help="Excel .xlsx export containing order/revenue rows.")
     parser.add_argument("--business-json", action="append", default=[], help="JSON export containing order/revenue rows.")
     parser.add_argument("--published-items-json", action="append", default=[], help="Published items JSON evidence.")
     parser.add_argument("--published-url", action="append", default=[], help="Published URL or platform=url evidence.")
@@ -102,6 +103,11 @@ def load_order_rows(args: argparse.Namespace) -> tuple[list[dict[str, Any]], lis
         loaded = rows_from_csv(path)
         rows.extend(loaded)
         sources.append({"type": "business_csv", "source": str(path), "status": "loaded", "rowCount": len(loaded)})
+    for value in args.business_xlsx:
+        path = Path(value)
+        loaded = rows_from_xlsx(path)
+        rows.extend(loaded)
+        sources.append({"type": "business_xlsx", "source": str(path), "status": "loaded", "rowCount": len(loaded)})
     for value in args.business_json:
         path = Path(value)
         loaded = rows_from_json(path)
@@ -113,6 +119,20 @@ def load_order_rows(args: argparse.Namespace) -> tuple[list[dict[str, Any]], lis
 def rows_from_csv(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return [normalize_order_row(row, str(path), index) for index, row in enumerate(csv.DictReader(handle), start=1)]
+
+
+def rows_from_xlsx(path: Path) -> list[dict[str, Any]]:
+    rows = metrics_intake.xlsx_rows(path)
+    if not rows:
+        return []
+    headers = [str(value).strip() for value in rows[0]]
+    records = []
+    for index, row in enumerate(rows[1:], start=1):
+        if not any(str(value).strip() for value in row):
+            continue
+        item = {header: row[column] if column < len(row) else "" for column, header in enumerate(headers) if header}
+        records.append(normalize_order_row(item, str(path), index))
+    return records
 
 
 def rows_from_json(path: Path) -> list[dict[str, Any]]:

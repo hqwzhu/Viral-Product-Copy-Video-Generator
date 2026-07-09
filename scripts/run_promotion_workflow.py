@@ -98,6 +98,7 @@ def parse_args() -> argparse.Namespace:
 
     metrics = parser.add_mutually_exclusive_group()
     metrics.add_argument("--metrics-csv", help="CSV export for real post-publish metrics.")
+    metrics.add_argument("--metrics-xlsx", help="Excel .xlsx export for real post-publish metrics.")
     metrics.add_argument("--metrics-json", help="JSON export for real post-publish metrics.")
     metrics.add_argument("--metrics-text", help="Text evidence for real post-publish metrics.")
     metrics.add_argument("--published-url", help="Published URL to resolve through supported official metrics connectors.")
@@ -826,6 +827,8 @@ def dimensions_for(platform: str) -> tuple[int, int]:
 def metrics_source_args(args: argparse.Namespace) -> list[str]:
     if args.metrics_csv:
         return ["--csv-file", args.metrics_csv]
+    if args.metrics_xlsx:
+        return ["--xlsx-file", args.metrics_xlsx]
     if args.metrics_json:
         return ["--json-file", args.metrics_json]
     if args.metrics_text:
