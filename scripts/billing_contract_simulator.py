@@ -332,6 +332,7 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         "hosted_mp4_render",
         "browser_publish_session",
         "launch_unlock_pack",
+        "real_evidence_inbox_setup",
         "real_evidence_inbox",
         "performance_monitor",
         "final_readiness_audit",

@@ -84,6 +84,7 @@ The backend should keep these credit costs in sync with `browser-extension/billi
 | `hosted_mp4_render` | 3 | Hosted render/storage add-on. |
 | `browser_publish_session` | 2 | Browser/manual publish payloads, optional visible-field fill coordination, screenshots, and follow-up commands. |
 | `launch_unlock_pack` | 2 | Platform access audit, publish setup kit, browser-assisted payload references, real-evidence templates, checklist, and next commands. |
+| `real_evidence_inbox_setup` | 1 | Empty real-evidence inbox templates, manifest, checklist, and import commands. |
 | `real_evidence_inbox` | 2 | Published URL, metric, comment, order, and revenue evidence recovery. |
 | `performance_monitor` | 2 | Post-publish public metrics/comments capture, optional attribution, metrics recovery, next-round optimization, and history snapshot. |
 | `final_readiness_audit` | 1 | Final capability matrix refresh. |

@@ -25,7 +25,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
 | Copy and video generation | Ready | Platform-native copy and ffmpeg MP4 rendering are included. Voiceover can use an audio file or Windows review-quality TTS. |
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
-| Metrics and revenue | Waiting for real evidence | The Skill can run a post-publish performance monitor or import an evidence inbox, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
+| Metrics and revenue | Waiting for real evidence | The Skill can initialize a fillable evidence inbox, run a post-publish performance monitor, import evidence files, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
 | Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, hosted-run request, and webhook contract locally before a real payment backend is deployed. |
 
@@ -129,7 +129,17 @@ python scripts\performance_monitor.py `
   --out-dir ".\promotion-output"
 ```
 
-Use the monitor after published URLs have been registered. It captures public/browser-visible metrics, captures visible comments and demand signals, attributes optional business exports, runs metrics recovery, writes a history file, and generates next-round recommendations. For several export files, use the evidence inbox:
+Use the monitor after published URLs have been registered. It captures public/browser-visible metrics, captures visible comments and demand signals, attributes optional business exports, runs metrics recovery, writes a history file, and generates next-round recommendations. Before or after publishing, create a fillable evidence inbox:
+
+```powershell
+python scripts\real_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+For several export files, import the evidence inbox:
 
 ```powershell
 python scripts\real_evidence_inbox.py `
@@ -145,7 +155,7 @@ The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/
 
 - Captures the active tab URL and title.
 - Lets the user select target platforms and run depth.
-- Generates Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts.
+- Generates Codex commands for one-link Skill runs, browser publish sessions, evidence inbox setup/recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts.
 - Estimates token-backed subscription usage from command type, run depth, hosted MP4, browser publish, and evidence-recovery options.
 - Stores a license key locally, validates it against a configurable ENHE license endpoint, reserves hosted usage credits through the ENHE usage authorization endpoint, and can copy or submit a hosted run payload to the ENHE hosted run endpoint.
 - Opens ENHE checkout and customer billing portal URLs.
@@ -339,9 +349,15 @@ python scripts\metrics_recovery.py `
   --out-dir ".\promotion-output"
 ```
 
-Recover a whole real-evidence inbox:
+Set up and recover a whole real-evidence inbox:
 
 ```powershell
+python scripts\real_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+
 python scripts\real_evidence_inbox.py `
   --inbox-dir ".\promotion-evidence-inbox" `
   --skip-post-publish-capture `

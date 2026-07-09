@@ -177,6 +177,16 @@ python scripts\performance_monitor.py --out-dir ".\promotion-output"
 
 它会串联公开/浏览器可见指标抓取、评论和需求信号抓取、可选业务归因、指标合并、下一轮优化和历史快照。
 
+发布前或发布后可以先生成本地证据收件箱模板：
+
+```powershell
+python scripts\real_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
 多个证据文件可以使用本地收件箱：
 
 ```powershell

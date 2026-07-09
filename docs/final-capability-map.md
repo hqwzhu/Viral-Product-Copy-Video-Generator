@@ -8,11 +8,11 @@ This file maps the user's target requirements to the current Skill capability an
 | Parse all product URLs after Codex reads pages | `browser_snapshot.py`, `product_url_discovery.py`, `product_url_reader.py`, `product_batch_runner.py`, `product_intake.py` | Playwright browser runtime for dynamic pages |
 | Generate copy, review packs, and real video files | `promotion_manager.py`, `competitor_content_enhancer.py`, `render_video.py` | ffmpeg for MP4 output, optional voiceover file; `promotion_manager.py review|all` also writes a cheat-on-content bridge pack for Codex `cheat-score` |
 | Auto-publish where possible, otherwise semi-auto | `publish_queue.py`, `publish_readiness_runner.py`, `launch_unlock_pack.py`, `publish_executor.py`, `youtube_oauth_publish.py`, `browser_publish_assistant.py`, `browser_publish_form_fill.py`, `browser_publish_session.py` | Credentials, app review, authorization, explicit `I_APPROVE_PUBLISH`, manual final publish for browser-assisted platforms |
-| Recover real views, likes, comments, orders, revenue | `launch_unlock_pack.py`, `performance_monitor.py`, `real_evidence_inbox.py`, `published_items.py`, `publish_url_capture.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py` | Real published URLs, official metrics credentials, screenshots, exports, business-system data |
+| Recover real views, likes, comments, orders, revenue | `launch_unlock_pack.py`, `real_evidence_inbox_setup.py`, `performance_monitor.py`, `real_evidence_inbox.py`, `published_items.py`, `publish_url_capture.py`, `post_publish_metrics_capture.py`, `comment_evidence_capture.py`, `business_attribution.py`, `metrics_recovery.py` | Real published URLs, official metrics credentials, screenshots, exports, business-system data |
 | Self-evolve | `final_capability_audit.py`, `platform_access_audit.py`, `self_evolution_audit.py` | Only allowlisted runtime installs and approved Skill sync. No silent unreviewed self-replacement |
 | Sync installed Codex Skill | `self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC` | Explicit approval and reviewed clean files |
 | GitHub docs, intro, usage, install tutorial | `README.md` and `docs/*.md` | Keep docs updated with each capability change |
-| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, usage credit reservation, hosted run payload/endpoint handoff, one-link run command, browser publish session command, launch unlock pack command, evidence inbox command, performance monitor command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, usage commit, hosted worker fleet, and admin operations |
+| Browser extension with subscription and ENHE traffic | `browser-extension/`, `browser-extension/billing-contract.json`, `scripts/billing_contract_simulator.py`, subscription docs, checkout/portal/license UI, usage credit reservation, hosted run payload/endpoint handoff, one-link run command, browser publish session command, launch unlock pack command, evidence inbox setup/import commands, performance monitor command, readiness audit command, periodic automation config/run/Windows task commands | Production license API, payment-provider integration, hosted usage enforcement, usage commit, hosted worker fleet, and admin operations |
 
 ## Acceptance Command
 
@@ -50,7 +50,17 @@ The monitor captures public metrics, comments, optional business attribution, me
 
 ## Real Evidence Inbox
 
-After a real publishing round, put exported evidence into `promotion-evidence-inbox` and run:
+Before or after a real publishing round, initialize the inbox:
+
+```powershell
+python scripts\real_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+Then put exported evidence into `promotion-evidence-inbox` and run:
 
 ```powershell
 python scripts\real_evidence_inbox.py `

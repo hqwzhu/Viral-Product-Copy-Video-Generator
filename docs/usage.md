@@ -187,7 +187,17 @@ python scripts\metrics_recovery.py `
   --out-dir ".\promotion-output"
 ```
 
-Or recover a full local evidence inbox:
+Create a fillable evidence inbox before or after publishing:
+
+```powershell
+python scripts\real_evidence_inbox_setup.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --inbox-dir ".\promotion-evidence-inbox" `
+  --out-dir ".\promotion-output"
+```
+
+Then recover a full local evidence inbox:
 
 ```powershell
 python scripts\real_evidence_inbox.py `
@@ -195,7 +205,7 @@ python scripts\real_evidence_inbox.py `
   --out-dir ".\promotion-output"
 ```
 
-The inbox runner accepts exported or copied evidence such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, and JSON/text variants. It registers published URLs, imports metrics, captures comments, attributes orders/revenue, runs metrics recovery, and then runs `next_round_optimizer.py`. Use `--skip-post-publish-capture` when the inbox already contains platform metric exports and you do not want public URL fetch attempts.
+The setup command writes `inbox-manifest.json`, `published-urls.csv`, `metrics.csv`, `comments.txt`, `orders.csv`, `structured-metrics-snapshot.example.json`, `README.md`, and an import command file. The inbox runner accepts exported or copied evidence such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, and JSON/text variants. It registers published URLs, imports metrics, captures comments, attributes orders/revenue, runs metrics recovery, and then runs `next_round_optimizer.py`. Use `--skip-post-publish-capture` when the inbox already contains platform metric exports and you do not want public URL fetch attempts.
 
 Optimize the next round:
 

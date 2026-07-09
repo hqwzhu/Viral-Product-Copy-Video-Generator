@@ -155,7 +155,11 @@ def evidence_from_manifest(path: Path, inbox_dir: Path) -> tuple[dict[str, list[
             if key == "publishedUrls" and looks_like_url_or_platform_url(value):
                 evidence[key].append(value)
             else:
-                evidence[key].append(str(resolve_inbox_path(inbox_dir, value)))
+                resolved = resolve_inbox_path(inbox_dir, value)
+                if is_template_or_example_path(resolved):
+                    sources.append({"source": str(value), "role": key, "status": "ignored_template_or_example"})
+                    continue
+                evidence[key].append(str(resolved))
             sources.append({"source": str(value), "role": key, "status": "manifest"})
     return evidence, sources
 
@@ -168,12 +172,21 @@ def evidence_from_files(inbox_dir: Path, manifest_path: Path | None) -> tuple[di
             continue
         if manifest_path and path.resolve() == manifest_path.resolve():
             continue
+        if is_template_or_example_path(path):
+            sources.append({"source": str(path), "role": "", "status": "ignored_template_or_example"})
+            continue
         role = classify_file(path)
         if not role:
             continue
         evidence[role].append(str(path))
         sources.append({"source": str(path), "role": role, "status": "heuristic"})
     return evidence, sources
+
+
+def is_template_or_example_path(path: Path) -> bool:
+    name = path.name.lower()
+    stem = path.stem.lower()
+    return ".example." in name or name.endswith(".example") or "template" in stem
 
 
 def classify_file(path: Path) -> str:

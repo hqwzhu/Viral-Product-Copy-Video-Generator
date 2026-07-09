@@ -6,7 +6,7 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 
 - Reads the active tab URL and title after the user opens the extension.
 - Lets the operator select target platforms.
-- Builds safe Codex commands for `scripts/skill_entry.py`, `scripts/browser_publish_session.py`, `scripts/launch_unlock_pack.py`, `scripts/real_evidence_inbox.py`, `scripts/performance_monitor.py`, `scripts/final_capability_readiness.py`, and `scripts/automation_scheduler.py`.
+- Builds safe Codex commands for `scripts/skill_entry.py`, `scripts/browser_publish_session.py`, `scripts/launch_unlock_pack.py`, `scripts/real_evidence_inbox_setup.py`, `scripts/real_evidence_inbox.py`, `scripts/performance_monitor.py`, `scripts/final_capability_readiness.py`, and `scripts/automation_scheduler.py`.
 - Shows whether the operator is running a one-link product cycle, a browser-assisted publishing session, a real evidence recovery pass, or a readiness audit.
 - Lets the operator provide the output directory, publish queue path, publisher URL overrides, evidence inbox path, automation config path, scheduler output root, job ID, interval, and Windows Task Scheduler script settings.
 - Estimates token-backed subscription usage before the operator starts a hosted run.
@@ -48,6 +48,7 @@ Command types:
 - One-link Skill run: reads the product URL, runs research, content generation, publish-pack setup, and readiness refresh.
 - Browser publish session: reads a generated `publish-queue.json`, prepares browser/manual publish payloads, optionally fills visible fields, and stops before final publish.
 - Launch unlock pack: reads a generated `publish-queue.json`, combines platform access audit, publish setup, browser-assisted publish payloads, and real-evidence templates into one launch checklist. Publisher URL overrides from the popup are passed through as `--platform-publish-url`.
+- Evidence inbox setup: creates `published-urls.csv`, `metrics.csv`, `comments.txt`, `orders.csv`, `inbox-manifest.json`, and import commands before or immediately after publishing.
 - Real evidence inbox: imports published URLs, platform metrics, comments, orders, and revenue evidence from a local folder.
 - Performance monitor: reruns post-publish public metrics capture, visible comment capture, optional business attribution, metrics recovery, next-round optimization, and history snapshots from registered published URLs.
 - Final readiness audit: refreshes the matrix that compares the current run against the requested final Agent scope.

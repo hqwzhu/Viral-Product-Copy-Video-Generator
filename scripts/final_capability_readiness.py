@@ -70,6 +70,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--publish-readiness", action="append", default=[], help="Path to a publish-readiness.json file. Can repeat.")
     parser.add_argument("--publish-setup", action="append", default=[], help="Path to a publish-setup.json file. Can repeat.")
     parser.add_argument("--real-evidence-setup", action="append", default=[], help="Path to a real-evidence-setup.json file. Can repeat.")
+    parser.add_argument("--real-evidence-inbox-setup", action="append", default=[], help="Path to a real-evidence-inbox-setup.json file. Can repeat.")
     return parser.parse_args()
 
 
@@ -101,6 +102,11 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         + glob_existing(out_dir, "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
     )
+    real_evidence_inbox_setup_paths = unique_paths(
+        explicit_existing(args.real_evidence_inbox_setup)
+        + glob_existing(out_dir, "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
+        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
+    )
     launch_unlock_paths = unique_paths(
         glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
@@ -113,6 +119,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishReadinessPaths": publish_readiness_paths,
         "publishSetupPaths": publish_setup_paths,
         "realEvidenceSetupPaths": real_evidence_setup_paths,
+        "realEvidenceInboxSetupPaths": real_evidence_inbox_setup_paths,
         "launchUnlockPaths": launch_unlock_paths,
         "finalRun": read_json(final_run_path),
         "finalAudit": read_json(final_audit_path),
@@ -121,6 +128,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishReadiness": [read_json(path) for path in publish_readiness_paths],
         "publishSetup": [read_json(path) for path in publish_setup_paths],
         "realEvidenceSetup": [read_json(path) for path in real_evidence_setup_paths],
+        "realEvidenceInboxSetup": [read_json(path) for path in real_evidence_inbox_setup_paths],
         "launchUnlock": [read_json(path) for path in launch_unlock_paths],
     }
 
@@ -132,7 +140,7 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
     self_evolution = sources["selfEvolution"]
     readiness = sources["publishReadiness"]
     setup = sources["publishSetup"]
-    real_evidence_setup = sources["realEvidenceSetup"]
+    real_evidence_setup = [*sources["realEvidenceSetup"], *sources["realEvidenceInboxSetup"]]
     rows = [
         product_intake_row(final_run, final_audit),
         viral_research_row(final_run, final_audit),
@@ -299,7 +307,7 @@ def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any], evidence
     metrics = real_evidence_metrics(summary)
     setup_targets = max(
         int_value(summary.get("realEvidenceSetupTargets")),
-        sum(int_value((report.get("summary") or {}).get("targets")) for report in evidence_setup_reports if isinstance(report, dict)),
+        sum(evidence_setup_target_count(report) for report in evidence_setup_reports if isinstance(report, dict)),
     )
     metrics["realEvidenceSetupTargets"] = setup_targets
     status = audit_item.get("status") or "unknown"
@@ -511,9 +519,17 @@ def build_action_queue(
     metrics_status = by_id["real_metrics_comments_orders_revenue"]["status"]
     if metrics_status.startswith("waiting_real_data"):
         evidence_setup_targets = sum(
-            int_value((report.get("summary") or {}).get("targets")) for report in evidence_setup_reports if isinstance(report, dict)
+            evidence_setup_target_count(report) for report in evidence_setup_reports if isinstance(report, dict)
         )
         if not evidence_setup_targets:
+            actions.append(
+                action(
+                    57,
+                    "setup_real_evidence_inbox",
+                    "Create a fillable local evidence inbox before or immediately after publishing.",
+                    f"python scripts/real_evidence_inbox_setup.py --product-url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./promotion-evidence-inbox\" --out-dir \"{out_dir}\"",
+                )
+            )
             actions.append(
                 action(
                     59,
@@ -839,6 +855,7 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
         "publishReadiness": [report_source(path) for path in sources.get("publishReadinessPaths", [])],
         "publishSetup": [report_source(path) for path in sources.get("publishSetupPaths", [])],
         "realEvidenceSetup": [report_source(path) for path in sources.get("realEvidenceSetupPaths", [])],
+        "realEvidenceInboxSetup": [report_source(path) for path in sources.get("realEvidenceInboxSetupPaths", [])],
         "launchUnlock": [report_source(path) for path in sources.get("launchUnlockPaths", [])],
     }
 
@@ -1016,6 +1033,11 @@ def int_value(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def evidence_setup_target_count(report: dict[str, Any]) -> int:
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    return max(int_value(summary.get("targets")), int_value(summary.get("platforms")))
 
 
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:

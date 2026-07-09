@@ -40,6 +40,7 @@ PUBLISH_QUEUE = ROOT / "scripts" / "publish_queue.py"
 PUBLISH_READINESS = ROOT / "scripts" / "publish_readiness_runner.py"
 PUBLISH_SETUP_ASSISTANT = ROOT / "scripts" / "publish_setup_assistant.py"
 REAL_EVIDENCE_SETUP = ROOT / "scripts" / "real_evidence_setup.py"
+REAL_EVIDENCE_INBOX_SETUP = ROOT / "scripts" / "real_evidence_inbox_setup.py"
 REAL_EVIDENCE_INBOX = ROOT / "scripts" / "real_evidence_inbox.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
@@ -5945,6 +5946,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Command type", popup)
         self.assertIn("Browser publish session", popup)
         self.assertIn("Launch unlock pack", popup)
+        self.assertIn("Evidence inbox setup", popup)
         self.assertIn("Real evidence inbox", popup)
         self.assertIn("Performance monitor", popup)
         self.assertIn("Final readiness audit", popup)
@@ -5981,12 +5983,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("skill_entry.py", script)
         self.assertIn("browser_publish_session.py", script)
         self.assertIn("launch_unlock_pack.py", script)
+        self.assertIn("real_evidence_inbox_setup.py", script)
         self.assertIn("real_evidence_inbox.py", script)
         self.assertIn("performance_monitor.py", script)
         self.assertIn("final_capability_readiness.py", script)
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
         self.assertIn("launch_unlock_pack", script)
+        self.assertIn("real_evidence_inbox_setup", script)
         self.assertIn("real_evidence_inbox", script)
         self.assertIn("performance_monitor", script)
         self.assertIn("automation_config_init", script)
@@ -6004,6 +6008,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(contract["creditCosts"]["standard_run"], 4)
         self.assertIn("browser_publish_session", contract["creditCosts"])
         self.assertIn("launch_unlock_pack", contract["creditCosts"])
+        self.assertEqual(contract["creditCosts"]["real_evidence_inbox_setup"], 1)
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
         self.assertIn("performance_monitor", contract["creditCosts"])
         self.assertIn("final_readiness_audit", contract["creditCosts"])
@@ -6341,6 +6346,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["post_publish_metrics_capture"]["exists"])
         self.assertTrue(report["scripts"]["comment_evidence_capture"]["exists"])
         self.assertTrue(report["scripts"]["business_attribution"]["exists"])
+        self.assertTrue(report["scripts"]["real_evidence_inbox_setup"]["exists"])
         self.assertTrue(report["scripts"]["real_evidence_inbox"]["exists"])
         self.assertTrue(report["scripts"]["performance_monitor"]["exists"])
         self.assertTrue(report["scripts"]["next_round_optimizer"]["exists"])
@@ -6359,6 +6365,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser_publish_session.py", publish_evidence)
         metrics_evidence = "\n".join(by_requirement["real_metrics_orders_revenue_recovery"]["evidence"])
         self.assertIn("business_attribution.py", metrics_evidence)
+        self.assertIn("real_evidence_inbox_setup.py", metrics_evidence)
         self.assertIn("real_evidence_inbox.py", metrics_evidence)
         self.assertIn("performance_monitor.py", metrics_evidence)
         optimization_evidence = "\n".join(by_requirement["retrospective_next_round_optimization"]["evidence"])
@@ -6400,6 +6407,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "billing_contract_simulator_demo" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "monitor_post_publish_performance" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "setup_real_evidence_inbox" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "import_real_evidence_inbox" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
@@ -6640,6 +6648,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["id"] == "sync_installed_skill_when_approved" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "refresh_platform_access_docs" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "monitor_post_publish_performance" for item in report["actionQueue"]))
+        self.assertTrue(any(item["id"] == "setup_real_evidence_inbox" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "import_real_evidence_inbox" for item in report["actionQueue"]))
         self.assertTrue(any(item["id"] == "run_xiaohongshu_browser_publish_session" for item in report["actionQueue"]))
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
@@ -8545,6 +8554,81 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("revenue", metrics_template)
         self.assertIn("utm_content", business_template)
         self.assertIn("xhs-001", business_template)
+
+    def test_real_evidence_inbox_setup_creates_fillable_inbox_without_fake_metrics(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="real-evidence-inbox-setup-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        inbox_dir = out_dir / "evidence-inbox"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(REAL_EVIDENCE_INBOX_SETUP),
+                "--product-url",
+                "https://example.com/ai-prompt-kit",
+                "--product-name",
+                "AI Prompt Kit",
+                "--platforms",
+                "youtube,xiaohongshu,github",
+                "--published-url",
+                "github=https://github.com/example/ai-prompt-kit",
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["platforms"], 3)
+        self.assertEqual(report["summary"]["publishedUrlsSeeded"], 1)
+        self.assertEqual(report["summary"]["realMetricsSeeded"], 0)
+        self.assertEqual(report["summary"]["realOrdersSeeded"], 0)
+        self.assertEqual(report["summary"]["realRevenueSeeded"], 0)
+        artifacts = {key: Path(value["path"]) for key, value in report["artifacts"].items()}
+        for path in artifacts.values():
+            self.assertTrue(path.exists(), path)
+        manifest = json.loads(artifacts["manifest"].read_text(encoding="utf-8"))
+        self.assertEqual(manifest["source"], "real_evidence_inbox_setup")
+        self.assertNotIn("metricsStructuredJson", manifest["evidence"])
+        metrics_csv = artifacts["metricsCsv"].read_text(encoding="utf-8-sig")
+        orders_csv = artifacts["ordersCsv"].read_text(encoding="utf-8-sig")
+        comments_text = artifacts["commentsText"].read_text(encoding="utf-8")
+        self.assertIn("views", metrics_csv)
+        self.assertEqual(len([line for line in metrics_csv.splitlines() if line.strip()]), 1)
+        self.assertIn("revenue", orders_csv)
+        self.assertEqual(len([line for line in orders_csv.splitlines() if line.strip()]), 1)
+        self.assertEqual(comments_text, "")
+        self.assertIn("real_evidence_inbox.py", artifacts["importCommands"].read_text(encoding="utf-8"))
+        example = json.loads(artifacts["structuredMetricsExample"].read_text(encoding="utf-8"))
+        self.assertTrue(example["exampleOnly"])
+        self.assertTrue(example["doNotImportAsEvidence"])
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(REAL_EVIDENCE_INBOX),
+                "--inbox-dir",
+                str(inbox_dir),
+                "--out-dir",
+                str(out_dir),
+                "--skip-post-publish-capture",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        inbox_report = json.loads((out_dir / "reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.json").read_text(encoding="utf-8"))
+        ignored_sources = [item for item in inbox_report["sources"] if item.get("status") == "ignored_template_or_example"]
+        self.assertTrue(any("structured-metrics-snapshot.example.json" in item["source"] for item in ignored_sources))
+        self.assertEqual(inbox_report["discoveredEvidence"]["metricsStructuredJson"], [])
+        business_report = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution.json").read_text(encoding="utf-8"))
+        self.assertEqual(business_report["status"], "waiting_business_data")
+        self.assertEqual(business_report["summary"]["totalOrders"], 0.0)
+        self.assertEqual(business_report["summary"]["totalRevenue"], 0.0)
 
     def test_launch_unlock_pack_orchestrates_external_gate_setup_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="launch-unlock-test-"))

@@ -54,6 +54,7 @@ SCRIPT_REQUIREMENTS = {
     "post_publish_metrics_capture": "post_publish_metrics_capture.py",
     "comment_evidence_capture": "comment_evidence_capture.py",
     "business_attribution": "business_attribution.py",
+    "real_evidence_inbox_setup": "real_evidence_inbox_setup.py",
     "real_evidence_inbox": "real_evidence_inbox.py",
     "performance_monitor": "performance_monitor.py",
     "metrics_intake": "metrics_intake.py",
@@ -400,6 +401,7 @@ def requirement_status(
             "post_publish_metrics_capture",
             "comment_evidence_capture",
             "business_attribution",
+            "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
             "metrics_intake",
@@ -508,6 +510,7 @@ def requirement_status(
                     "post_publish_metrics_capture",
                     "comment_evidence_capture",
                     "business_attribution",
+                    "real_evidence_inbox_setup",
                     "real_evidence_inbox",
                     "launch_unlock_pack",
                     "performance_monitor",
@@ -674,6 +677,7 @@ def browser_extension_status() -> dict[str, Any]:
         credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
         for workflow in [
             "browser_publish_session",
+            "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
             "launch_unlock_pack",
@@ -714,6 +718,7 @@ def browser_extension_status() -> dict[str, Any]:
             "Subscription estimate",
             "Command type",
             "Browser publish session",
+            "Evidence inbox setup",
             "Real evidence inbox",
             "Performance monitor",
             "Final readiness audit",
@@ -755,12 +760,14 @@ def browser_extension_status() -> dict[str, Any]:
             "COST_PER_CREDIT",
             "skill_entry.py",
             "browser_publish_session.py",
+            "real_evidence_inbox_setup.py",
             "real_evidence_inbox.py",
             "performance_monitor.py",
             "launch_unlock_pack.py",
             "final_capability_readiness.py",
             "automation_scheduler.py",
             "browser_publish_session",
+            "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
             "launch_unlock_pack",
@@ -1076,6 +1083,14 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/metrics_recovery.py --metrics-json "
                 f"\"{out_dir}/reports/promotion-manager/post-publish-capture/post-publish-metrics-export.json\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "setup_real_evidence_inbox",
+            "command": (
+                f"python scripts/real_evidence_inbox_setup.py --product-url \"https://example.com/product\" "
+                f"--platforms youtube,zhihu,xiaohongshu,douyin,github --inbox-dir \"./promotion-evidence-inbox\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {
