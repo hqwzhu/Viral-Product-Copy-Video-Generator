@@ -42,6 +42,7 @@ PUBLISH_SETUP_ASSISTANT = ROOT / "scripts" / "publish_setup_assistant.py"
 REAL_EVIDENCE_SETUP = ROOT / "scripts" / "real_evidence_setup.py"
 REAL_EVIDENCE_INBOX_SETUP = ROOT / "scripts" / "real_evidence_inbox_setup.py"
 REAL_EVIDENCE_INBOX = ROOT / "scripts" / "real_evidence_inbox.py"
+SYNTHETIC_EVIDENCE_GENERATOR = ROOT / "scripts" / "synthetic_evidence_generator.py"
 BROWSER_PUBLISH_ASSISTANT = ROOT / "scripts" / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = ROOT / "scripts" / "browser_publish_form_fill.py"
 BROWSER_PUBLISH_SESSION = ROOT / "scripts" / "browser_publish_session.py"
@@ -6805,6 +6806,78 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
+    def test_final_capability_readiness_flags_missing_requested_video_platform_evidence(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-video-gap-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        final_run_dir = out_dir / "reports/promotion-manager/final-run"
+        final_run_dir.mkdir(parents=True)
+        (final_run_dir / "final-capability-run.json").write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-10",
+                    "status": "partial_ready",
+                    "input": {"codexReadFirst": True, "platforms": "youtube,douyin,github"},
+                    "summary": {
+                        "promotionRuns": 1,
+                        "multiQueryDiscoveryRuns": 1,
+                        "multiQuerySearchCapturesReady": 1,
+                        "multiQueryMergedMaterials": 2,
+                        "multiQueryMergedCreators": 1,
+                        "multiQueryDeepEvidenceRuns": 1,
+                        "multiQueryVideoSampleFrames": 2,
+                        "contentArtifacts": 1,
+                        "videoFilesGenerated": 1,
+                    },
+                    "productBatch": {
+                        "platforms": "youtube,douyin,github",
+                        "promotionRuns": [
+                            {
+                                "multiQueryViralDiscovery": {
+                                    "summary": {"platforms": ["github"], "mergedMaterials": 2}
+                                }
+                            }
+                        ],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        capability_dir = out_dir / "reports/promotion-manager/capability"
+        capability_dir.mkdir(parents=True)
+        (capability_dir / "final-capability-audit.json").write_text(
+            json.dumps(
+                {
+                    "requirements": [
+                        {"id": "product_url_structured_intake", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "viral_creator_content_research", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "copy_and_real_video_generation", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "all_platform_auto_publish", "status": "blocked_by_authorization_or_platform_limits", "evidence": [], "missing": []},
+                        {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "retrospective_next_round_optimization", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "fully_autonomous_self_evolution", "status": "blocked_by_safety_boundary", "evidence": [], "missing": []},
+                    ],
+                    "platforms": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run([sys.executable, str(FINAL_CAPABILITY_READINESS), "--out-dir", str(out_dir)], check=True, cwd=ROOT)
+
+        report = json.loads(
+            (out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        viral_row = {item["id"]: item for item in report["requirements"]}["viral_creator_video_research"]
+        self.assertEqual(viral_row["status"], "partial_ready_non_video_platform_evidence")
+        self.assertEqual(viral_row["metrics"]["observedResearchPlatforms"], ["github"])
+        self.assertEqual(viral_row["metrics"]["missingVideoPlatformEvidence"], ["douyin", "youtube"])
+        self.assertIn("no viral material evidence was captured for requested video platforms: douyin, youtube", viral_row["missing"])
+        capture_action = next(item for item in report["actionQueue"] if item["id"] == "capture_missing_video_platform_evidence")
+        self.assertIn("--platforms douyin,youtube", capture_action["command"])
+        self.assertIn("--multi-query-sample-video-frames", capture_action["command"])
+
     def test_final_capability_readiness_distinguishes_field_level_real_evidence(self) -> None:
         root_dir = Path(tempfile.mkdtemp(prefix="final-readiness-fields-test-"))
         self.addCleanup(shutil.rmtree, root_dir, ignore_errors=True)
@@ -8797,6 +8870,47 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(business_report["status"], "waiting_business_data")
         self.assertEqual(business_report["summary"]["totalOrders"], 0.0)
         self.assertEqual(business_report["summary"]["totalRevenue"], 0.0)
+
+    def test_synthetic_evidence_generator_validates_recovery_without_real_claims(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="synthetic-evidence-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SYNTHETIC_EVIDENCE_GENERATOR),
+                "--product-url",
+                "https://example.com/ai-prompt-kit",
+                "--product-name",
+                "AI Prompt Kit",
+                "--platforms",
+                "youtube,github",
+                "--run-recovery",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/synthetic-evidence/synthetic-evidence.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "synthetic_validation_ready")
+        self.assertTrue(report["synthetic"])
+        self.assertEqual(report["warning"], "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT")
+        self.assertEqual(report["summary"]["platforms"], 2)
+        self.assertEqual(report["summary"]["recoveryExitCode"], 0)
+        for path in report["artifacts"].values():
+            self.assertTrue(Path(path).exists(), path)
+            self.assertIn("synthetic", Path(path).read_text(encoding="utf-8-sig", errors="replace").lower())
+        self.assertTrue(Path(report["recovery"]["reports"]["realEvidenceInbox"]).exists())
+        self.assertTrue(Path(report["recovery"]["reports"]["metricsRecovery"]).exists())
+        self.assertTrue(Path(report["recovery"]["reports"]["nextRoundOptimization"]).exists())
+        report_markdown = (out_dir / "reports/promotion-manager/synthetic-evidence/synthetic-evidence.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("SYNTHETIC_DEMO_DATA_DO_NOT_REPORT", report_markdown)
+        self.assertIn("must not be reported as real performance", report_markdown)
 
     def test_launch_unlock_pack_orchestrates_external_gate_setup_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="launch-unlock-test-"))

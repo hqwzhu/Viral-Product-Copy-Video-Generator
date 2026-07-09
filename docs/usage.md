@@ -209,6 +209,18 @@ python scripts\real_evidence_inbox.py `
 
 The setup command writes `inbox-manifest.json`, `published-urls.csv`, `metrics.csv`, `comments.txt`, `orders.csv`, `structured-metrics-snapshot.example.json`, `README.md`, and an import command file. The inbox runner accepts exported or copied evidence such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, and JSON/text variants. It registers published URLs, imports metrics, captures comments, attributes orders/revenue, runs metrics recovery, and then runs `next_round_optimizer.py`. Use `--skip-post-publish-capture` when the inbox already contains platform metric exports and you do not want public URL fetch attempts.
 
+To validate the recovery and next-round loop before real data exists, generate synthetic/demo evidence:
+
+```powershell
+python scripts\synthetic_evidence_generator.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --run-recovery `
+  --out-dir ".\promotion-output\synthetic-validation"
+```
+
+The synthetic inbox and report are marked `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT`. Use them only to validate local wiring; replace them with real published URLs, platform exports, comments, and business exports before any live retrospective.
+
 Optimize the next round:
 
 ```powershell

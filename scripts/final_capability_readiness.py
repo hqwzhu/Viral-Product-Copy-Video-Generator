@@ -11,6 +11,7 @@ from typing import Any
 
 
 TODAY = date.today().isoformat()
+VIDEO_RESEARCH_PLATFORMS = {"youtube", "douyin", "tiktok", "xiaohongshu"}
 OBJECTIVE_REQUIREMENTS = [
     {
         "id": "product_url_codex_structured_intake",
@@ -209,6 +210,13 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
     runs = int_value(summary.get("multiQueryDiscoveryRuns"))
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
+    requested = requested_platforms(final_run)
+    requested_video_platforms = sorted(platform for platform in requested if platform in VIDEO_RESEARCH_PLATFORMS)
+    observed_platforms = sorted(observed_multi_query_platforms(final_run))
+    observed_video_platforms = sorted(platform for platform in observed_platforms if platform in VIDEO_RESEARCH_PLATFORMS)
+    missing_video_platforms = [
+        platform for platform in requested_video_platforms if platform not in observed_video_platforms
+    ]
     metrics = {
         "multiQueryDiscoveryRuns": runs,
         "searchCapturesReady": int_value(summary.get("multiQuerySearchCapturesReady")),
@@ -222,12 +230,38 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
         "videoSampleRuns": int_value(summary.get("multiQueryVideoSampleRuns")),
         "videoSampleReady": int_value(summary.get("multiQueryVideoSampleReady")),
         "videoSampleFrames": int_value(summary.get("multiQueryVideoSampleFrames")),
+        "requestedPlatforms": requested,
+        "requestedVideoPlatforms": requested_video_platforms,
+        "observedResearchPlatforms": observed_platforms,
+        "observedVideoPlatforms": observed_video_platforms,
+        "missingVideoPlatformEvidence": missing_video_platforms,
     }
     if final_run and runs == 0:
         status = "needs_real_run_evidence"
         missing.append("no multi-query viral discovery run evidence in the final run")
-    elif final_run and metrics["mergedMaterials"] > 0 and metrics["mergedCreators"] > 0 and metrics["videoSampleFrames"] > 0:
+    elif (
+        final_run
+        and metrics["mergedMaterials"] > 0
+        and metrics["mergedCreators"] > 0
+        and metrics["videoSampleFrames"] > 0
+        and not missing_video_platforms
+    ):
         status = "ready_with_video_evidence"
+    elif final_run and missing_video_platforms and (
+        metrics["mergedMaterials"] > 0
+        or metrics["searchCapturesReady"] > 0
+        or metrics["deepEvidenceRuns"] > 0
+    ):
+        status = "partial_ready_non_video_platform_evidence"
+        missing.append(
+            "no viral material evidence was captured for requested video platforms: "
+            + ", ".join(missing_video_platforms)
+        )
+        if requested_video_platforms:
+            missing.append(
+                "no browser-visible video frame samples were captured for requested video platforms: "
+                + ", ".join(requested_video_platforms)
+            )
     elif final_run and (
         metrics["followUpImportedRecords"] > 0
         or metrics["browserVisibleCaptureReady"] > 0
@@ -517,6 +551,7 @@ def build_action_queue(
     if by_id["viral_creator_video_research"]["status"] in {
         "partial_ready_search_capture_only",
         "partial_ready_deep_content_evidence",
+        "partial_ready_non_video_platform_evidence",
     }:
         actions.append(
             action(
@@ -524,6 +559,16 @@ def build_action_queue(
                 "run_video_evidence_capture",
                 "Run multi-query viral discovery with follow-up captures and browser-visible video frame sampling.",
                 final_runner_command(out_dir) + " --multi-query-run-follow-up-captures --multi-query-sample-video-frames",
+            )
+        )
+    missing_video_platforms = by_id["viral_creator_video_research"]["metrics"].get("missingVideoPlatformEvidence") or []
+    if missing_video_platforms:
+        actions.append(
+            action(
+                22,
+                "capture_missing_video_platform_evidence",
+                "Rerun viral discovery scoped to requested video platforms that produced no captured material or video samples.",
+                video_platform_runner_command(out_dir, missing_video_platforms),
             )
         )
     if "no MP4 generated" in " ".join(by_id["copy_and_real_video_generation"]["missing"]):
@@ -591,6 +636,14 @@ def build_action_queue(
                     launch_unlock_command(out_dir),
                 )
             )
+        actions.append(
+            action(
+                63,
+                "run_synthetic_evidence_validation",
+                "Generate clearly marked synthetic/demo evidence to validate the retrospective loop without treating it as real performance.",
+                f"python scripts/synthetic_evidence_generator.py --product-url \"https://example.com/product\" --platforms youtube,zhihu,xiaohongshu,douyin,github --run-recovery --out-dir \"{out_dir}/synthetic-validation\"",
+            )
+        )
         actions.append(
             action(
                 60,
@@ -891,6 +944,17 @@ def final_runner_command(out_dir: Path) -> str:
     )
 
 
+def video_platform_runner_command(out_dir: Path, platforms: list[str]) -> str:
+    platform_arg = ",".join(platforms)
+    return (
+        "python scripts/final_capability_runner.py --url \"https://example.com/product\" "
+        f"--platforms {platform_arg} --run-follow-up-captures --capture-browser-assisted-follow-ups "
+        "--sample-video-frames --multi-query-run-follow-up-captures "
+        "--multi-query-capture-browser-assisted-follow-ups --multi-query-sample-video-frames "
+        f"--video-platforms {platform_arg} --out-dir \"{out_dir}\""
+    )
+
+
 def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
     return {
         "finalRun": report_source(sources.get("finalRunPath")),
@@ -976,11 +1040,10 @@ def platform_learning_metrics(self_evolution: dict[str, Any], platform_access: d
     doc_summary = platform_access.get("officialDocSummary") if isinstance(platform_access.get("officialDocSummary"), dict) else {}
     gap_research = platform_access.get("officialDocGapResearch") if isinstance(platform_access.get("officialDocGapResearch"), dict) else {}
     gap_summary = gap_research.get("summary") if isinstance(gap_research.get("summary"), dict) else {}
-    status = (
-        str(learning.get("status") or freshness.get("status") or "")
-        or ("fresh_live_checked" if platform_access.get("checkLive") else "missing_platform_access_audit")
-    )
     check_live = bool(learning.get("checkLive") or freshness.get("checkLive") or platform_access.get("checkLive"))
+    status = str(freshness.get("status") or learning.get("status") or "")
+    if not status:
+        status = "fresh_live_checked" if platform_access.get("checkLive") else "missing_platform_access_audit"
     return {
         "status": status,
         "checkLive": check_live,
@@ -1078,6 +1141,42 @@ def int_value(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def requested_platforms(final_run: dict[str, Any]) -> list[str]:
+    input_payload = final_run.get("input") if isinstance(final_run.get("input"), dict) else {}
+    platforms = split_platform_values(input_payload.get("platforms"))
+    if platforms:
+        return platforms
+    product_batch = final_run.get("productBatch") if isinstance(final_run.get("productBatch"), dict) else {}
+    return split_platform_values(product_batch.get("platforms"))
+
+
+def observed_multi_query_platforms(final_run: dict[str, Any]) -> set[str]:
+    platforms: set[str] = set()
+    product_batch = final_run.get("productBatch") if isinstance(final_run.get("productBatch"), dict) else {}
+    for run in list_records(product_batch, "promotionRuns"):
+        discovery = run.get("multiQueryViralDiscovery") if isinstance(run, dict) else {}
+        if isinstance(discovery, dict):
+            summary = discovery.get("summary") if isinstance(discovery.get("summary"), dict) else {}
+            platforms.update(split_platform_values(summary.get("platforms")))
+    for item in list_records(final_run, "cycleEvidence"):
+        research = item.get("competitorResearch") if isinstance(item, dict) else {}
+        discovery = research.get("multiQueryViralDiscovery") if isinstance(research, dict) else {}
+        if isinstance(discovery, dict):
+            summary = discovery.get("summary") if isinstance(discovery.get("summary"), dict) else {}
+            platforms.update(split_platform_values(summary.get("platforms")))
+    return platforms
+
+
+def split_platform_values(value: Any) -> list[str]:
+    if isinstance(value, str):
+        raw_values = value.split(",")
+    elif isinstance(value, list):
+        raw_values = value
+    else:
+        raw_values = []
+    return ordered_unique([str(item).strip().lower() for item in raw_values if str(item).strip()])
 
 
 def evidence_setup_target_count(report: dict[str, Any]) -> int:

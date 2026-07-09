@@ -151,6 +151,18 @@ python scripts\real_evidence_inbox.py `
 
 The inbox can contain files such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, or an optional `inbox-manifest.json` with explicit file roles. The runner registers real published URLs, imports visible/exported metrics, captures comment demand signals, attributes orders/revenue, and runs the next-round optimizer.
 
+If no real data exists yet and you only want to validate the recovery loop, generate a clearly marked synthetic/demo inbox:
+
+```powershell
+python scripts\synthetic_evidence_generator.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --run-recovery `
+  --out-dir ".\promotion-output\synthetic-validation"
+```
+
+Synthetic reports carry `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT`. They are only for local pipeline validation and must not be reported as real platform, order, or revenue performance.
+
 ## Browser Extension
 
 The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/). It is a lightweight operator cockpit:
@@ -359,6 +371,16 @@ python scripts\metrics_recovery.py `
   --metrics-json ".\promotion-output\reports\promotion-manager\post-publish-capture\post-publish-metrics-export.json" `
   --business-csv ".\orders-and-revenue.csv" `
   --out-dir ".\promotion-output"
+```
+
+Validate the recovery loop with synthetic/demo evidence only:
+
+```powershell
+python scripts\synthetic_evidence_generator.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --run-recovery `
+  --out-dir ".\promotion-output\synthetic-validation"
 ```
 
 Set up and recover a whole real-evidence inbox:

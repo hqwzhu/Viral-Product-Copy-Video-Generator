@@ -114,6 +114,18 @@ python scripts/real_evidence_inbox.py \
 
 The inbox setup writes `inbox-manifest.json`, `published-urls.csv`, `metrics.csv`, `comments.txt`, `orders.csv`, `structured-metrics-snapshot.example.json`, `README.md`, and an import command file without seeding fake metrics, comments, orders, or revenue. The inbox can contain `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, JSON/text variants, or an optional `inbox-manifest.json` with explicit roles. The inbox runner registers real published URLs, imports metrics, captures comment demand signals, attributes orders/revenue, runs metrics recovery, and generates next-round recommendations.
 
+If no real data exists yet and the operator only needs to validate the recovery and next-round loop, generate clearly marked synthetic/demo evidence:
+
+```bash
+python scripts/synthetic_evidence_generator.py \
+  --product-url "https://example.com/product" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --run-recovery \
+  --out-dir "./promotion-output/synthetic-validation"
+```
+
+Synthetic reports carry `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT`. They are for local pipeline validation only and must never be reported as real platform, order, or revenue performance.
+
 When browser-assisted platforms have known creator entry URLs, the one-link entry can also fill visible fields and stop before final publish:
 
 ```bash
@@ -1158,6 +1170,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/metrics_recovery.py`: metrics recovery coordinator for workflow manifests, publish queues, published URL evidence, and business exports.
 - `scripts/real_evidence_inbox_setup.py`: safe inbox initializer that writes fillable published URL, metric, comment, order, revenue, manifest, README, and import command files without seeding fake evidence.
 - `scripts/real_evidence_inbox.py`: local evidence inbox orchestrator that discovers published URL, metric, comment, order, and revenue files, runs the recovery scripts, and writes a single manager-facing report.
+- `scripts/synthetic_evidence_generator.py`: clearly marked synthetic/demo evidence generator for validating the recovery and next-round loop without claiming real performance.
 - `scripts/performance_monitor.py`: post-publish monitor that reruns public metric capture, comment capture, optional business attribution, metrics recovery, next-round optimization, and history snapshots from registered published URLs.
 - `scripts/published_items.py`: published URL registrar for official execution reports, publish queues, and manual/browser-assisted publish evidence.
 - `scripts/publish_url_capture.py`: post-publish browser snapshot/HTML/text capturer that registers real published URLs.

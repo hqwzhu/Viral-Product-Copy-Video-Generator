@@ -75,6 +75,18 @@ python scripts\published_items.py `
 python scripts\performance_monitor.py --out-dir ".\promotion-output"
 ```
 
+如果还没有真实发布数据，只是想验证数据回收、复盘和下一轮优化链路，可以生成明确标记的 synthetic/demo 证据：
+
+```powershell
+python scripts\synthetic_evidence_generator.py `
+  --product-url "https://example.com/product" `
+  --platforms youtube,zhihu,xiaohongshu,douyin,github `
+  --run-recovery `
+  --out-dir ".\promotion-output\synthetic-validation"
+```
+
+生成结果会带有 `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT` 标记，只能用于本地流程验证，不能当作真实播放量、订单或收入数据汇报。
+
 发布前或发布后可以先生成证据收件箱模板：
 
 ```powershell
