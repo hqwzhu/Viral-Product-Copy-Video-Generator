@@ -628,6 +628,58 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(record["product"]["sourceType"], "text")
         self.assertIn("--text-file", record["nextWorkflowCommand"])
 
+    def test_product_url_reader_reuses_matching_cached_profile_after_intake_failure(self) -> None:
+        module = load_script_module(PRODUCT_URL_READER)
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-cached-profile-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        intake_dir = out_dir / "intake"
+        intake_dir.mkdir(parents=True)
+        (intake_dir / "product-profile.json").write_text(
+            json.dumps(
+                {
+                    "productName": "LumiOS AI",
+                    "canonicalUrl": "https://www.enhe-tech.com.cn/software/windows-ai",
+                    "sourceType": "text",
+                    "valueProposition": "Windows AI workspace for operators.",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        status = module.run_intake_command(
+            [],
+            intake_dir,
+            [sys.executable, "-c", "import sys; sys.exit(1)"],
+            "https://www.enhe-tech.com.cn/software/windows-ai/",
+        )
+
+        self.assertEqual(status["status"], "partial_ready")
+        self.assertEqual(status["exitCode"], 1)
+        self.assertIn("matching cached product profile", status["reason"])
+        self.assertTrue(module.usable_profile_status(status))
+        self.assertEqual(module.record_status({"status": "error"}, status), "partial_ready")
+        cached_text = module.write_cached_profile_text(
+            out_dir,
+            {
+                "productName": "LumiOS AI",
+                "canonicalUrl": "https://www.enhe-tech.com.cn/software/windows-ai",
+                "valueProposition": "Windows AI workspace for operators.",
+                "pricing": "unknown",
+                "targetAudienceAssumptions": ["AI tool users"],
+                "painPointAssumptions": ["repeated context setup"],
+            },
+        )
+        command = module.next_workflow_command(
+            "https://www.enhe-tech.com.cn/software/windows-ai",
+            "cached_profile_fallback",
+            out_dir / "missing-snapshot.json",
+            cached_text,
+            out_dir / "output",
+            status,
+        )
+        self.assertIn("--text-file", command)
+        self.assertIn("cached-product-profile.md", command)
+
     def test_product_batch_runner_routes_web_text_fallback_to_text_file_cycle(self) -> None:
         module = load_script_module(PRODUCT_BATCH_RUNNER)
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-web-fallback-source-test-"))
@@ -646,6 +698,29 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(source["flag"], "--text-file")
         self.assertEqual(source["value"], str(text_file))
         self.assertEqual(source["sourceMode"], "web_text_fallback")
+
+        static_source = module.workflow_source(
+            {
+                "url": "https://example.invalid/product",
+                "sourceMode": "static_url_fallback",
+                "intake": {"status": "partial_ready"},
+            }
+        )
+        self.assertEqual(static_source["flag"], "--product-url")
+        self.assertEqual(static_source["value"], "https://example.invalid/product")
+        self.assertEqual(static_source["sourceMode"], "static_url_fallback")
+
+        cached_source = module.workflow_source(
+            {
+                "url": "https://example.invalid/product",
+                "sourceMode": "cached_profile_fallback",
+                "intake": {"status": "partial_ready"},
+                "webText": {"status": "ready", "textFile": str(text_file)},
+            }
+        )
+        self.assertEqual(cached_source["flag"], "--text-file")
+        self.assertEqual(cached_source["value"], str(text_file))
+        self.assertEqual(cached_source["sourceMode"], "cached_profile_fallback")
 
     def test_product_url_discovery_selects_product_links_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-url-discovery-test-"))
@@ -6881,11 +6956,61 @@ Prompt templates for product copy, SEO content, and video scripts.
         capture_action = next(item for item in report["actionQueue"] if item["id"] == "capture_missing_video_platform_evidence")
         self.assertIn("--platforms douyin,youtube", capture_action["command"])
         self.assertIn("--multi-query-sample-video-frames", capture_action["command"])
+        self.assertIn("--multi-query-query-count 1", capture_action["command"])
+        self.assertIn("--multi-query-top-n 5", capture_action["command"])
+        self.assertIn("--multi-query-video-sample-count 2", capture_action["command"])
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", capture_action["command"])
         synthetic_action = next(item for item in report["actionQueue"] if item["id"] == "run_synthetic_evidence_validation")
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", synthetic_action["command"])
         final_step = next(item for item in report["operatingSequence"] if item["step"] == "run_final_capability")
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", final_step["command"])
+
+    def test_final_capability_readiness_does_not_relist_observed_video_platform_as_missing(self) -> None:
+        module = load_script_module(FINAL_CAPABILITY_READINESS)
+        row = module.viral_research_row(
+            {
+                "input": {"platforms": "youtube,douyin,xiaohongshu"},
+                "summary": {
+                    "multiQueryDiscoveryRuns": 1,
+                    "multiQuerySearchCapturesReady": 3,
+                    "multiQueryMergedMaterials": 4,
+                    "multiQueryMergedCreators": 1,
+                    "multiQueryDeepEvidenceRuns": 1,
+                    "multiQueryVideoSampleFrames": 3,
+                },
+                "productBatch": {
+                    "promotionRuns": [
+                        {
+                            "multiQueryViralDiscovery": {
+                                "summary": {"platforms": ["youtube"]}
+                            }
+                        }
+                    ]
+                },
+            },
+            {
+                "requirements": [
+                    {
+                        "id": "viral_creator_content_research",
+                        "status": "partial_ready",
+                        "evidence": [],
+                        "missing": [],
+                        "limits": [],
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(row["metrics"]["observedVideoPlatforms"], ["youtube"])
+        self.assertEqual(row["metrics"]["missingVideoPlatformEvidence"], ["douyin", "xiaohongshu"])
+        self.assertIn(
+            "no browser-visible video frame samples were captured for requested video platforms: douyin, xiaohongshu",
+            row["missing"],
+        )
+        self.assertNotIn(
+            "no browser-visible video frame samples were captured for requested video platforms: douyin, xiaohongshu, youtube",
+            row["missing"],
+        )
 
     def test_final_capability_readiness_distinguishes_field_level_real_evidence(self) -> None:
         root_dir = Path(tempfile.mkdtemp(prefix="final-readiness-fields-test-"))

@@ -245,7 +245,7 @@ def run_promotion_cycles(
 
 
 def workflow_source(record: dict[str, Any]) -> dict[str, Any] | None:
-    if (record.get("intake") or {}).get("status") != "ready":
+    if (record.get("intake") or {}).get("status") not in {"ready", "partial_ready"}:
         return None
     snapshot = Path(str((record.get("browser") or {}).get("snapshot", "")))
     if record.get("sourceMode") == "browser_structured_snapshot" and snapshot.exists():
@@ -253,6 +253,8 @@ def workflow_source(record: dict[str, Any]) -> dict[str, Any] | None:
     text_file = Path(str((record.get("webText") or {}).get("textFile", "")))
     if record.get("sourceMode") == "web_text_fallback" and text_file.exists():
         return {"flag": "--text-file", "value": str(text_file), "sourceMode": "web_text_fallback"}
+    if record.get("sourceMode") == "cached_profile_fallback" and text_file.exists():
+        return {"flag": "--text-file", "value": str(text_file), "sourceMode": "cached_profile_fallback"}
     url = str(record.get("url", "")).strip()
     if url:
         return {"flag": "--product-url", "value": url, "sourceMode": "static_url_fallback"}
@@ -520,8 +522,12 @@ def build_report(
     summary = {
         "requestedUrls": (reader.get("summary") or {}).get("requestedUrls", len(reader.get("records", []))),
         "discoveredUrls": len(discovered_urls),
-        "readyProductProfiles": sum(1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") == "ready"),
-        "blockedProductProfiles": sum(1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") != "ready"),
+        "readyProductProfiles": sum(
+            1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") in {"ready", "partial_ready"}
+        ),
+        "blockedProductProfiles": sum(
+            1 for item in reader.get("records", []) if (item.get("intake") or {}).get("status") not in {"ready", "partial_ready"}
+        ),
         "readyPromotionRuns": sum(1 for item in runs if item.get("status") == "ready"),
         "failedPromotionRuns": sum(1 for item in runs if item.get("status") == "error"),
         "blockedPromotionRuns": sum(1 for item in runs if item.get("status") == "blocked"),

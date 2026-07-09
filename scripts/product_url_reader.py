@@ -119,8 +119,8 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
             "--out-dir",
             str(intake_dir),
         ]
-        profile_status = run_intake_command(steps, intake_dir, intake_command)
-        if profile_status.get("status") == "ready":
+        profile_status = run_intake_command(steps, intake_dir, intake_command, url)
+        if usable_profile_status(profile_status):
             source_mode = "browser_structured_snapshot"
     elif args.no_static_fallback:
         intake_command = []
@@ -133,11 +133,11 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
             "--out-dir",
             str(intake_dir),
         ]
-        profile_status = run_intake_command(steps, intake_dir, intake_command)
-        if profile_status.get("status") == "ready":
+        profile_status = run_intake_command(steps, intake_dir, intake_command, url)
+        if usable_profile_status(profile_status):
             source_mode = "static_url_fallback"
 
-    if profile_status.get("status") != "ready" and not args.disable_web_text_fallback:
+    if not usable_profile_status(profile_status) and not args.disable_web_text_fallback:
         web_text_status = fetch_web_text_fallback(args, item_dir, url)
         steps.append(web_text_status.get("_step", {}))
         if web_text_status.get("status") == "ready":
@@ -149,10 +149,10 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
                 "--out-dir",
                 str(intake_dir),
             ]
-            profile_status = run_intake_command(steps, intake_dir, intake_command)
-            if profile_status.get("status") == "ready":
+            profile_status = run_intake_command(steps, intake_dir, intake_command, url)
+            if usable_profile_status(profile_status):
                 source_mode = "web_text_fallback"
-    elif not intake_command and profile_status.get("status") != "ready":
+    elif not intake_command and not usable_profile_status(profile_status):
         profile_status = {
             "status": "blocked",
             "profile": "",
@@ -161,11 +161,20 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
         }
 
     profile = read_json(Path(profile_status.get("profile", ""))) if profile_status.get("profile") else {}
+    if profile_status.get("status") == "partial_ready" and profile:
+        cached_text_path = write_cached_profile_text(item_dir, profile)
+        web_text_status = {
+            "status": "ready",
+            "source": "cached_profile",
+            "textFile": str(cached_text_path),
+            "bytes": cached_text_path.stat().st_size,
+        }
+        source_mode = "cached_profile_fallback"
     return {
         "id": f"product-url-{index:03d}",
         "url": url,
         "status": record_status(browser_status, profile_status),
-        "sourceMode": source_mode if profile_status.get("status") == "ready" else "unavailable",
+        "sourceMode": source_mode if usable_profile_status(profile_status) else "unavailable",
         "workspace": str(item_dir),
         "browser": browser_status,
         "webText": public_web_text_status(web_text_status),
@@ -176,15 +185,29 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
     }
 
 
-def run_intake_command(steps: list[dict[str, Any]], intake_dir: Path, intake_command: list[str]) -> dict[str, Any]:
+def run_intake_command(
+    steps: list[dict[str, Any]], intake_dir: Path, intake_command: list[str], requested_url: str
+) -> dict[str, Any]:
     intake_step = run_command("product_intake", intake_command)
     steps.append(intake_step)
     profile_path = intake_dir / "product-profile.json"
+    profile = read_json(profile_path)
+    cached_profile_matches = bool(profile) and profile_matches_url(profile, requested_url)
+    if intake_step["exitCode"] == 0 and profile_path.exists():
+        status = "ready"
+        reason = ""
+    elif profile_path.exists() and cached_profile_matches:
+        status = "partial_ready"
+        reason = "Intake command failed, but a matching cached product profile is available."
+    else:
+        status = "error"
+        reason = ""
     return {
-        "status": "ready" if intake_step["exitCode"] == 0 and profile_path.exists() else "error",
+        "status": status,
         "profile": str(profile_path) if profile_path.exists() else "",
         "markdown": str(intake_dir / "product-profile.md") if (intake_dir / "product-profile.md").exists() else "",
         "exitCode": intake_step["exitCode"],
+        **({"reason": reason} if reason else {}),
     }
 
 
@@ -293,12 +316,14 @@ def build_report(args: argparse.Namespace, out_dir: Path, records: list[dict[str
             "browserStructuredProfiles": sum(1 for item in records if item["sourceMode"] == "browser_structured_snapshot"),
             "staticFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "static_url_fallback"),
             "webTextFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "web_text_fallback"),
+            "cachedProfileFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "cached_profile_fallback"),
         },
         "recommendedNextCommand": "Use records[].nextWorkflowCommand for the correct structured or static intake mode.",
         "guardrails": [
             "Read browser-visible product page evidence before product intake whenever Chromium is available.",
             "Static URL intake is only a fallback and may miss dynamic page content.",
             "Public web-reader text fallback is used only after browser/static intake fails and records its source.",
+            "Cached profile fallback is used only when a previously written profile matches the requested URL.",
             "Do not extract cookies, passwords, hidden tokens, private endpoints, or bypass login/captcha/risk controls.",
             "Treat pricing, testimonials, customer counts, and legal claims as assumptions unless the product page proves them.",
         ],
@@ -360,7 +385,7 @@ def run_command(name: str, command: list[str]) -> dict[str, Any]:
 def record_status(browser_status: dict[str, Any], profile_status: dict[str, Any]) -> str:
     if browser_status.get("status") == "ready" and profile_status.get("status") == "ready":
         return "ready"
-    if profile_status.get("status") == "ready":
+    if usable_profile_status(profile_status):
         return "partial_ready"
     return "blocked"
 
@@ -389,14 +414,14 @@ def summarize_profile(profile: dict[str, Any]) -> dict[str, Any]:
 
 
 def next_workflow_command(url: str, source_mode: str, snapshot_path: Path, text_path: Path, out_dir: Path, profile_status: dict[str, Any]) -> str:
-    if profile_status.get("status") != "ready":
+    if not usable_profile_status(profile_status):
         return ""
     if source_mode == "browser_structured_snapshot" and snapshot_path.exists():
         return (
             f"python scripts/run_promotion_workflow.py --structured-json \"{snapshot_path}\" "
             f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
         )
-    if source_mode == "web_text_fallback" and text_path.exists():
+    if source_mode in {"web_text_fallback", "cached_profile_fallback"} and text_path.exists():
         return (
             f"python scripts/run_promotion_workflow.py --text-file \"{text_path}\" "
             f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
@@ -405,6 +430,39 @@ def next_workflow_command(url: str, source_mode: str, snapshot_path: Path, text_
         f"python scripts/run_promotion_workflow.py --product-url \"{url}\" "
         f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
     )
+
+
+def usable_profile_status(profile_status: dict[str, Any]) -> bool:
+    return profile_status.get("status") in {"ready", "partial_ready"}
+
+
+def profile_matches_url(profile: dict[str, Any], requested_url: str) -> bool:
+    canonical = str(profile.get("canonicalUrl") or "").strip()
+    return bool(canonical) and normalize_url(canonical) == normalize_url(requested_url)
+
+
+def normalize_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url.strip())
+    scheme = parsed.scheme.lower()
+    host = (parsed.hostname or "").lower()
+    path = parsed.path.rstrip("/") or "/"
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{scheme}://{host}{path}{query}" if scheme and host else url.strip().rstrip("/")
+
+
+def write_cached_profile_text(item_dir: Path, profile: dict[str, Any]) -> Path:
+    text_path = item_dir / "cached-product-profile.md"
+    lines = [
+        f"Product: {profile.get('productName', '')}",
+        f"URL: {profile.get('canonicalUrl', '')}",
+        f"Description: {profile.get('valueProposition', '')}",
+        f"Pricing: {profile.get('pricing', '')}",
+        f"Audience: {', '.join(str(item) for item in profile.get('targetAudienceAssumptions', []) if item)}",
+        f"Pain points: {', '.join(str(item) for item in profile.get('painPointAssumptions', []) if item)}",
+        "Source: cached product profile from a previous matching URL intake.",
+    ]
+    text_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return text_path
 
 
 def read_json(path: Path) -> dict[str, Any]:

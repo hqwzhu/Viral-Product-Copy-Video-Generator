@@ -273,7 +273,7 @@ def viral_research_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -
         if requested_video_platforms:
             missing.append(
                 "no browser-visible video frame samples were captured for requested video platforms: "
-                + ", ".join(requested_video_platforms)
+                + ", ".join(missing_video_platforms)
             )
     elif final_run and (
         metrics["followUpImportedRecords"] > 0
@@ -963,9 +963,10 @@ def video_platform_runner_command(out_dir: Path, platforms: list[str], product_u
     return (
         f"python scripts/final_capability_runner.py --url \"{product_url}\" "
         f"--platforms {platform_arg} --run-follow-up-captures --capture-browser-assisted-follow-ups "
-        "--sample-video-frames --multi-query-run-follow-up-captures "
+        "--sample-video-frames --video-sample-count 2 --top-n 5 "
+        "--multi-query-query-count 1 --multi-query-top-n 5 --multi-query-run-follow-up-captures "
         "--multi-query-capture-browser-assisted-follow-ups --multi-query-sample-video-frames "
-        f"--video-platforms {platform_arg} --out-dir \"{out_dir}\""
+        f"--multi-query-video-sample-count 2 --video-platforms {platform_arg} --out-dir \"{out_dir}\""
     )
 
 
