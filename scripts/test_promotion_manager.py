@@ -3566,6 +3566,62 @@ Prompt templates for product copy, SEO content, and video scripts.
         recovery = json.loads(Path(record["metricsRecovery"]["report"]).read_text(encoding="utf-8"))
         self.assertEqual(recovery["metricSources"][0]["type"], "metrics_xlsx")
 
+    def test_automation_scheduler_passes_real_evidence_file_sources(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-evidence-command-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        module = load_script_module(AUTOMATION_SCHEDULER)
+        job = {
+            "metricsRecovery": {
+                "enabled": True,
+                "metricsCsv": "metrics.csv",
+                "metricsJson": ["metrics.json"],
+                "metricsText": "metrics.txt",
+                "metricsStructuredJson": "metrics-structured.json",
+                "businessText": "orders.txt",
+            },
+            "commentEvidenceCapture": {
+                "enabled": True,
+                "platform": "xiaohongshu",
+                "structuredJson": "comments-structured.json",
+                "htmlFile": "comments.html",
+                "textFile": "comments.txt",
+                "captureBrowserAssisted": True,
+                "installBrowserIfMissing": True,
+                "allowLocalhost": True,
+            },
+            "businessAttribution": {
+                "enabled": True,
+                "businessText": "orders.txt",
+                "publishedItemsJson": "published-items.json",
+            },
+        }
+        manifest_path = out_dir / "workflow-manifest.json"
+        recovery_command = module.build_metrics_recovery_command(job, out_dir / "run", out_dir, manifest_path, "")
+        self.assertIn("--metrics-csv", recovery_command)
+        self.assertIn(str((out_dir / "metrics.csv").resolve()), recovery_command)
+        self.assertIn("--metrics-json", recovery_command)
+        self.assertIn(str((out_dir / "metrics.json").resolve()), recovery_command)
+        self.assertIn("--metrics-text", recovery_command)
+        self.assertIn(str((out_dir / "metrics.txt").resolve()), recovery_command)
+        self.assertIn("--metrics-structured-json", recovery_command)
+        self.assertIn(str((out_dir / "metrics-structured.json").resolve()), recovery_command)
+        self.assertIn("--business-text", recovery_command)
+        self.assertIn(str((out_dir / "orders.txt").resolve()), recovery_command)
+
+        comment_command = module.build_comment_evidence_capture_command(job, out_dir / "run", out_dir)
+        for flag in ("--platform", "--structured-json", "--html-file", "--text-file", "--capture-browser-assisted", "--install-browser-if-missing", "--allow-localhost"):
+            self.assertIn(flag, comment_command)
+        self.assertIn("xiaohongshu", comment_command)
+        self.assertIn(str((out_dir / "comments-structured.json").resolve()), comment_command)
+        self.assertIn(str((out_dir / "comments.html").resolve()), comment_command)
+        self.assertIn(str((out_dir / "comments.txt").resolve()), comment_command)
+
+        attribution_command = module.build_business_attribution_command(job, out_dir / "run", out_dir)
+        self.assertIn("--business-text", attribution_command)
+        self.assertIn(str((out_dir / "orders.txt").resolve()), attribution_command)
+        self.assertIn("--published-items-json", attribution_command)
+        self.assertIn(str((out_dir / "published-items.json").resolve()), attribution_command)
+
     def test_automation_scheduler_runs_post_publish_metrics_capture_before_recovery(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-post-metrics-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -6759,6 +6815,62 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["summary"]["attributedRevenue"], 120.0)
         export = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution-export.json").read_text(encoding="utf-8"))
         self.assertEqual(float(export["records"][0]["revenue"]), 120.0)
+
+    def test_business_attribution_imports_text_orders_export(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="business-attribution-text-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_dir = out_dir / "reports/promotion-manager/published-items"
+        published_dir.mkdir(parents=True)
+        published_items_path = published_dir / "published-items.json"
+        published_items_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "xiaohongshu",
+                            "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                            "contentId": "note123",
+                            "title": "Launch Note",
+                            "publishStatus": "published",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        business_text = out_dir / "orders.txt"
+        business_text.write_text(
+            "\n".join(
+                [
+                    "title: Launch Note",
+                    "publishedUrl: https://www.xiaohongshu.com/explore/note123",
+                    "contentId: note123",
+                    "orders: 2",
+                    "revenue: 88.00",
+                    "clicks: 40",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(BUSINESS_ATTRIBUTION),
+                "--business-text",
+                str(business_text),
+                "--published-items-json",
+                str(published_items_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/business-attribution/business-attribution.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["sources"][0]["type"], "business_text")
+        self.assertEqual(report["summary"]["matchedRows"], 1)
+        self.assertEqual(report["summary"]["attributedOrders"], 2.0)
+        self.assertEqual(report["summary"]["attributedRevenue"], 88.0)
 
     def test_metrics_recovery_accepts_business_attribution_export(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="business-attribution-recovery-test-"))

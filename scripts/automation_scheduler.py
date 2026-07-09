@@ -111,9 +111,44 @@ def init_config(args: argparse.Namespace) -> None:
         "installBrowserIfMissing": args.install_browser_if_missing,
         "metrics": {},
         "postPublishMetricsCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
-        "commentEvidenceCapture": {"enabled": False, "limit": 20, "captureBrowserAssisted": False, "publishedItemsJson": [], "publishedUrls": []},
-        "businessAttribution": {"enabled": False, "businessCsv": [], "businessXlsx": [], "businessJson": [], "publishedItemsJson": [], "publishedUrls": []},
-        "metricsRecovery": {"enabled": False},
+        "commentEvidenceCapture": {
+            "enabled": False,
+            "limit": 20,
+            "platform": "auto",
+            "structuredJson": "",
+            "htmlFile": "",
+            "textFile": "",
+            "captureBrowserAssisted": False,
+            "installBrowserIfMissing": False,
+            "allowLocalhost": False,
+            "publishedItemsJson": [],
+            "publishedUrls": [],
+        },
+        "businessAttribution": {
+            "enabled": False,
+            "businessCsv": [],
+            "businessXlsx": [],
+            "businessJson": [],
+            "businessText": [],
+            "publishedItemsJson": [],
+            "publishedUrls": [],
+        },
+        "metricsRecovery": {
+            "enabled": False,
+            "metricsCsv": [],
+            "metricsXlsx": [],
+            "metricsJson": [],
+            "metricsText": [],
+            "metricsStructuredJson": [],
+            "businessCsv": [],
+            "businessXlsx": [],
+            "businessJson": [],
+            "businessText": [],
+            "publishedItemsJson": [],
+            "publishedUrls": [],
+            "githubRepos": [],
+            "youtubeVideoIds": [],
+        },
         "nextRoundOptimization": {"enabled": False},
         "publish": {"enabled": False, "mode": "queue_only", "execute": False, "approval": "", "douyin": {"videoFile": ""}},
         "browserPublishAssistant": {"enabled": False, "openBrowser": False, "platformPublishUrls": {}, "publishedUrls": [], "evidence": []},
@@ -689,9 +724,13 @@ def build_metrics_recovery_command(
     append_many(command, "--published-url", recovery.get("publishedUrls"))
     append_many(command, "--github-repo", recovery.get("githubRepos"))
     append_many(command, "--youtube-video-id", recovery.get("youtubeVideoIds"))
+    append_many(command, "--metrics-csv", recovery.get("metricsCsv"), base_dir)
     append_many(command, "--business-csv", recovery.get("businessCsv"), base_dir)
     append_many(command, "--business-xlsx", recovery.get("businessXlsx"), base_dir)
     append_many(command, "--metrics-xlsx", recovery.get("metricsXlsx"), base_dir)
+    append_many(command, "--metrics-json", recovery.get("metricsJson"), base_dir)
+    append_many(command, "--metrics-text", recovery.get("metricsText"), base_dir)
+    append_many(command, "--metrics-structured-json", recovery.get("metricsStructuredJson"), base_dir)
     append_many(command, "--business-json", recovery.get("businessJson"), base_dir)
     append_many(command, "--business-text", recovery.get("businessText"), base_dir)
     metric_export = (post_publish_capture_result or {}).get("metricExport")
@@ -794,6 +833,7 @@ def build_business_attribution_command(job: dict[str, Any], out_dir: Path, base_
     append_many(command, "--business-csv", attribution.get("businessCsv"), base_dir)
     append_many(command, "--business-xlsx", attribution.get("businessXlsx"), base_dir)
     append_many(command, "--business-json", attribution.get("businessJson"), base_dir)
+    append_many(command, "--business-text", attribution.get("businessText"), base_dir)
     append_many(command, "--published-items-json", attribution.get("publishedItemsJson"), base_dir)
     append_many(command, "--published-url", attribution.get("publishedUrls"))
     return command

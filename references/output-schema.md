@@ -680,15 +680,16 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 - `jobs[].creatorFollowUp.dryRun`: optional boolean that plans creator follow-up without fetching public APIs
 - `jobs[].competitorInformedContent.enabled`: optional boolean; `true` passes `--use-competitor-informed-content`, `false` passes `--skip-competitor-informed-content`
 - `jobs[].installBrowserIfMissing`: optional boolean that lets the workflow run the official Playwright Chromium install when `browserUrl` is used and Chromium is missing
-- `jobs[].metrics`: optional real-data source such as `csvFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
+- `jobs[].metrics`: optional workflow-time real-data source such as `csvFile`, `xlsxFile`, `jsonFile`, `textFile`, `publishedUrl`, `githubRepo`, or `youtubeVideoId`
 - `jobs[].metricsRecovery.enabled`: defaults to false; when true, the scheduler runs `scripts/metrics_recovery.py` after a successful workflow and optional publish queue
 - `jobs[].metricsRecovery.publishedItemsJson`: optional file path or list of file paths containing published item evidence
 - `jobs[].metricsRecovery.publishedUrls`: optional URL or list of URLs to inspect through supported official connectors
 - `jobs[].metricsRecovery.githubRepos`: optional GitHub repo or list of repos for public REST metrics
 - `jobs[].metricsRecovery.youtubeVideoIds`: optional YouTube video id or list of ids; requires `YOUTUBE_API_KEY` for live statistics
-- `jobs[].metricsRecovery.businessCsv`, `businessJson`, and `businessText`: optional export paths for orders, revenue, clicks, leads, or platform metrics
+- `jobs[].metricsRecovery.metricsCsv`, `metricsXlsx`, `metricsJson`, `metricsText`, and `metricsStructuredJson`: optional platform metric evidence files from exports, copied text, or Codex/browser structured snapshots
+- `jobs[].metricsRecovery.businessCsv`, `businessXlsx`, `businessJson`, and `businessText`: optional export paths for orders, revenue, clicks, leads, or platform metrics
 - `jobs[].businessAttribution.enabled`: optional boolean; when true, the scheduler runs `scripts/business_attribution.py` before metrics recovery and passes the attribution export into recovery
-- `jobs[].businessAttribution.businessCsv` and `businessJson`: optional order/revenue export paths with URL, UTM content, referrer, content ID, title, or campaign fields
+- `jobs[].businessAttribution.businessCsv`, `businessXlsx`, `businessJson`, and `businessText`: optional order/revenue export paths with URL, UTM content, referrer, content ID, title, or campaign fields
 - `jobs[].businessAttribution.publishedItemsJson` and `publishedUrls`: optional proven published content evidence used as attribution targets
 - `jobs[].nextRoundOptimization.enabled`: optional boolean; when true, the scheduler runs `scripts/next_round_optimizer.py` after metrics/comment/business recovery
 - `jobs[].nextRoundOptimization.metricsRecoveryJson`, `commentEvidenceJson`, and `businessAttributionJson`: optional override paths when the optimizer should use external evidence files instead of the reports from the current scheduled run

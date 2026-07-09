@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--business-csv", action="append", default=[], help="CSV export containing order/revenue rows.")
     parser.add_argument("--business-xlsx", action="append", default=[], help="Excel .xlsx export containing order/revenue rows.")
     parser.add_argument("--business-json", action="append", default=[], help="JSON export containing order/revenue rows.")
+    parser.add_argument("--business-text", action="append", default=[], help="Text evidence containing order/revenue rows.")
     parser.add_argument("--published-items-json", action="append", default=[], help="Published items JSON evidence.")
     parser.add_argument("--published-url", action="append", default=[], help="Published URL or platform=url evidence.")
     parser.add_argument("--out-dir", default="./promotion-output")
@@ -113,6 +114,11 @@ def load_order_rows(args: argparse.Namespace) -> tuple[list[dict[str, Any]], lis
         loaded = rows_from_json(path)
         rows.extend(loaded)
         sources.append({"type": "business_json", "source": str(path), "status": "loaded", "rowCount": len(loaded)})
+    for value in args.business_text:
+        path = Path(value)
+        loaded = rows_from_text(path)
+        rows.extend(loaded)
+        sources.append({"type": "business_text", "source": str(path), "status": "loaded", "rowCount": len(loaded)})
     return rows, sources
 
 
@@ -138,6 +144,24 @@ def rows_from_xlsx(path: Path) -> list[dict[str, Any]]:
 def rows_from_json(path: Path) -> list[dict[str, Any]]:
     data = read_json(path)
     return [normalize_order_row(row, str(path), index) for index, row in enumerate(list_records(data), start=1) if isinstance(row, dict)]
+
+
+def rows_from_text(path: Path) -> list[dict[str, Any]]:
+    record = metrics_intake.record_from_text(path.read_text(encoding="utf-8"), str(path), "auto")
+    metrics = record.get("metrics") or {}
+    if not any(metric_raw(metrics, field) for field in ("orders", "revenue", "clicks", "leads")):
+        return []
+    row = {
+        "platform": record.get("platform", ""),
+        "publishedUrl": record.get("publishedUrl", ""),
+        "contentId": record.get("contentId", ""),
+        "title": record.get("title", ""),
+        "orders": metric_raw(metrics, "orders"),
+        "revenue": metric_raw(metrics, "revenue"),
+        "clicks": metric_raw(metrics, "clicks"),
+        "leads": metric_raw(metrics, "leads"),
+    }
+    return [normalize_order_row(row, str(path), 1)]
 
 
 def normalize_order_row(row: dict[str, Any], source: str, index: int) -> dict[str, Any]:
