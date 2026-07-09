@@ -78,6 +78,17 @@ python scripts\browser_publish_assistant.py `
   --out-dir ".\promotion-output"
 ```
 
+Build one launch unlock pack for platform access, publish setup, browser-assisted publishing, and real evidence collection:
+
+```powershell
+python scripts\launch_unlock_pack.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
+  --out-dir ".\promotion-output"
+```
+
+The unlock pack writes `reports/promotion-manager/launch-unlock/launch-unlock.json`, a checklist, and copy-ready next commands. It records only credential variable names and setup status, never secret values.
+
 Run a browser-assisted publish session. This prepares payloads, optionally fills visible fields, writes screenshots, and stops before the final publish action:
 
 ```powershell

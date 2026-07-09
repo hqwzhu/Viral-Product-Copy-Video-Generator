@@ -76,6 +76,17 @@ python scripts\browser_publish_assistant.py `
   --out-dir ".\promotion-output"
 ```
 
+生成发布与真实证据解锁包：
+
+```powershell
+python scripts\launch_unlock_pack.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
+  --out-dir ".\promotion-output"
+```
+
+该解锁包会输出 `reports/promotion-manager/launch-unlock/launch-unlock.json`、检查清单和下一步命令，只记录凭证变量名和准备状态，不保存真实密钥值。
+
 浏览器辅助发布会准备 payload、可选填写可见字段、写截图，并在最终发布前停止：
 
 ```powershell

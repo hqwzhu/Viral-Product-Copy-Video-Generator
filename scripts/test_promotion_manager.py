@@ -48,6 +48,7 @@ PUBLISH_URL_CAPTURE = ROOT / "scripts" / "publish_url_capture.py"
 POST_PUBLISH_METRICS_CAPTURE = ROOT / "scripts" / "post_publish_metrics_capture.py"
 COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
 PERFORMANCE_MONITOR = ROOT / "scripts" / "performance_monitor.py"
+LAUNCH_UNLOCK_PACK = ROOT / "scripts" / "launch_unlock_pack.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
@@ -5928,6 +5929,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Subscription estimate", popup)
         self.assertIn("Command type", popup)
         self.assertIn("Browser publish session", popup)
+        self.assertIn("Launch unlock pack", popup)
         self.assertIn("Real evidence inbox", popup)
         self.assertIn("Performance monitor", popup)
         self.assertIn("Final readiness audit", popup)
@@ -5963,11 +5965,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("COST_PER_CREDIT", script)
         self.assertIn("skill_entry.py", script)
         self.assertIn("browser_publish_session.py", script)
+        self.assertIn("launch_unlock_pack.py", script)
         self.assertIn("real_evidence_inbox.py", script)
         self.assertIn("performance_monitor.py", script)
         self.assertIn("final_capability_readiness.py", script)
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
+        self.assertIn("launch_unlock_pack", script)
         self.assertIn("real_evidence_inbox", script)
         self.assertIn("performance_monitor", script)
         self.assertIn("automation_config_init", script)
@@ -5984,6 +5988,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("hostedRunEndpoint", contract)
         self.assertEqual(contract["creditCosts"]["standard_run"], 4)
         self.assertIn("browser_publish_session", contract["creditCosts"])
+        self.assertIn("launch_unlock_pack", contract["creditCosts"])
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
         self.assertIn("performance_monitor", contract["creditCosts"])
         self.assertIn("final_readiness_audit", contract["creditCosts"])
@@ -6205,6 +6210,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
         self.assertIn("scripts/billing_contract_simulator.py", files)
+        self.assertIn("scripts/launch_unlock_pack.py", files)
 
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
@@ -8524,6 +8530,131 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("revenue", metrics_template)
         self.assertIn("utm_content", business_template)
         self.assertIn("xhs-001", business_template)
+
+    def test_launch_unlock_pack_orchestrates_external_gate_setup_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="launch-unlock-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        queue_path = out_dir / "reports/promotion-manager/publish-queue/publish-queue.json"
+        readiness_path = out_dir / "reports/promotion-manager/publish-readiness/publish-readiness.json"
+        queue_path.parent.mkdir(parents=True)
+        readiness_path.parent.mkdir(parents=True)
+        youtube_draft = out_dir / "youtube-draft.md"
+        xhs_draft = out_dir / "xhs-draft.md"
+        youtube_draft.write_text("- Title: YouTube launch draft\n- Body: Launch copy\n", encoding="utf-8")
+        xhs_draft.write_text("- Title: Xiaohongshu note draft\n- Body: Note copy\n", encoding="utf-8")
+        secret_value = "secret-value-must-not-appear-in-launch-unlock"
+        queue_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "platform": "youtube",
+                            "status": "dry_run",
+                            "publishMode": "official_api_publish",
+                            "contentDraft": str(youtube_draft),
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/?utm_source=youtube&utm_content=yt-001",
+                                "contentId": "yt-001",
+                                "utm": {"utm_source": "youtube", "utm_medium": "video", "utm_campaign": "launch", "utm_content": "yt-001"},
+                            },
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "status": "queued_manual",
+                            "publishMode": "manual_publish_required",
+                            "contentDraft": str(xhs_draft),
+                            "trackingPlan": {
+                                "trackedUrl": "https://example.com/?utm_source=xiaohongshu&utm_content=xhs-001",
+                                "contentId": "xhs-001",
+                                "utm": {"utm_source": "xiaohongshu", "utm_medium": "social", "utm_campaign": "launch", "utm_content": "xhs-001"},
+                            },
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-09",
+                    "status": "partial_ready",
+                    "inputs": {
+                        "publishQueue": str(queue_path),
+                        "youtubeVideoFile": "./youtube.mp4",
+                    },
+                    "records": [
+                        {
+                            "platform": "youtube",
+                            "publishMode": "official_api_publish",
+                            "readiness": "missing_credentials",
+                            "credentialStatus": {
+                                "requiredAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+                                "alternativeAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "missingEnv": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "presentEnv": [],
+                                "valuesStored": False,
+                            },
+                            "targetStatus": {"ready": True, "field": "youtubeVideoFile", "missing": ""},
+                            "approvalStatus": {"required": True, "approvalProvided": False},
+                            "nextAction": "Set required YouTube OAuth environment variables.",
+                        },
+                        {
+                            "platform": "xiaohongshu",
+                            "publishMode": "manual_publish_required",
+                            "readiness": "manual_publish_required",
+                            "credentialStatus": {"missingEnv": [], "presentEnv": [], "valuesStored": False},
+                            "targetStatus": {"ready": True, "field": "", "missing": ""},
+                            "approvalStatus": {"required": True, "approvalProvided": False},
+                            "nextAction": "Use browser-assisted publishing.",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(LAUNCH_UNLOCK_PACK),
+                "--publish-queue",
+                str(queue_path),
+                "--publish-readiness",
+                str(readiness_path),
+                "--platforms",
+                "youtube,xiaohongshu",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env={**os.environ, "YOUTUBE_OAUTH_ACCESS_TOKEN": secret_value},
+        )
+
+        report_path = out_dir / "reports/promotion-manager/launch-unlock/launch-unlock.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_value, report_text)
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready_unlock_pack")
+        self.assertEqual(report["summary"]["gates"], 5)
+        self.assertTrue(report["sourceReports"]["platformAccess"]["exists"])
+        self.assertTrue(report["sourceReports"]["publishSetup"]["exists"])
+        self.assertTrue(report["sourceReports"]["realEvidenceSetup"]["exists"])
+        self.assertTrue(report["sourceReports"]["browserPublishAssistant"]["exists"])
+        gate_ids = {item["id"] for item in report["gates"]}
+        self.assertIn("publish_authorization", gate_ids)
+        self.assertIn("browser_assisted_publish", gate_ids)
+        self.assertIn("real_evidence_collection", gate_ids)
+        command_purposes = {item["purpose"] for item in report["nextCommands"]}
+        self.assertIn("browser_publish_session", command_purposes)
+        self.assertIn("performance_monitor", command_purposes)
+        self.assertTrue(Path(report["artifacts"]["checklist"]).exists())
+        self.assertTrue(Path(report["artifacts"]["nextActionCommands"]).exists())
+        self.assertTrue((out_dir / "reports/promotion-manager/launch-unlock/launch-unlock.md").exists())
+        self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN=", (out_dir / "reports/promotion-manager/publish-setup/publish-credentials.example.env").read_text(encoding="utf-8"))
 
     def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-douyin-test-"))

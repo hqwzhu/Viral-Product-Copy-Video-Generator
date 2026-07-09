@@ -43,6 +43,17 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
+生成发布与真实证据解锁包：
+
+```powershell
+python scripts\launch_unlock_pack.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
+  --out-dir ".\promotion-output"
+```
+
+该解锁包会生成平台授权、凭证变量名、浏览器辅助发布、真实数据模板和下一步命令清单；它不会读取或保存真实密钥，也不会绕过登录、验证码、风控或最终发布确认。
+
 发布后，先登记真实 URL，再运行性能监控：
 
 ```powershell

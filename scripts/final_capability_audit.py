@@ -42,6 +42,7 @@ SCRIPT_REQUIREMENTS = {
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
     "publish_setup_assistant": "publish_setup_assistant.py",
+    "launch_unlock_pack": "launch_unlock_pack.py",
     "browser_publish_assistant": "browser_publish_assistant.py",
     "browser_publish_form_fill": "browser_publish_form_fill.py",
     "browser_publish_session": "browser_publish_session.py",
@@ -479,6 +480,7 @@ def requirement_status(
                     "publish_queue",
                     "publish_readiness",
                     "publish_setup_assistant",
+                    "launch_unlock_pack",
                     "browser_publish_assistant",
                     "browser_publish_form_fill",
                     "browser_publish_session",
@@ -507,6 +509,7 @@ def requirement_status(
                     "comment_evidence_capture",
                     "business_attribution",
                     "real_evidence_inbox",
+                    "launch_unlock_pack",
                     "performance_monitor",
                     "metrics_intake",
                     "metric_parsing",
@@ -524,7 +527,10 @@ def requirement_status(
             "id": "retrospective_next_round_optimization",
             "label": "Turn real metrics, comments, orders, and revenue into next-round content and publish actions",
             "status": "ready" if optimization_ready else "not_ready",
-            "evidence": scripts_present(scripts, ["next_round_optimizer", "metrics_recovery", "comment_evidence_capture", "business_attribution", "performance_monitor"]),
+            "evidence": scripts_present(
+                scripts,
+                ["next_round_optimizer", "metrics_recovery", "comment_evidence_capture", "business_attribution", "performance_monitor", "launch_unlock_pack"],
+            ),
             "missing": [] if optimization_ready else ["next_round_optimizer.py"],
             "limits": [
                 "The optimizer uses recovered evidence only and outputs waiting_real_data when metrics, comments, and business attribution are absent.",
@@ -670,6 +676,7 @@ def browser_extension_status() -> dict[str, Any]:
             "browser_publish_session",
             "real_evidence_inbox",
             "performance_monitor",
+            "launch_unlock_pack",
             "final_readiness_audit",
             "automation_config_init",
             "automation_due_run",
@@ -750,11 +757,13 @@ def browser_extension_status() -> dict[str, Any]:
             "browser_publish_session.py",
             "real_evidence_inbox.py",
             "performance_monitor.py",
+            "launch_unlock_pack.py",
             "final_capability_readiness.py",
             "automation_scheduler.py",
             "browser_publish_session",
             "real_evidence_inbox",
             "performance_monitor",
+            "launch_unlock_pack",
             "final_readiness_audit",
             "automation_config_init",
             "automation_due_run",
@@ -1021,6 +1030,15 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
             "command": (
                 f"python scripts/publish_setup_assistant.py --publish-readiness "
                 f"\"{out_dir}/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}\""
+            ),
+        },
+        {
+            "purpose": "build_launch_unlock_pack",
+            "command": (
+                f"python scripts/launch_unlock_pack.py --publish-queue "
+                f"\"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" "
+                f"--publish-readiness \"{out_dir}/reports/promotion-manager/publish-readiness/publish-readiness.json\" "
+                f"--out-dir \"{out_dir}\""
             ),
         },
         {

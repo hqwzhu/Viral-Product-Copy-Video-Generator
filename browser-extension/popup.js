@@ -17,6 +17,7 @@ const COST_PER_CREDIT = 0.35;
 const COMMAND_LABELS = {
   skill_entry: "Skill run",
   browser_publish_session: "Publish session",
+  launch_unlock_pack: "Launch unlock pack",
   real_evidence_inbox: "Evidence inbox",
   performance_monitor: "Performance monitor",
   final_readiness: "Readiness audit",
@@ -172,6 +173,10 @@ function generateCommand() {
     generateBrowserPublishSessionCommand();
     return;
   }
+  if (commandType === "launch_unlock_pack") {
+    generateLaunchUnlockPackCommand();
+    return;
+  }
   if (commandType === "real_evidence_inbox") {
     generateRealEvidenceInboxCommand();
     return;
@@ -262,6 +267,25 @@ function generateBrowserPublishSessionCommand() {
   }
   if (els.allowLocalhost.checked) {
     args.push("--allow-localhost");
+  }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateLaunchUnlockPackCommand() {
+  const queuePath = els.publishQueue.value.trim();
+  if (!queuePath) {
+    els.commandOutput.value = "Enter a publish-queue.json path first.";
+    return;
+  }
+  const platforms = selectedPlatforms();
+  const args = [
+    "python scripts\\launch_unlock_pack.py",
+    `--publish-queue ${quote(queuePath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  if (platforms.length) {
+    args.push(`--platforms ${platforms.join(",")}`);
   }
   els.commandOutput.value = args.join(" ");
   updateEstimate();
@@ -567,7 +591,7 @@ async function buildHostedRunPayload() {
   if (requiresPlatforms(els.commandType.value) && !selectedPlatforms().length) {
     throw new Error("Select at least one platform.");
   }
-  if (els.commandType.value === "browser_publish_session" && !els.publishQueue.value.trim()) {
+  if ((els.commandType.value === "browser_publish_session" || els.commandType.value === "launch_unlock_pack") && !els.publishQueue.value.trim()) {
     throw new Error("Enter a publish-queue.json path first.");
   }
   if (els.commandType.value === "real_evidence_inbox" && !els.evidenceInbox.value.trim()) {
@@ -695,6 +719,10 @@ function estimateCredits() {
     workflowType = "browser_publish_session";
     creditsPerRun = 2;
   }
+  if (commandType === "launch_unlock_pack") {
+    workflowType = "launch_unlock_pack";
+    creditsPerRun = 2;
+  }
   if (commandType === "real_evidence_inbox") {
     workflowType = "real_evidence_inbox";
     creditsPerRun = 2;
@@ -745,7 +773,7 @@ function handleCommandTypeChange() {
 }
 
 function commandScope(commandType) {
-  if (commandType === "browser_publish_session") {
+  if (commandType === "browser_publish_session" || commandType === "launch_unlock_pack") {
     return "publish";
   }
   if (commandType === "real_evidence_inbox") {

@@ -101,6 +101,10 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         + glob_existing(out_dir, "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
     )
+    launch_unlock_paths = unique_paths(
+        glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
+        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
+    )
     return {
         "finalRunPath": final_run_path,
         "finalAuditPath": final_audit_path,
@@ -109,6 +113,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishReadinessPaths": publish_readiness_paths,
         "publishSetupPaths": publish_setup_paths,
         "realEvidenceSetupPaths": real_evidence_setup_paths,
+        "launchUnlockPaths": launch_unlock_paths,
         "finalRun": read_json(final_run_path),
         "finalAudit": read_json(final_audit_path),
         "platformAccess": read_json(platform_access_path),
@@ -116,6 +121,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "publishReadiness": [read_json(path) for path in publish_readiness_paths],
         "publishSetup": [read_json(path) for path in publish_setup_paths],
         "realEvidenceSetup": [read_json(path) for path in real_evidence_setup_paths],
+        "launchUnlock": [read_json(path) for path in launch_unlock_paths],
     }
 
 
@@ -472,6 +478,14 @@ def build_action_queue(
     publish_status = by_id["official_or_browser_assisted_publish"]["status"]
     if publish_status.startswith("partial_ready"):
         actions.extend(publish_actions(out_dir, readiness_reports, setup_reports))
+        actions.append(
+            action(
+                41,
+                "build_launch_unlock_pack",
+                "Build one setup pack for platform access, publish setup, browser-assisted publishing, and real evidence collection.",
+                launch_unlock_command(out_dir),
+            )
+        )
     if publish_status.startswith("blocked") and not readiness_reports:
         actions.append(
             action(
@@ -486,6 +500,14 @@ def build_action_queue(
                 ),
             )
         )
+        actions.append(
+            action(
+                41,
+                "build_launch_unlock_pack",
+                "After the publish queue exists, build one setup pack for platform access, publishing gates, and real evidence collection.",
+                launch_unlock_command(out_dir),
+            )
+        )
     metrics_status = by_id["real_metrics_comments_orders_revenue"]["status"]
     if metrics_status.startswith("waiting_real_data"):
         evidence_setup_targets = sum(
@@ -498,6 +520,14 @@ def build_action_queue(
                     "build_real_evidence_setup",
                     "Generate platform metrics, comment, published URL, and business attribution templates before collecting real data.",
                     f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\"",
+                )
+            )
+            actions.append(
+                action(
+                    58,
+                    "build_launch_unlock_pack",
+                    "Build the launch unlock pack before collecting real published URL, metric, comment, order, and revenue evidence.",
+                    launch_unlock_command(out_dir),
                 )
             )
         actions.append(
@@ -677,6 +707,15 @@ def browser_publish_session_command(prepare_command: str) -> str:
     return command
 
 
+def launch_unlock_command(out_dir: Path) -> str:
+    return (
+        f"python scripts/launch_unlock_pack.py --publish-queue "
+        f"\"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" "
+        f"--publish-readiness \"{out_dir}/reports/promotion-manager/publish-readiness/publish-readiness.json\" "
+        f"--out-dir \"{out_dir}\""
+    )
+
+
 def action(priority: int, action_id: str, description: str, command: str, approval: str = "") -> dict[str, Any]:
     return {
         "priority": priority,
@@ -760,6 +799,10 @@ def operating_sequence(out_dir: Path) -> list[dict[str, str]]:
             "command": f"python scripts/publish_setup_assistant.py --out-dir \"{out_dir}\"",
         },
         {
+            "step": "build_launch_unlock_pack",
+            "command": launch_unlock_command(out_dir),
+        },
+        {
             "step": "prepare_browser_publish",
             "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}\"",
         },
@@ -796,6 +839,7 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
         "publishReadiness": [report_source(path) for path in sources.get("publishReadinessPaths", [])],
         "publishSetup": [report_source(path) for path in sources.get("publishSetupPaths", [])],
         "realEvidenceSetup": [report_source(path) for path in sources.get("realEvidenceSetupPaths", [])],
+        "launchUnlock": [report_source(path) for path in sources.get("launchUnlockPaths", [])],
     }
 
 

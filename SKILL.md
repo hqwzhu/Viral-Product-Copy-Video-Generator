@@ -34,7 +34,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, launch unlock packs, real evidence inbox recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
 To validate the paid-subscription contract locally before deploying a backend:
 
@@ -751,6 +751,17 @@ python scripts/real_evidence_setup.py \
   --out-dir "./promotion-output"
 ```
 
+To build one safe launch unlock pack for platform access, publish setup, browser-assisted publishing, and real evidence collection:
+
+```bash
+python scripts/launch_unlock_pack.py \
+  --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
+  --publish-readiness "./promotion-output/reports/promotion-manager/publish-readiness/publish-readiness.json" \
+  --out-dir "./promotion-output"
+```
+
+The unlock pack writes a checklist, next-action commands, credential variable-name templates, browser payload references, and real-evidence templates. It does not read or store secret values and does not bypass account authorization.
+
 To prepare browser-assisted publishing payloads for Zhihu, Xiaohongshu, Douyin, TikTok, or other non-official direct-publish platforms:
 
 ```bash
@@ -892,6 +903,7 @@ The command writes:
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
 - `reports/promotion-manager/publish-setup/publish-setup.{json,md}`, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}` when `scripts/publish_setup_assistant.py` turns readiness into credential names, target requirements, official setup references, approval gates, and next commands without storing secret values.
 - `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, `templates/*`, and `commands/import-real-evidence.ps1` when `scripts/real_evidence_setup.py` creates fillable platform metrics, comment, published URL, and business attribution evidence templates.
+- `reports/promotion-manager/launch-unlock/launch-unlock.{json,md}`, `launch-unlock-checklist.md`, and `commands/launch-unlock-next-actions.ps1` when `scripts/launch_unlock_pack.py` combines platform access, publish setup, browser-assisted publishing, and real-evidence setup into one safe operator pack.
 - `reports/promotion-manager/real-evidence-inbox/real-evidence-inbox.{json,md}` and normalized helper files when `scripts/real_evidence_inbox.py` scans a local evidence folder, registers published URLs, imports metrics/comments/orders/revenue, and runs next-round optimization.
 - `reports/promotion-manager/browser-publish/browser-publish-assistant.{json,md}` and `payloads/*` when `scripts/browser_publish_assistant.py` prepares user-visible publish payloads, form-fill helpers, browser form-fill commands, checklists, and optional real URL registration for manual/browser-assisted platforms.
 - `reports/promotion-manager/browser-publish/browser-form-fill.{json,md}` and `browser-form-fill.png` when `scripts/browser_publish_form_fill.py` fills visible publisher fields from one prepared payload and stops before final publish.
@@ -1009,6 +1021,7 @@ Use `scripts/youtube_oauth_publish.py` when the user needs the full YouTube OAut
 Use `scripts/publish_queue.py` after a workflow run to convert publish packs into executable GitHub/YouTube dry-runs, Douyin official dry-runs when `--douyin-video-file` is supplied, plus manual/browser-assisted queue records for Zhihu, Xiaohongshu, and other unsupported direct-publish platforms.
 Use `scripts/publish_readiness_runner.py` after a workflow run or existing publish queue to produce a machine-checkable readiness report before execution. It may build the guarded queue first with `--build-queue`; it records credential presence only by environment variable name and still requires `--execute-publish --approval I_APPROVE_PUBLISH` before official writes. `scripts/final_capability_runner.py` and `scripts/skill_entry.py` can pass the same gated execution request down to publish readiness.
 Use `scripts/publish_setup_assistant.py` after publish readiness to write a publish setup kit: platform-by-platform credential environment variable names, target gaps, official setup references, approval gates, rerun/execution commands, `publish-credentials.example.env`, `publish-setup-checklist.md`, and `platform-setup-guide.{json,md}`. It never writes credential values.
+Use `scripts/launch_unlock_pack.py` after publish readiness or a publish queue exists when the operator wants one consolidated safe setup package. It runs platform access audit, publish setup, real evidence setup, browser publish payload preparation, and writes a launch checklist plus next commands without reading credential values or performing platform writes.
 Use `scripts/browser_publish_assistant.py` after `publish_queue.py` to prepare browser-assisted payload files, platform entry URLs, generic form-fill helper scripts, browser form-fill commands, and post-publish URL registration commands for Zhihu, Xiaohongshu, Douyin, TikTok, or similar platforms. It may open publisher entry URLs in the user's default browser with `--open-browser`, but it must not auto-login, solve captcha, or click the final publish button.
 Use `scripts/browser_publish_form_fill.py` only on a prepared payload JSON when the user wants Codex to fill visible publisher fields. It writes a screenshot and report, does not submit the form, and must stop for login, captcha, risk control, account verification, or final publish.
 Use `scripts/platform_access_audit.py` when you need a machine-readable official access boundary report for YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, and TikTok before deciding whether a platform can be automated or must remain manual/browser-assisted. Add `--check-live` when the decision depends on current official documentation; live reachability is evidence for documentation existence, not account authorization.
@@ -1114,6 +1127,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/publish_readiness_runner.py`: publish readiness auditor for queue status, target info, credentials, approval, and per-platform next actions without storing secret values.
 - `scripts/publish_setup_assistant.py`: readiness-to-setup-kit generator that writes credential variable names, target gaps, official setup references, approval commands, an env template, checklist, and platform setup guide without storing secret values.
 - `scripts/real_evidence_setup.py`: publish-queue-to-evidence-kit generator that writes platform metric, comment, published URL, business attribution, structured snapshot templates, and safe import commands without storing secrets or fabricating data.
+- `scripts/launch_unlock_pack.py`: unified safe setup pack builder for external launch gates; it orchestrates platform access audit, publish setup, real evidence setup, browser publish payload preparation, checklist, and next commands without storing secrets.
 - `scripts/browser_publish_assistant.py`: user-visible browser-assisted publishing payload preparer and real published URL registrar for platforms without verified direct API publishing.
 - `scripts/browser_publish_form_fill.py`: controlled Playwright helper that fills visible publisher fields from a prepared payload, screenshots the result, and stops before final publish.
 - `scripts/browser_publish_session.py`: session-level browser-assisted publisher that runs payload preparation, optional visible-field form fill, screenshots, final user-action checklist, URL registration commands, and evidence inbox command.

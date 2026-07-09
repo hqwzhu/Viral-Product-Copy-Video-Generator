@@ -24,10 +24,10 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Product URL reading | Ready | Browser snapshots, structured JSON intake, static fallback, URL discovery, and batch runner are included. |
 | Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
 | Copy and video generation | Ready | Platform-native copy and ffmpeg MP4 rendering are included. Voiceover can use an audio file or Windows review-quality TTS. |
-| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
+| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can run a post-publish performance monitor or import an evidence inbox, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, hosted-run request, and webhook contract locally before a real payment backend is deployed. |
+| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, hosted-run request, and webhook contract locally before a real payment backend is deployed. |
 
 ## Install
 
@@ -106,6 +106,17 @@ python scripts\final_capability_audit.py --out-dir ".\promotion-output"
 python scripts\self_evolution_audit.py --out-dir ".\promotion-output"
 python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 ```
+
+Build one launch unlock pack for platform access, publish setup, browser-assisted publishing, and real evidence collection:
+
+```powershell
+python scripts\launch_unlock_pack.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
+  --out-dir ".\promotion-output"
+```
+
+The unlock pack writes a checklist, next-action commands, credential variable-name templates, browser payload references, and real-evidence templates. It does not read or store secret values and does not bypass account authorization.
 
 After publishing, put real evidence files into a local inbox and recover the loop:
 
@@ -259,6 +270,15 @@ Browser-assisted publishing payloads:
 ```powershell
 python scripts\browser_publish_assistant.py `
   --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --out-dir ".\promotion-output"
+```
+
+Launch unlock pack for publish and evidence gates:
+
+```powershell
+python scripts\launch_unlock_pack.py `
+  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
+  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
   --out-dir ".\promotion-output"
 ```
 

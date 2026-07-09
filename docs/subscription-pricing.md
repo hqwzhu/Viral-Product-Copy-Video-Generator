@@ -39,6 +39,7 @@ Use `safety_multiplier = 1.6` at launch until real logs are available.
 | Deep strategy run | Research run plus high-quality strategic review | 250K input, 80K output on GPT-5.5 tier | About 5.90 USD |
 | Hosted MP4 add-on | Hosted render, storage, and download | No fixed token cost | Price separately if ENHE hosts compute |
 | Browser publish session | Payload preparation, visible-field form fill coordination, screenshots, and post-publish commands | Mostly local/browser automation plus hosted state | About 0.20 USD |
+| Launch unlock pack | Platform access audit, publish setup kit, browser-assisted payload references, real-evidence templates, checklist, and next commands | Mostly local orchestration plus hosted state | About 0.30 USD |
 | Real evidence inbox | Normalize published URLs, metric exports, comments, orders, revenue, and next-round recovery commands | Low hosted model usage unless ENHE adds hosted analysis | About 0.35 USD |
 | Performance monitor | Rerun public metric capture, comment evidence capture, optional attribution, recovery, next-round optimization, and history snapshot | Mostly local/browser-visible capture plus hosted orchestration state | About 0.35 USD |
 | Final readiness audit | Merge generated reports into the final capability matrix | No heavy hosted model call | About 0.10 USD |
@@ -58,6 +59,7 @@ Credits prevent heavy users from creating losses.
 | Deep strategy run | 15 |
 | Hosted MP4 render | 3 |
 | Browser publish session | 2 |
+| Launch unlock pack | 2 |
 | Real evidence inbox | 2 |
 | Performance monitor | 2 |
 | Final readiness audit | 1 |
