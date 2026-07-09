@@ -18,6 +18,7 @@ PRODUCT_BATCH_RUNNER = SCRIPTS / "product_batch_runner.py"
 PUBLISH_READINESS = SCRIPTS / "publish_readiness_runner.py"
 PUBLISH_SETUP_ASSISTANT = SCRIPTS / "publish_setup_assistant.py"
 REAL_EVIDENCE_SETUP = SCRIPTS / "real_evidence_setup.py"
+LAUNCH_UNLOCK_PACK = SCRIPTS / "launch_unlock_pack.py"
 BROWSER_PUBLISH_ASSISTANT = SCRIPTS / "browser_publish_assistant.py"
 BROWSER_PUBLISH_FORM_FILL = SCRIPTS / "browser_publish_form_fill.py"
 PLATFORM_ACCESS_AUDIT = SCRIPTS / "platform_access_audit.py"
@@ -41,6 +42,7 @@ def main() -> None:
     real_evidence_setup = run_real_evidence_setup(args, batch, publish_readiness, steps)
     browser_publish = run_browser_publish_assistant(args, batch, steps)
     browser_form_fill = run_browser_form_fill(args, browser_publish, steps)
+    launch_unlock = run_launch_unlock_pack(args, batch, publish_readiness, steps)
     audits = run_audits(args, out_dir, steps)
     cycle_evidence = collect_cycle_evidence(batch)
     report = build_report(
@@ -52,6 +54,7 @@ def main() -> None:
         real_evidence_setup,
         browser_publish,
         browser_form_fill,
+        launch_unlock,
         cycle_evidence,
         audits,
         steps,
@@ -144,6 +147,7 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--skip-publish-readiness", action="store_true")
     publish.add_argument("--skip-publish-setup-assistant", action="store_true")
     publish.add_argument("--skip-browser-publish-assistant", action="store_true")
+    publish.add_argument("--skip-launch-unlock-pack", action="store_true")
     publish.add_argument("--browser-publish-open-browser", action="store_true")
     publish.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
     publish.add_argument("--run-browser-form-fill", action="store_true", help="Fill visible publisher fields from prepared payloads and stop before final publish.")
@@ -563,6 +567,63 @@ def run_browser_form_fill(args: argparse.Namespace, browser_publish: list[dict[s
     return results
 
 
+def run_launch_unlock_pack(
+    args: argparse.Namespace,
+    batch: dict[str, Any],
+    publish_readiness: list[dict[str, Any]],
+    steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if args.skip_launch_unlock_pack:
+        return []
+    readiness_by_run = {item.get("productRunId", ""): item for item in publish_readiness}
+    results = []
+    for run in batch.get("promotionRuns", []):
+        run_dir = existing_dir(run.get("outputDir", ""))
+        queue_path = existing_path(run.get("publishQueue", "")) or (
+            run_dir / "reports/promotion-manager/publish-queue/publish-queue.json" if run_dir else None
+        )
+        if not run_dir or not queue_path or not queue_path.exists():
+            continue
+        readiness_path = existing_path((readiness_by_run.get(run.get("id", "")) or {}).get("report", ""))
+        command = [
+            sys.executable,
+            str(LAUNCH_UNLOCK_PACK),
+            "--publish-queue",
+            str(queue_path),
+            "--platforms",
+            args.publish_platforms or args.platforms,
+            "--out-dir",
+            str(run_dir),
+        ]
+        if readiness_path:
+            command.extend(["--publish-readiness", str(readiness_path)])
+        append_if_present(command, "--github-repo", args.github_repo)
+        append_if_present(command, "--youtube-video-file", args.youtube_video_file)
+        append_if_present(command, "--douyin-video-file", args.douyin_video_file)
+        append_first(command, "--business-csv", args.business_csv)
+        append_first(command, "--business-xlsx", args.business_xlsx)
+        append_first(command, "--business-json", args.business_json)
+        append_first(command, "--business-text", args.business_text)
+        append_many(command, "--platform-publish-url", args.platform_publish_url)
+        step = run_command(f"launch_unlock_pack_{run.get('id', 'product')}", command, check=False)
+        steps.append(step)
+        report_path = run_dir / "reports/promotion-manager/launch-unlock/launch-unlock.json"
+        report = read_json(report_path)
+        artifacts = report.get("artifacts") if isinstance(report.get("artifacts"), dict) else {}
+        results.append(
+            {
+                "productRunId": run.get("id", ""),
+                "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+                "report": str(report_path) if report_path.exists() else "",
+                "checklist": str(artifacts.get("checklist", "")),
+                "nextActionCommands": str(artifacts.get("nextActionCommands", "")),
+                "summary": report.get("summary", {}) if isinstance(report.get("summary"), dict) else {},
+                "exitCode": step["exitCode"],
+            }
+        )
+    return results
+
+
 def run_audits(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
     audits: dict[str, Any] = {}
     if not args.skip_platform_access_audit:
@@ -620,6 +681,7 @@ def build_report(
     real_evidence_setup: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
     browser_form_fill: list[dict[str, Any]],
+    launch_unlock: list[dict[str, Any]],
     cycle_evidence: list[dict[str, Any]],
     audits: dict[str, Any],
     steps: list[dict[str, Any]],
@@ -636,6 +698,9 @@ def build_report(
         "realEvidenceSetupTargets": sum(int_value((item.get("summary") or {}).get("targets")) for item in real_evidence_setup),
         "browserPublishAssistantRuns": len(browser_publish),
         "browserFormFillRuns": len(browser_form_fill),
+        "launchUnlockPackRuns": len(launch_unlock),
+        "launchUnlockReadyGates": sum(int_value((item.get("summary") or {}).get("readyGates")) for item in launch_unlock),
+        "launchUnlockWaitingGates": sum(int_value((item.get("summary") or {}).get("waitingGates")) for item in launch_unlock),
         "browserFormFillReady": sum(1 for item in browser_form_fill if item.get("status") == "ready"),
         "browserFormFillBlocked": sum(1 for item in browser_form_fill if item.get("status") == "blocked"),
         "browserFormFillErrors": sum(1 for item in browser_form_fill if item.get("status") == "error"),
@@ -646,7 +711,7 @@ def build_report(
     summary.update(cycle_evidence_summary(cycle_evidence))
     return {
         "generatedAt": TODAY,
-        "status": final_status(batch, publish_readiness, publish_setup, real_evidence_setup, browser_publish, browser_form_fill, audits),
+        "status": final_status(batch, publish_readiness, publish_setup, real_evidence_setup, browser_publish, browser_form_fill, launch_unlock, audits),
         "outDir": str(out_dir),
         "input": {
             "urls": args.url,
@@ -678,6 +743,7 @@ def build_report(
         "realEvidenceSetup": real_evidence_setup,
         "browserPublishAssistant": browser_publish,
         "browserFormFill": browser_form_fill,
+        "launchUnlockPack": launch_unlock,
         "audits": audits,
         "externalGates": external_gates(),
         "recommendedNextCommands": recommended_next_commands(out_dir),
@@ -921,6 +987,7 @@ def final_status(
     real_evidence_setup: list[dict[str, Any]],
     browser_publish: list[dict[str, Any]],
     browser_form_fill: list[dict[str, Any]],
+    launch_unlock: list[dict[str, Any]],
     audits: dict[str, Any],
 ) -> str:
     if batch.get("status") in {"blocked", "error", ""}:
@@ -930,8 +997,9 @@ def final_status(
     failed_real_evidence = any(item.get("status") == "error" for item in real_evidence_setup)
     failed_browser = any(item.get("status") == "error" for item in browser_publish)
     failed_form_fill = any(item.get("status") == "error" for item in browser_form_fill)
+    failed_launch_unlock = any(item.get("status") == "error" for item in launch_unlock)
     failed_audit = any(item.get("exitCode") not in {0, None} for item in audits.values())
-    if failed_readiness or failed_setup or failed_real_evidence or failed_browser or failed_form_fill or failed_audit:
+    if failed_readiness or failed_setup or failed_real_evidence or failed_browser or failed_form_fill or failed_launch_unlock or failed_audit:
         return "partial_ready_with_errors"
     if batch.get("status") == "ready" and publish_readiness:
         return "partial_ready"
@@ -967,6 +1035,10 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "run_browser_publish_session",
             "command": f"python scripts/browser_publish_session.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --run-form-fill --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+        },
+        {
+            "purpose": "build_launch_unlock_pack",
+            "command": f"python scripts/launch_unlock_pack.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --publish-readiness \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
         },
         {
             "purpose": "prepare_real_evidence_templates",
@@ -1038,6 +1110,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Browser form fill ({item.get('productRunId', '')}/{item.get('platform', '')}): "
             f"`{item.get('status', '')}` fields={item.get('filledFields', 0)} {item.get('report', '')}"
         )
+    for item in report["launchUnlockPack"]:
+        lines.append(f"- Launch unlock pack ({item['productRunId']}): `{item['status']}` {item['report']}")
     for name, item in report["audits"].items():
         lines.append(f"- {name}: `{item['status']}` {item['report']}")
     readiness = report.get("finalReadinessMatrix") or {}
@@ -1137,6 +1211,13 @@ def append_if_present(command: list[str], flag: str, value: Any) -> None:
 def append_many(command: list[str], flag: str, values: list[str]) -> None:
     for value in values:
         append_if_present(command, flag, value)
+
+
+def append_first(command: list[str], flag: str, values: list[str]) -> None:
+    for value in values:
+        if str(value or "").strip():
+            append_if_present(command, flag, value)
+            return
 
 
 def display_command(command: list[str]) -> list[str]:

@@ -89,6 +89,8 @@ python scripts\launch_unlock_pack.py `
 
 The unlock pack writes `reports/promotion-manager/launch-unlock/launch-unlock.json`, a checklist, and copy-ready next commands. It records only credential variable names and setup status, never secret values.
 
+The final capability runner creates the same pack automatically for each product run when a publish queue exists. Pass `--platform-publish-url platform=url` to preserve browser-assisted publisher entry URLs inside the pack.
+
 Run a browser-assisted publish session. This prepares payloads, optionally fills visible fields, writes screenshots, and stops before the final publish action:
 
 ```powershell

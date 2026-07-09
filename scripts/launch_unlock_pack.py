@@ -76,6 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--business-xlsx", default="")
     parser.add_argument("--business-json", default="")
     parser.add_argument("--business-text", default="")
+    parser.add_argument("--platform-publish-url", action="append", default=[], help="Override browser-assisted publisher entry as platform=url.")
     parser.add_argument("--check-live", action="store_true", help="Refresh official platform doc reachability.")
     parser.add_argument("--skip-browser-publish-assistant", action="store_true")
     parser.add_argument("--out-dir", default="./promotion-output")
@@ -189,6 +190,7 @@ def run_browser_publish(
         "--out-dir",
         str(out_dir),
     ]
+    append_many(command, "--platform-publish-url", args.platform_publish_url)
     run_step("browser_publish_assistant", command, steps)
     return out_dir / "reports/promotion-manager/browser-publish/browser-publish-assistant.json"
 
@@ -483,6 +485,11 @@ def report_ref(path: Path | None) -> dict[str, Any]:
 def append_arg(command: list[str], flag: str, value: str) -> None:
     if value:
         command.extend([flag, value])
+
+
+def append_many(command: list[str], flag: str, values: list[str]) -> None:
+    for value in values:
+        append_arg(command, flag, value)
 
 
 def tail(value: str, limit: int = 1200) -> str:

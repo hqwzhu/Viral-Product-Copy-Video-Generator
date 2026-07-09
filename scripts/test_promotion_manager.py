@@ -1420,6 +1420,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["summary"]["publishReadinessRuns"], 1)
         self.assertEqual(report["summary"]["publishSetupRuns"], 1)
         self.assertEqual(report["summary"]["browserPublishAssistantRuns"], 1)
+        self.assertEqual(report["summary"]["launchUnlockPackRuns"], 1)
+        self.assertGreaterEqual(report["summary"]["launchUnlockReadyGates"], 1)
         self.assertEqual(report["summary"]["nextRoundOptimizationRuns"], 1)
         self.assertEqual(report["summary"]["multiQueryDiscoveryRuns"], 1)
         self.assertEqual(report["summary"]["contentArtifacts"], 1)
@@ -1459,6 +1461,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(report["finalReadinessMatrix"]["report"]).exists())
         self.assertEqual(report["browserPublishAssistant"][0]["status"], "ready")
         self.assertTrue(Path(report["browserPublishAssistant"][0]["report"]).exists())
+        self.assertEqual(report["launchUnlockPack"][0]["status"], "ready_unlock_pack")
+        self.assertTrue(Path(report["launchUnlockPack"][0]["report"]).exists())
+        self.assertTrue(Path(report["launchUnlockPack"][0]["checklist"]).exists())
+        self.assertTrue(Path(report["launchUnlockPack"][0]["nextActionCommands"]).exists())
+        self.assertTrue(any(item["name"].startswith("launch_unlock_pack_") for item in report["steps"]))
         self.assertTrue(any(item["area"] == "zhihu_xiaohongshu" for item in report["externalGates"]))
         self.assertTrue((out_dir / "output/reports/promotion-manager/final-run/final-capability-run.md").exists())
 
@@ -1586,6 +1593,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["input"]["publishApprovalProvided"])
         self.assertTrue(report["summary"]["publishApprovalProvided"])
         self.assertEqual(report["summary"]["contentArtifacts"], 1)
+        self.assertEqual(report["summary"]["launchUnlockPackRuns"], 1)
         self.assertTrue(Path(report["playbook"]["report"]).exists())
         self.assertTrue(Path(report["finalRun"]["report"]).exists())
         self.assertTrue(Path(report["readiness"]["report"]).exists())
@@ -8626,6 +8634,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                 str(readiness_path),
                 "--platforms",
                 "youtube,xiaohongshu",
+                "--platform-publish-url",
+                "xiaohongshu=https://creator.xiaohongshu.example/publish",
                 "--out-dir",
                 str(out_dir),
             ],
@@ -8651,6 +8661,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         command_purposes = {item["purpose"] for item in report["nextCommands"]}
         self.assertIn("browser_publish_session", command_purposes)
         self.assertIn("performance_monitor", command_purposes)
+        browser_step = next(item for item in report["steps"] if item["name"] == "browser_publish_assistant")
+        self.assertIn("--platform-publish-url", browser_step["command"])
+        self.assertIn("xiaohongshu=https://creator.xiaohongshu.example/publish", browser_step["command"])
         self.assertTrue(Path(report["artifacts"]["checklist"]).exists())
         self.assertTrue(Path(report["artifacts"]["nextActionCommands"]).exists())
         self.assertTrue((out_dir / "reports/promotion-manager/launch-unlock/launch-unlock.md").exists())

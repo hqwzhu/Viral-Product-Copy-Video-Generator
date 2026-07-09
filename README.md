@@ -118,6 +118,8 @@ python scripts\launch_unlock_pack.py `
 
 The unlock pack writes a checklist, next-action commands, credential variable-name templates, browser payload references, and real-evidence templates. It does not read or store secret values and does not bypass account authorization.
 
+`scripts\final_capability_runner.py` now builds this unlock pack automatically for each product run when a publish queue exists. Use the standalone command when you want to rebuild the pack after changing credentials, target files, or publisher entry URLs.
+
 After publishing, put real evidence files into a local inbox and recover the loop:
 
 ```powershell

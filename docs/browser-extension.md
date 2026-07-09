@@ -47,7 +47,7 @@ Command types:
 
 - One-link Skill run: reads the product URL, runs research, content generation, publish-pack setup, and readiness refresh.
 - Browser publish session: reads a generated `publish-queue.json`, prepares browser/manual publish payloads, optionally fills visible fields, and stops before final publish.
-- Launch unlock pack: reads a generated `publish-queue.json`, combines platform access audit, publish setup, browser-assisted publish payloads, and real-evidence templates into one launch checklist.
+- Launch unlock pack: reads a generated `publish-queue.json`, combines platform access audit, publish setup, browser-assisted publish payloads, and real-evidence templates into one launch checklist. Publisher URL overrides from the popup are passed through as `--platform-publish-url`.
 - Real evidence inbox: imports published URLs, platform metrics, comments, orders, and revenue evidence from a local folder.
 - Performance monitor: reruns post-publish public metrics capture, visible comment capture, optional business attribution, metrics recovery, next-round optimization, and history snapshots from registered published URLs.
 - Final readiness audit: refreshes the matrix that compares the current run against the requested final Agent scope.

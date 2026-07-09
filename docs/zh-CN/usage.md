@@ -87,6 +87,8 @@ python scripts\launch_unlock_pack.py `
 
 该解锁包会输出 `reports/promotion-manager/launch-unlock/launch-unlock.json`、检查清单和下一步命令，只记录凭证变量名和准备状态，不保存真实密钥值。
 
+最终能力 runner 会在存在发布队列时为每个产品 run 自动创建同样的解锁包。使用 `--platform-publish-url platform=url` 可以把浏览器辅助发布入口保留进解锁包。
+
 浏览器辅助发布会准备 payload、可选填写可见字段、写截图，并在最终发布前停止：
 
 ```powershell

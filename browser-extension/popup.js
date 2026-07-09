@@ -287,6 +287,9 @@ function generateLaunchUnlockPackCommand() {
   if (platforms.length) {
     args.push(`--platforms ${platforms.join(",")}`);
   }
+  parseList(els.platformPublishUrls.value).forEach((value) => {
+    args.push(`--platform-publish-url ${quote(value)}`);
+  });
   els.commandOutput.value = args.join(" ");
   updateEstimate();
 }

@@ -405,6 +405,7 @@ def build_report(
             "contentArtifacts": int_value((final_run.get("summary") or {}).get("contentArtifacts")),
             "videoFilesGenerated": int_value((final_run.get("summary") or {}).get("videoFilesGenerated")),
             "publishQueues": int_value((final_run.get("summary") or {}).get("publishQueues")),
+            "launchUnlockPackRuns": int_value((final_run.get("summary") or {}).get("launchUnlockPackRuns")),
             "capturedMetricRecords": int_value((final_run.get("summary") or {}).get("capturedMetricRecords")),
             "commentCount": int_value((final_run.get("summary") or {}).get("commentCount")),
             "matchedBusinessRows": int_value((final_run.get("summary") or {}).get("matchedBusinessRows")),
