@@ -25,7 +25,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. |
 | Metrics and revenue | Waiting for real evidence | The Skill can import and recover real data, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands, estimates subscription cost, and links to ENHE. A real paid launch still needs a backend license and payment service. |
+| Browser extension | MVP included | `browser-extension/` captures the current tab, builds Codex commands, estimates subscription cost, and links to ENHE. `scripts/billing_contract_simulator.py` proves the license, quota, usage, and webhook contract locally before a real payment backend is deployed. |
 
 ## Install
 
@@ -128,7 +128,7 @@ Full guide: [docs/browser-extension.md](docs/browser-extension.md)
 
 ## Subscription Model
 
-The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, and a machine-readable backend contract. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
+The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, a machine-readable backend contract, and a local reference simulator for license, usage, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
 
 The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
 
@@ -136,6 +136,17 @@ The starter commercial model is in [docs/subscription-pricing.md](docs/subscript
 - Starter: USD 29/month for small operators.
 - Growth: USD 99/month for repeated product promotion.
 - Scale: USD 299/month for agencies or teams.
+
+Run the local billing contract simulator:
+
+```powershell
+python scripts\billing_contract_simulator.py demo `
+  --plan growth `
+  --workflow-type research_run `
+  --out-dir ".\promotion-output"
+```
+
+The simulator writes `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json` and keeps only hashed license keys in its state file.
 
 The docs include the formulas, cost assumptions, and backend usage-control contract used for the initial launch model. Recalculate the numbers from real usage logs before public launch.
 

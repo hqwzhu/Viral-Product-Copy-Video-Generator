@@ -79,6 +79,25 @@ Expected response:
 }
 ```
 
+## Reference Simulator
+
+Before deploying a real payment backend, run the local contract simulator to verify the license, quota, usage, and webhook flow:
+
+```powershell
+python scripts\billing_contract_simulator.py demo `
+  --plan growth `
+  --workflow-type research_run `
+  --out-dir ".\promotion-output"
+```
+
+The simulator writes:
+
+- `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json`
+- `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.md`
+- `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator-state.json`
+
+The state file stores a license hash, subscription status, remaining credits, usage reservations, usage commits, and handled webhook event IDs. It does not store plaintext license keys or payment provider secrets.
+
 ## Security Notes
 
 The extension follows MV3 constraints:

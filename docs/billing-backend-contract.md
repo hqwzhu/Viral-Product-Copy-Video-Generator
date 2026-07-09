@@ -124,6 +124,25 @@ Request:
 }
 ```
 
+## Reference Simulator
+
+The repository includes a local, non-production simulator for this contract:
+
+```powershell
+python scripts\billing_contract_simulator.py demo `
+  --plan growth `
+  --workflow-type research_run `
+  --out-dir ".\promotion-output"
+```
+
+It validates `browser-extension/billing-contract.json`, creates a local hashed license record, validates that license, reserves credits before a run, commits actual token usage, and applies a simulated `invoice.payment_succeeded` webhook. Reports are written to:
+
+```text
+promotion-output\reports\promotion-manager\billing-simulator\
+```
+
+Use it as an implementation reference for endpoint behavior and loss-control checks. It is not a production backend: a deployed service still needs authentication, database transactions, salted or peppered license-key hashing, webhook signature verification, audit logging, admin controls, and real payment-provider SDK integration.
+
 ## Webhooks
 
 Backend endpoint:

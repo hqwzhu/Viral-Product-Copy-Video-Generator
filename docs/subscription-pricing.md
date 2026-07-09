@@ -91,6 +91,14 @@ Production components:
 
 The concrete API contract is in `docs/billing-backend-contract.md` and `browser-extension/billing-contract.json`.
 
+The local reference implementation is:
+
+```powershell
+python scripts\billing_contract_simulator.py demo --plan growth --workflow-type research_run --out-dir ".\promotion-output"
+```
+
+Use it to verify that a plan's included credits, workflow credit costs, usage reservation, usage commit, and renewal webhook behavior match the pricing model before building the production backend.
+
 ## Launch Rule
 
 Before public release, collect real usage logs for at least 50 workflows:

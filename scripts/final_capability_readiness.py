@@ -46,7 +46,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "browser_extension_operator_ui_subscription",
-        "label": "Provide a Chrome extension operator UI with subscription estimate, license hook, developer info, and ENHE website traffic links.",
+        "label": "Provide a Chrome extension operator UI with subscription estimate, license hook, billing contract simulator, developer info, and ENHE website traffic links.",
     },
 ]
 
@@ -595,6 +595,15 @@ def build_action_queue(
                 "complete_browser_extension",
                 "Complete the Chrome MV3 extension files and subscription/license UI evidence.",
                 "review browser-extension/manifest.json browser-extension/popup.html browser-extension/popup.css browser-extension/popup.js",
+            )
+        )
+    elif not (out_dir / "reports/promotion-manager/billing-simulator/billing-simulator.json").exists():
+        actions.append(
+            action(
+                84,
+                "validate_billing_contract_simulator",
+                "Run the local billing contract simulator to verify license, quota, usage, and webhook behavior before deploying a paid backend.",
+                f"python scripts/billing_contract_simulator.py demo --plan growth --workflow-type research_run --out-dir \"{out_dir}\"",
             )
         )
     for item in final_audit.get("nextActions", []) if isinstance(final_audit.get("nextActions"), list) else []:

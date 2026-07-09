@@ -36,6 +36,15 @@ python scripts/skill_entry.py \
 
 For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates the safe `scripts/skill_entry.py` command for Codex. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
+To validate the paid-subscription contract locally before deploying a backend:
+
+```bash
+python scripts/billing_contract_simulator.py demo \
+  --plan growth \
+  --workflow-type research_run \
+  --out-dir "./promotion-output"
+```
+
 For GitHub/open-source users, start with `README.md`, `docs/installation.md`, `docs/usage.md`, and `docs/final-capability-map.md`.
 
 When real published URLs, platform exports, browser snapshots, comment evidence, or business exports already exist, pass them into the same one-link entry so the Skill can recover evidence and generate the next round:
@@ -829,6 +838,7 @@ The command writes:
 - `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}` when `scripts/final_capability_readiness.py` merges final-run, final-audit, publish-readiness, publish-setup, platform-access, and self-evolution reports into a requirement-by-requirement end-state matrix and action queue.
 - `reports/promotion-manager/capability/final-capability-audit.{json,md}` when `scripts/final_capability_audit.py` checks scripts, tools, credential presence, platform limits, and final requirement gaps.
 - `reports/promotion-manager/self-evolution/self-evolution-audit.{json,md}` when `scripts/self_evolution_audit.py` checks local tools, repository state, installed Skill drift, safe install candidates, platform-learning freshness, and approved Skill sync actions.
+- `reports/promotion-manager/billing-simulator/billing-simulator.{json,md}` and `billing-simulator-state.json` when `scripts/billing_contract_simulator.py` validates the extension billing contract, hashed license storage, usage reservation, usage commit, and simulated webhook flow.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
 - `README.md`, `docs/*.md`, and `browser-extension/*` as the public GitHub docs and browser extension MVP when syncing the installed Skill.
@@ -1038,6 +1048,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/final_capability_readiness.py`: final acceptance matrix builder that merges generated reports into requirement status, external gates, and next commands for the requested end state.
 - `scripts/final_capability_audit.py`: final readiness auditor for requested end-state requirements, local tools, credential presence, platform limits, and controlled self-evolution actions.
 - `scripts/self_evolution_audit.py`: controlled self-evolution auditor for runtime gaps, repository status, installed Skill drift, platform-learning freshness, safe install candidates, and approved local Skill sync.
+- `scripts/billing_contract_simulator.py`: local reference backend simulator for browser-extension subscription plans, hashed licenses, quota authorization, usage commits, and payment webhook state changes.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.

@@ -63,6 +63,7 @@ SCRIPT_REQUIREMENTS = {
     "final_capability_runner": "final_capability_runner.py",
     "final_capability_readiness": "final_capability_readiness.py",
     "self_evolution_audit": "self_evolution_audit.py",
+    "billing_contract_simulator": "billing_contract_simulator.py",
 }
 
 
@@ -546,12 +547,13 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription estimate, license hook, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate commands and validate a license endpoint, but secure paid usage enforcement requires a backend license and payment service.",
+                "The extension can generate commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
+                "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
         },
@@ -585,9 +587,15 @@ def github_docs_status() -> dict[str, Any]:
         ],
         "docs/installation.md": ["Installation", "Install As A Codex Skill", "Verify"],
         "docs/usage.md": ["One Product URL", "Publishing", "Metrics And Next Round"],
-        "docs/browser-extension.md": ["Browser Extension", "Subscription Flow", "Developer Info"],
+        "docs/browser-extension.md": ["Browser Extension", "Subscription Flow", "Reference Simulator", "Developer Info"],
         "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Plans"],
-        "docs/billing-backend-contract.md": ["Billing Backend Contract", "Usage Authorization", "Webhooks", "Loss-Control Rules"],
+        "docs/billing-backend-contract.md": [
+            "Billing Backend Contract",
+            "Usage Authorization",
+            "Webhooks",
+            "Loss-Control Rules",
+            "Reference Simulator",
+        ],
         "docs/final-capability-map.md": ["Final Capability Map", "Acceptance Command"],
     }
     for path, markers in required_markers.items():
@@ -607,6 +615,11 @@ def github_docs_status() -> dict[str, Any]:
 def browser_extension_status() -> dict[str, Any]:
     missing = [path for path in BROWSER_EXTENSION_FILES if not (ROOT / path).exists()]
     evidence = [str(ROOT / path) for path in BROWSER_EXTENSION_FILES if (ROOT / path).exists()]
+    simulator_path = ROOT / "scripts/billing_contract_simulator.py"
+    if simulator_path.exists():
+        evidence.append(str(simulator_path))
+    else:
+        missing.append("scripts/billing_contract_simulator.py")
     manifest_path = ROOT / "browser-extension/manifest.json"
     contract_path = ROOT / "browser-extension/billing-contract.json"
     popup_path = ROOT / "browser-extension/popup.html"
@@ -830,6 +843,10 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         {
             "purpose": "load_browser_extension",
             "command": "open chrome://extensions, enable Developer mode, click Load unpacked, select ./browser-extension",
+        },
+        {
+            "purpose": "billing_contract_simulator_demo",
+            "command": f"python scripts/billing_contract_simulator.py demo --plan growth --workflow-type research_run --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "batch_product_url_cycles",

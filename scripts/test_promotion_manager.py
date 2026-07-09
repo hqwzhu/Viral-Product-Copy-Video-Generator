@@ -62,6 +62,7 @@ FINAL_CAPABILITY_AUDIT = ROOT / "scripts" / "final_capability_audit.py"
 FINAL_CAPABILITY_RUNNER = ROOT / "scripts" / "final_capability_runner.py"
 FINAL_CAPABILITY_READINESS = ROOT / "scripts" / "final_capability_readiness.py"
 SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
+BILLING_CONTRACT_SIMULATOR = ROOT / "scripts" / "billing_contract_simulator.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
@@ -5749,6 +5750,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("customer.subscription.updated", billing)
         self.assertIn("invoice.payment_failed", billing)
         self.assertIn("Loss-Control Rules", billing)
+        self.assertIn("Reference Simulator", billing)
+        self.assertIn("billing_contract_simulator.py", billing)
 
     def test_browser_extension_manifest_popup_and_subscription_ui_are_static_mv3(self) -> None:
         manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
@@ -5786,6 +5789,53 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
         self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
 
+    def test_billing_contract_simulator_runs_license_usage_and_webhook_flow(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="billing-simulator-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        secret_license = "pm_demo_secret_license_for_test"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BILLING_CONTRACT_SIMULATOR),
+                "demo",
+                "--license-key",
+                secret_license,
+                "--plan",
+                "growth",
+                "--workflow-type",
+                "research_run",
+                "--out-dir",
+                str(out_dir),
+                "--reset-state",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "reports/promotion-manager/billing-simulator/billing-simulator.json"
+        state_path = out_dir / "reports/promotion-manager/billing-simulator/billing-simulator-state.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        state_text = state_path.read_text(encoding="utf-8")
+        self.assertNotIn(secret_license, report_text)
+        self.assertNotIn(secret_license, state_text)
+        report = json.loads(report_text)
+        state = json.loads(state_text)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["contract"]["status"], "ready")
+        self.assertFalse(report["secretStored"])
+        self.assertEqual(report["response"]["usageAuthorization"]["allowed"], True)
+        self.assertEqual(report["response"]["usageCommit"]["status"], "succeeded")
+        self.assertEqual(report["response"]["webhook"]["event"], "invoice.payment_succeeded")
+        self.assertEqual(report["summary"]["licenses"], 1)
+        self.assertEqual(report["summary"]["committedUsageRecords"], 1)
+        self.assertEqual(report["summary"]["webhookEvents"], 1)
+        license_record = next(iter(state["licenses"].values()))
+        self.assertIn("licenseKeyHash", license_record)
+        self.assertNotIn("licenseKey", license_record)
+        usage_record = next(iter(state["usageLedger"].values()))
+        self.assertEqual(usage_record["workflowType"], "research_run")
+        self.assertEqual(usage_record["creditsReserved"], 3)
+        self.assertEqual(usage_record["creditsUsed"], 3)
+
     def test_self_evolution_managed_files_include_docs_and_browser_extension(self) -> None:
         module = load_script_module(SELF_EVOLUTION_AUDIT)
         files = {item.as_posix() for item in module.managed_skill_files(ROOT)}
@@ -5798,6 +5848,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/popup.html", files)
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
+        self.assertIn("scripts/billing_contract_simulator.py", files)
 
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
@@ -5935,6 +5986,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         extension_evidence = "\n".join(by_requirement["browser_extension_operator_ui_subscription"]["evidence"]).replace("\\", "/")
         self.assertIn("browser-extension/manifest.json", extension_evidence)
         self.assertIn("browser-extension/popup.js", extension_evidence)
+        self.assertIn("scripts/billing_contract_simulator.py", extension_evidence)
+        self.assertTrue(report["scripts"]["billing_contract_simulator"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
@@ -5956,6 +6009,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "build_final_readiness_matrix" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "review_github_docs" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "load_browser_extension" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "billing_contract_simulator_demo" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_post_publish_metrics" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_public_comment_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "attribute_business_results" for item in report["recommendedCommands"]))
