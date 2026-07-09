@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,73 @@ def load_script_module(path: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def write_minimal_xlsx(path: Path, rows: list[list[Any]]) -> None:
+    def escape(value: Any) -> str:
+        return (
+            str(value)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
+    def column_name(index: int) -> str:
+        name = ""
+        index += 1
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            name = chr(65 + remainder) + name
+        return name
+
+    row_xml = []
+    for row_index, row in enumerate(rows, start=1):
+        cells = []
+        for col_index, value in enumerate(row):
+            ref = f"{column_name(col_index)}{row_index}"
+            cells.append(f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>')
+        row_xml.append(f'<row r="{row_index}">{"".join(cells)}</row>')
+    sheet_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetData>{"".join(row_xml)}</sheetData>'
+        "</worksheet>"
+    )
+    with zipfile.ZipFile(path, "w") as workbook:
+        workbook.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            "</Types>",
+        )
+        workbook.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            "</Relationships>",
+        )
+        workbook.writestr(
+            "xl/workbook.xml",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>'
+            "</workbook>",
+        )
+        workbook.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            "</Relationships>",
+        )
+        workbook.writestr("xl/worksheets/sheet1.xml", sheet_xml)
 
 
 def playwright_chromium_available() -> bool:
@@ -3962,6 +4030,165 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["aggregates"]["totals"]["revenue"], 188.5)
         self.assertEqual(report["records"][0]["platform"], "xiaohongshu")
         self.assertIn("xhs-export.csv", report["records"][0]["evidence"])
+
+    def test_metrics_intake_imports_xlsx_platform_export(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-intake-xlsx-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        metrics_xlsx = out_dir / "metrics-export.xlsx"
+        write_minimal_xlsx(
+            metrics_xlsx,
+            [
+                [
+                    "\u5e73\u53f0",
+                    "\u53d1\u5e03\u94fe\u63a5",
+                    "\u6807\u9898",
+                    "\u64ad\u653e\u91cf(\u6b21)",
+                    "\u70b9\u8d5e\u6570",
+                    "\u8bc4\u8bba\u6570",
+                    "\u5206\u4eab\u6570",
+                    "\u5b98\u7f51\u70b9\u51fb",
+                    "\u7ebf\u7d22\u6570",
+                    "\u8ba2\u5355\u6570",
+                    "\u6210\u4ea4\u91d1\u989d(\u5143)",
+                    "\u8bc1\u636e",
+                ],
+                [
+                    "\u5c0f\u7ea2\u4e66",
+                    "https://www.xiaohongshu.com/explore/note123",
+                    "Launch Note",
+                    "1.2\u4e07",
+                    "840",
+                    "66",
+                    "18",
+                    "144",
+                    "21",
+                    "3",
+                    "188.50",
+                    "xhs-export.xlsx",
+                ],
+            ],
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_INTAKE),
+                "--xlsx-file",
+                str(metrics_xlsx),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics/imported-metrics.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(report["inputMode"], "xlsx_file")
+        self.assertEqual(record["platform"], "xiaohongshu")
+        self.assertEqual(record["publishedUrl"], "https://www.xiaohongshu.com/explore/note123")
+        self.assertEqual(record["metrics"]["views"]["normalized"], 12000.0)
+        self.assertEqual(record["metrics"]["likes"]["normalized"], 840.0)
+        self.assertEqual(record["metrics"]["comments"]["normalized"], 66.0)
+        self.assertEqual(record["metrics"]["shares"]["normalized"], 18.0)
+        self.assertEqual(record["metrics"]["clicks"]["normalized"], 144.0)
+        self.assertEqual(record["metrics"]["leads"]["normalized"], 21.0)
+        self.assertEqual(record["metrics"]["orders"]["normalized"], 3.0)
+        self.assertEqual(record["metrics"]["revenue"]["normalized"], 188.5)
+        self.assertIn("xhs-export.xlsx", record["evidence"])
+
+    def test_metrics_recovery_imports_xlsx_platform_export(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-xlsx-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_items = out_dir / "published-items.json"
+        published_items.write_text(
+            json.dumps(
+                [
+                    {
+                        "platform": "xiaohongshu",
+                        "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        "title": "Launch Note",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        metrics_xlsx = out_dir / "metrics-export.xlsx"
+        write_minimal_xlsx(
+            metrics_xlsx,
+            [
+                ["platform", "publishedUrl", "title", "view_count", "like_count", "comment_count", "order_count", "paid_amount", "evidence"],
+                ["xiaohongshu", "https://www.xiaohongshu.com/explore/note123", "Launch Note", "4200", "360", "41", "2", "99.00", "xhs-export.xlsx"],
+            ],
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--published-items-json",
+                str(published_items),
+                "--metrics-xlsx",
+                str(metrics_xlsx),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "ready")
+        self.assertEqual(report["coverage"]["manualOrPendingRequirements"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["views"], 4200.0)
+        self.assertEqual(report["aggregates"]["totals"]["likes"], 360.0)
+        self.assertEqual(report["aggregates"]["totals"]["comments"], 41.0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 99.0)
+        self.assertEqual(report["metricSources"][0]["type"], "metrics_xlsx")
+
+    def test_metrics_recovery_imports_business_xlsx_export(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-business-xlsx-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        published_items = out_dir / "published-items.json"
+        published_items.write_text(
+            json.dumps(
+                [
+                    {
+                        "platform": "xiaohongshu",
+                        "publishedUrl": "https://www.xiaohongshu.com/explore/note123",
+                        "title": "Launch Note",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        business_xlsx = out_dir / "business-export.xlsx"
+        write_minimal_xlsx(
+            business_xlsx,
+            [
+                ["platform", "publishedUrl", "title", "click_count", "lead_count", "order_count", "paid_amount", "evidence"],
+                ["xiaohongshu", "https://www.xiaohongshu.com/explore/note123", "Launch Note", "108", "13", "2", "99.00", "shop-export.xlsx"],
+            ],
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(METRICS_RECOVERY),
+                "--published-items-json",
+                str(published_items),
+                "--business-xlsx",
+                str(business_xlsx),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "reports/promotion-manager/metrics-recovery/metrics-recovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recoveryStatus"], "ready")
+        self.assertEqual(report["coverage"]["manualOrPendingRequirements"], 0)
+        self.assertEqual(report["aggregates"]["totals"]["clicks"], 108.0)
+        self.assertEqual(report["aggregates"]["totals"]["leads"], 13.0)
+        self.assertEqual(report["aggregates"]["totals"]["orders"], 2.0)
+        self.assertEqual(report["aggregates"]["totals"]["revenue"], 99.0)
+        self.assertEqual(report["businessSources"][0]["type"], "business_xlsx")
 
     def test_metrics_recovery_imports_structured_metrics_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="metrics-recovery-structured-test-"))

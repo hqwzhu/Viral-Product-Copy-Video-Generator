@@ -756,6 +756,14 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+Excel `.xlsx` exports are also accepted:
+
+```bash
+python scripts/metrics_intake.py \
+  --xlsx-file "./metrics-export.xlsx" \
+  --out-dir "./promotion-output"
+```
+
 For a browser-visible published page or analytics page that Codex has already read into structured JSON:
 
 ```bash
@@ -763,6 +771,8 @@ python scripts/metrics_intake.py \
   --structured-json "./published-metrics-snapshot.json" \
   --out-dir "./promotion-output"
 ```
+
+`--xlsx-file` is part of the supported metrics intake sources for platform or business dashboard exports.
 
 Supported sources are `--csv-file`, `--json-file`, `--text-file`, `--structured-json`, `--published-url`, `--github-repo`, and `--youtube-video-id`. Text and structured snapshots can contain English/Chinese metric labels with common units/currency such as `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`. GitHub public repository metrics use the official REST API. YouTube video statistics require `YOUTUBE_API_KEY` in the environment and the key must not be written to files or chat output. Orders and revenue must come from user-provided business exports or analytics evidence.
 
@@ -775,6 +785,15 @@ python scripts/metrics_recovery.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
   --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+Use Excel exports when CSV is not available:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-xlsx "./platform-metrics.xlsx" \
+  --business-xlsx "./orders-and-revenue.xlsx" \
   --out-dir "./promotion-output"
 ```
 

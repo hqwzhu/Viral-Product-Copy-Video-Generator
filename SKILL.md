@@ -433,6 +433,14 @@ python scripts/metrics_intake.py \
   --out-dir "./promotion-output"
 ```
 
+Excel `.xlsx` exports are also supported for common platform and business dashboards:
+
+```bash
+python scripts/metrics_intake.py \
+  --xlsx-file "./metrics-export.xlsx" \
+  --out-dir "./promotion-output"
+```
+
 Metric parsing supports visible English and Chinese labels plus common units/currency, including `12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, and `￥88.00`. Treat parsed values as evidence only when the source is a public page, official API/export, screenshot OCR/text, or business export.
 
 To import real metrics from a Codex/browser structured snapshot of a published page or analytics page:
@@ -450,6 +458,15 @@ python scripts/metrics_recovery.py \
   --workflow-manifest "./promotion-output/reports/promotion-manager/agent-run/workflow-manifest.json" \
   --publish-queue "./promotion-output/reports/promotion-manager/publish-queue/publish-queue.json" \
   --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
+Use `--metrics-xlsx` or `--business-xlsx` when the platform or order system exports Excel instead of CSV:
+
+```bash
+python scripts/metrics_recovery.py \
+  --metrics-xlsx "./platform-metrics.xlsx" \
+  --business-xlsx "./orders-and-revenue.xlsx" \
   --out-dir "./promotion-output"
 ```
 
@@ -876,6 +893,7 @@ Use only real data supplied by the user or exported from platforms:
 - evidence URLs/screenshots/exports
 
 If no real data exists, output `waiting_real_data`. Never estimate or fabricate performance.
+Excel `.xlsx` platform and business exports are valid real-data inputs through `metrics_intake.py --xlsx-file`, `metrics_recovery.py --metrics-xlsx`, and `metrics_recovery.py --business-xlsx`.
 Use `scripts/metrics_intake.py` to import real CSV, JSON, text, Codex/browser structured snapshots, GitHub, or YouTube metrics before doing a retrospective. It parses visible English/Chinese metric labels and common units/currency (`12K`, `2.4M`, `1.2万`, `3亿`, `$88.00`, `￥88.00`) from text and structured snapshots. YouTube live metrics require `YOUTUBE_API_KEY`; GitHub public repository metrics can use the public REST API.
 Use `scripts/metrics_recovery.py` when the run has a workflow manifest, publish queue, `published-items` report, published URL list, structured metric snapshot, or business export. It merges official GitHub/YouTube metrics with user-provided platform snapshots and orders/revenue exports, and marks Zhihu, Xiaohongshu, Douyin, TikTok, or unpublished queue items as `manual_export_required` or `publish_pending` instead of inventing data.
 Before a retrospective, run `scripts/post_publish_metrics_capture.py` when `published-items.json` contains real URLs. It captures only public/browser-visible metrics and produces `post-publish-metrics-export.json`; pass that file to `metrics_recovery.py --metrics-json`. If metrics are hidden behind platform analytics, login, captcha, or risk checks, use the generated manual evidence request and import a real export or screenshot-derived text.

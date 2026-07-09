@@ -532,7 +532,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 
 `imported-metrics.json` includes:
 
-- `inputMode`: `csv_file`, `json_file`, `text_file`, `structured_json`, `published_url`, `github_repo`, or `youtube_video_id`
+- `inputMode`: `csv_file`, `xlsx_file`, `json_file`, `text_file`, `structured_json`, `published_url`, `github_repo`, or `youtube_video_id`
 - `records[]`: normalized real metric records with platform, published URL, content id, title, metrics, evidence, source, confidence, and derived rates
 - `records[].source.type`: `user_export`, `user_text`, `structured_snapshot`, or `official_api`
 - `aggregates`: totals, records with metrics, records with evidence, best by views, best by revenue, and platforms
@@ -566,8 +566,8 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 - `publishedItems`: planned, queued, dry-run, or proven published items discovered from manifests, publish queues, the default published-items report, or user-provided JSON
 - `records[]`: normalized metric records compatible with `metrics_intake.py`
 - `connectorStatus[]`: official connector results for YouTube/GitHub and unsupported/manual statuses for other platforms
-- `metricSources[]`: CSV, JSON, text, or structured browser snapshot evidence loaded for platform metrics
-- `businessSources[]`: CSV, JSON, or text evidence loaded for orders, revenue, clicks, leads, or platform metrics
+- `metricSources[]`: CSV, Excel `.xlsx`, JSON, text, or structured browser snapshot evidence loaded for platform metrics
+- `businessSources[]`: CSV, Excel `.xlsx`, JSON, or text evidence loaded for orders, revenue, clicks, leads, or platform metrics
 - `manualExportRequired[]`: platforms or queue items that need real export/screenshot/API evidence before optimization
 - `coverage`: counts for discovered published items, queued items, metric records, records with metrics, pending manual requirements, and platforms
 - `retrospective`: data-backed next-round recommendations, or `waiting_real_data` when evidence is missing

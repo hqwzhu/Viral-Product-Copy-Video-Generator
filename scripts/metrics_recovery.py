@@ -74,10 +74,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-repo", action="append", default=[], help="GitHub owner/repo to inspect through the public REST API.")
     parser.add_argument("--youtube-video-id", action="append", default=[], help="YouTube video ID to inspect through the YouTube Data API when YOUTUBE_API_KEY is set.")
     parser.add_argument("--metrics-csv", action="append", default=[], help="CSV export containing platform metrics.")
+    parser.add_argument("--metrics-xlsx", action="append", default=[], help="Excel .xlsx export containing platform metrics.")
     parser.add_argument("--metrics-json", action="append", default=[], help="JSON export containing platform metrics.")
     parser.add_argument("--metrics-text", action="append", default=[], help="Text evidence containing platform metrics.")
     parser.add_argument("--metrics-structured-json", action="append", default=[], help="Codex/browser structured snapshot containing published-page or analytics metrics.")
     parser.add_argument("--business-csv", action="append", default=[], help="CSV export containing orders, revenue, clicks, or platform metrics.")
+    parser.add_argument("--business-xlsx", action="append", default=[], help="Excel .xlsx export containing orders, revenue, clicks, or platform metrics.")
     parser.add_argument("--business-json", action="append", default=[], help="JSON export containing orders, revenue, clicks, or platform metrics.")
     parser.add_argument("--business-text", action="append", default=[], help="Text evidence containing real metrics.")
     parser.add_argument("--out-dir", default="./promotion-output")
@@ -301,6 +303,11 @@ def collect_business_records(args: argparse.Namespace) -> tuple[list[dict[str, A
         loaded = metrics_intake.records_from_csv(path)
         records.extend(loaded)
         sources.append({"type": "business_csv", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
+    for value in args.business_xlsx:
+        path = Path(value)
+        loaded = metrics_intake.records_from_xlsx(path)
+        records.extend(loaded)
+        sources.append({"type": "business_xlsx", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
     for value in args.business_json:
         path = Path(value)
         loaded = metrics_intake.records_from_json(path)
@@ -322,6 +329,11 @@ def collect_metric_records(args: argparse.Namespace) -> tuple[list[dict[str, Any
         loaded = metrics_intake.records_from_csv(path)
         records.extend(loaded)
         sources.append({"type": "metrics_csv", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
+    for value in args.metrics_xlsx:
+        path = Path(value)
+        loaded = metrics_intake.records_from_xlsx(path)
+        records.extend(loaded)
+        sources.append({"type": "metrics_xlsx", "source": str(path), "status": "loaded", "recordCount": len(loaded)})
     for value in args.metrics_json:
         path = Path(value)
         loaded = metrics_intake.records_from_json(path)

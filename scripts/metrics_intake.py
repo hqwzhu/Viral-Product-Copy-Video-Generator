@@ -10,9 +10,11 @@ import os
 import re
 import urllib.parse
 import urllib.request
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree as ET
 
 import metric_parsing
 
@@ -92,6 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import real publication metrics for retrospective analysis.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--csv-file", help="CSV export with platform/url/metric columns.")
+    source.add_argument("--xlsx-file", help="Excel .xlsx export with platform/url/metric columns.")
     source.add_argument("--json-file", help="JSON export with metric records.")
     source.add_argument("--text-file", help="Copied metric text, notes, or transcript.")
     source.add_argument("--structured-json", help="Codex/browser structured snapshot containing a published page or analytics text.")
@@ -107,6 +110,9 @@ def load_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.csv_file:
         path = Path(args.csv_file)
         return {"inputMode": "csv_file", "source": str(path), "records": records_from_csv(path), "connectorStatus": []}
+    if args.xlsx_file:
+        path = Path(args.xlsx_file)
+        return {"inputMode": "xlsx_file", "source": str(path), "records": records_from_xlsx(path), "connectorStatus": []}
     if args.json_file:
         path = Path(args.json_file)
         return {"inputMode": "json_file", "source": str(path), "records": records_from_json(path), "connectorStatus": []}
@@ -154,6 +160,85 @@ def load_from_published_url(url: str, platform: str) -> dict[str, Any]:
 def records_from_csv(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return [normalize_mapping(row, str(path)) for row in csv.DictReader(handle)]
+
+
+def records_from_xlsx(path: Path) -> list[dict[str, Any]]:
+    rows = xlsx_rows(path)
+    if not rows:
+        return []
+    headers = [str(value).strip() for value in rows[0]]
+    records = []
+    for row in rows[1:]:
+        if not any(str(value).strip() for value in row):
+            continue
+        item = {header: row[index] if index < len(row) else "" for index, header in enumerate(headers) if header}
+        records.append(normalize_mapping(item, str(path)))
+    return records
+
+
+def xlsx_rows(path: Path) -> list[list[str]]:
+    with zipfile.ZipFile(path) as workbook:
+        shared_strings = xlsx_shared_strings(workbook)
+        sheet_name = xlsx_first_sheet_name(workbook)
+        root = ET.fromstring(workbook.read(sheet_name))
+    rows = []
+    for row in root.findall(".//{*}sheetData/{*}row"):
+        values: dict[int, str] = {}
+        for cell in row.findall("{*}c"):
+            ref = cell.attrib.get("r", "")
+            index = xlsx_column_index(ref) if ref else len(values)
+            values[index] = xlsx_cell_value(cell, shared_strings)
+        if values:
+            width = max(values) + 1
+            rows.append([values.get(index, "") for index in range(width)])
+    return rows
+
+
+def xlsx_first_sheet_name(workbook: zipfile.ZipFile) -> str:
+    names = workbook.namelist()
+    if "xl/worksheets/sheet1.xml" in names:
+        return "xl/worksheets/sheet1.xml"
+    candidates = sorted(name for name in names if name.startswith("xl/worksheets/") and name.endswith(".xml"))
+    if not candidates:
+        raise ValueError("No worksheet XML found in .xlsx file.")
+    return candidates[0]
+
+
+def xlsx_shared_strings(workbook: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in workbook.namelist():
+        return []
+    root = ET.fromstring(workbook.read("xl/sharedStrings.xml"))
+    strings = []
+    for item in root.findall("{*}si"):
+        parts = [node.text or "" for node in item.findall(".//{*}t")]
+        strings.append("".join(parts))
+    return strings
+
+
+def xlsx_cell_value(cell: ET.Element, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t", "")
+    if cell_type == "inlineStr":
+        return "".join(node.text or "" for node in cell.findall(".//{*}is/{*}t"))
+    value_node = cell.find("{*}v")
+    if value_node is None or value_node.text is None:
+        return ""
+    value = value_node.text
+    if cell_type == "s":
+        try:
+            return shared_strings[int(value)]
+        except (ValueError, IndexError):
+            return value
+    if cell_type == "b":
+        return "TRUE" if value == "1" else "FALSE"
+    return value
+
+
+def xlsx_column_index(ref: str) -> int:
+    letters = "".join(char for char in ref if char.isalpha())
+    index = 0
+    for char in letters.upper():
+        index = index * 26 + ord(char) - ord("A") + 1
+    return max(index - 1, 0)
 
 
 def records_from_json(path: Path) -> list[dict[str, Any]]:
