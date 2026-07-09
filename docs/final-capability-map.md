@@ -25,6 +25,25 @@ python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
 
 The readiness status can remain partial when the blocker is external platform authorization or missing real metrics. That is expected and safer than fabricating readiness.
 
+When a video-platform evidence gap is caused by dynamic public search pages timing out on `networkidle`, rerun the capture with bounded browser search waits:
+
+```powershell
+python scripts\final_capability_runner.py `
+  --url "https://www.enhe-tech.com.cn/software/windows-ai" `
+  --platforms douyin,xiaohongshu `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --sample-video-frames `
+  --timeout-ms 15000 `
+  --wait-until domcontentloaded `
+  --multi-query-browser-search-timeout-ms 15000 `
+  --multi-query-browser-search-wait-until domcontentloaded `
+  --multi-query-run-follow-up-captures `
+  --multi-query-capture-browser-assisted-follow-ups `
+  --multi-query-sample-video-frames `
+  --out-dir ".\promotion-output\enhe-video-evidence-rerun"
+```
+
 ## Phase Progress Reporting
 
 After every major stage, report:

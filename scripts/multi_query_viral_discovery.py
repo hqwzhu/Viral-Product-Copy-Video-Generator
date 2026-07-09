@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+import urllib.parse
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,29 @@ SCRIPTS = ROOT / "scripts"
 TODAY = date.today().isoformat()
 COMPETITOR_DIR = Path("reports/promotion-manager/competitors")
 DEFAULT_PLATFORMS = "youtube,zhihu,xiaohongshu,douyin,github"
+NON_CONTENT_PATH_PARTS = {
+    "about",
+    "aboutus",
+    "agreement",
+    "agreements",
+    "contact",
+    "help",
+    "privacy",
+    "recovery_account",
+    "terms",
+}
+NON_CONTENT_TITLE_TERMS = {
+    "about us",
+    "contact us",
+    "privacy policy",
+    "terms of service",
+    "user agreement",
+    "用户协议",
+    "隐私政策",
+    "关于我们",
+    "联系我们",
+    "账号找回",
+}
 
 
 def main() -> None:
@@ -54,6 +78,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Write query plan and commands without running platform search.")
     parser.add_argument("--existing-run-dir", action="append", default=[], help="Existing viral_discovery_runner output directory to merge. Can be repeated.")
     parser.add_argument("--html-snapshot-root", default="", help="Optional root containing saved search HTML fixtures. Uses <root>/<query-slug> when present, otherwise <root>.")
+    parser.add_argument("--browser-search-timeout-ms", type=int, default=30000)
+    parser.add_argument("--browser-search-wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--install-browser-if-missing", action="store_true")
     parser.add_argument("--live-official", action="store_true")
     parser.add_argument("--run-creator-follow-up", action="store_true")
@@ -216,6 +242,10 @@ def build_discovery_command(args: argparse.Namespace, query: dict[str, Any], run
         str(args.top_n),
         "--out-dir",
         str(run_dir),
+        "--browser-search-timeout-ms",
+        str(args.browser_search_timeout_ms),
+        "--browser-search-wait-until",
+        args.browser_search_wait_until,
     ]
     html_dir = html_snapshot_dir_for(args.html_snapshot_root, query["slug"])
     if html_dir:
@@ -279,6 +309,8 @@ def merge_materials(runs: list[dict[str, Any]], top_n: int) -> list[dict[str, An
             if not isinstance(material, dict):
                 continue
             item = dict(material)
+            if not is_mergeable_material(item):
+                continue
             item["sourceRun"] = run.get("outDir", "")
             item["sourceQuery"] = first_non_empty(run.get("query"), item.get("query"))
             key = material_key(item)
@@ -498,6 +530,19 @@ def url_host(url: str) -> str:
     from urllib.parse import urlparse
 
     return urlparse(url).netloc.lower() or "unknown"
+
+
+def is_mergeable_material(material: dict[str, Any]) -> bool:
+    title = clean_text(material.get("title") or "")
+    url = clean_text(material.get("url") or "")
+    parsed = urllib.parse.urlparse(url)
+    path_parts = {part.lower() for part in parsed.path.split("/") if part}
+    lowered_title = title.lower()
+    if path_parts & NON_CONTENT_PATH_PARTS:
+        return False
+    if any(term in lowered_title for term in NON_CONTENT_TITLE_TERMS):
+        return False
+    return bool(title or url)
 
 
 def aggregate_materials(materials: list[dict[str, Any]]) -> dict[str, Any]:

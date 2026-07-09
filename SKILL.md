@@ -330,10 +330,14 @@ python scripts/product_batch_runner.py \
   --run-multi-query-viral-discovery \
   --multi-query-query-count 5 \
   --multi-query-top-n 20 \
+  --multi-query-browser-search-timeout-ms 15000 \
+  --multi-query-browser-search-wait-until domcontentloaded \
   --multi-query-run-follow-up-captures \
   --multi-query-sample-video-frames \
   --out-dir "./promotion-output"
 ```
+
+For dynamic platform search pages that keep long-running network connections open, prefer `--browser-search-wait-until domcontentloaded` on `viral_discovery_runner.py` or `multi_query_viral_discovery.py`; in product batch and final runs use `--multi-query-browser-search-wait-until domcontentloaded` plus a bounded timeout such as `--multi-query-browser-search-timeout-ms 15000`.
 
 To batch-run product URLs through the closed loop with real evidence recovery and next-round optimization:
 
@@ -1015,7 +1019,7 @@ The command writes:
 - Use `scripts/creator_follow_up_runner.py` after the creator leaderboard exists to run safe YouTube/GitHub creator follow-up through official/public connectors and queue manual/browser evidence requests for Zhihu, Xiaohongshu, Douyin, TikTok, and unverified platforms. In the full workflow, add `--run-creator-follow-up`; use `--creator-follow-up-dry-run` for planning-only runs.
 - Use `scripts/follow_up_capture_runner.py` to execute only safe public follow-up capture tasks and generate manual evidence request files for browser-assisted platforms. In the full workflow, add `--run-follow-up-captures` when you want this stage to run.
 - Add `--capture-browser-assisted` to `scripts/follow_up_capture_runner.py`, or `--capture-browser-assisted-follow-ups` to the full workflow, when queued Zhihu, Xiaohongshu, Douyin, TikTok, or similar follow-up tasks should attempt public browser-visible snapshots before falling back to manual evidence requests.
-- Add `--sample-video-frames` and `--video-sample-count 5` to `scripts/follow_up_capture_runner.py`, `scripts/viral_discovery_runner.py`, `scripts/multi_query_viral_discovery.py`, `scripts/run_promotion_workflow.py`, `scripts/promotion_cycle_runner.py`, `scripts/product_batch_runner.py`, or `scripts/final_capability_runner.py` when YouTube, Douyin, TikTok, or other video-like follow-up tasks should capture browser-visible video metadata and frame screenshots. In product batch and final runs, use `--multi-query-sample-video-frames` and `--multi-query-video-sample-count 5` for the separate multi-query discovery stage. Successful follow-up imports copy `videoSampleEvidence` into deep competitor records so the enhancer can report frame-backed evidence. This does not download private media streams or store signed media query tokens.
+- Add `--sample-video-frames` and `--video-sample-count 5` to `scripts/follow_up_capture_runner.py`, `scripts/viral_discovery_runner.py`, `scripts/multi_query_viral_discovery.py`, `scripts/run_promotion_workflow.py`, `scripts/promotion_cycle_runner.py`, `scripts/product_batch_runner.py`, or `scripts/final_capability_runner.py` when YouTube, Douyin, TikTok, or other video-like follow-up tasks should capture browser-visible video metadata and frame screenshots. In product batch and final runs, use `--multi-query-sample-video-frames` and `--multi-query-video-sample-count 5` for the separate multi-query discovery stage. When Douyin, Xiaohongshu, or similar dynamic search pages time out while waiting for `networkidle`, pass `--browser-search-wait-until domcontentloaded` to `viral_discovery_runner.py`/`multi_query_viral_discovery.py`, or `--multi-query-browser-search-wait-until domcontentloaded` to `product_batch_runner.py`/`final_capability_runner.py`. Successful follow-up imports copy `videoSampleEvidence` into deep competitor records so the enhancer can report frame-backed evidence. This does not download private media streams or store signed media query tokens.
 - Use `scripts/browser_video_sampler.py` directly when the user provides a specific public/browser-visible video URL and wants frame evidence before deconstruction.
 - Use `scripts/competitor_content_enhancer.py` after the viral/deep libraries exist to apply observed hooks, reusable patterns, content deconstruction summaries, and safe structure roles to the generated platform content. The full workflow does this automatically when a library exists; use `--skip-competitor-informed-content` to disable it.
 - Use `scripts/competitor_intake.py` to turn public competitor pages, saved HTML, JSON exports, or pasted transcripts into `imported-competitors` reports before deconstruction. Imported records include `contentDeconstruction` with ordered beats, copy mechanics, optional video architecture, reuse guidance, and evidence confidence.

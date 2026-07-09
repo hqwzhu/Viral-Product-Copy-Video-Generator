@@ -29,6 +29,29 @@ METRIC_NAMES = [
     "forks",
     "subscribers",
 ]
+NON_CONTENT_PATH_PARTS = {
+    "about",
+    "aboutus",
+    "agreement",
+    "agreements",
+    "contact",
+    "help",
+    "privacy",
+    "recovery_account",
+    "terms",
+}
+NON_CONTENT_TITLE_TERMS = {
+    "about us",
+    "contact us",
+    "privacy policy",
+    "terms of service",
+    "user agreement",
+    "用户协议",
+    "隐私政策",
+    "关于我们",
+    "联系我们",
+    "账号找回",
+}
 ITEM_LIST_KEYS = [
     "items",
     "results",
@@ -172,6 +195,8 @@ def items_from_html(html: str, source: str, platform: str) -> list[dict[str, Any
         url = absolutize_url(link.get("url", ""), base)
         if not relevant_url(platform, url) and platform != "other":
             continue
+        if is_non_content_result(platform, url, title):
+            continue
         key = url or title.lower()
         if key in seen:
             continue
@@ -223,6 +248,8 @@ def normalize_records(payload: SourcePayload, top_n: int) -> list[dict[str, Any]
         metrics = {**extract_metrics(content), **normalize_metric_mapping(raw.get("visibleMetrics") or {})}
         title = first_non_empty(raw.get("title"), f"{payload.platform} search result {index}")
         url = raw.get("url", "")
+        if is_non_content_result(payload.platform, url, title):
+            continue
         creator = raw.get("creatorName", "")
         hook = first_non_empty(raw.get("hook"), extract_hook(content), title)
         cta = first_non_empty(raw.get("cta"), extract_cta(content))
@@ -365,6 +392,19 @@ def relevant_url(platform: str, url: str) -> bool:
     if platform == "tiktok":
         return "tiktok.com" in host
     return bool(url)
+
+
+def is_non_content_result(platform: str, url: str, title: str = "") -> bool:
+    parsed = urllib.parse.urlparse(url)
+    path_parts = {part.lower() for part in parsed.path.split("/") if part}
+    normalized_title = normalize_space(title).lower()
+    if path_parts & NON_CONTENT_PATH_PARTS:
+        return True
+    if any(term in normalized_title for term in NON_CONTENT_TITLE_TERMS):
+        return True
+    if platform == "douyin":
+        return not any(part in path_parts for part in {"video", "user", "search"}) and bool(path_parts & {"aboutus", "agreements"})
+    return False
 
 
 def absolutize_url(url: str, base: str) -> str:

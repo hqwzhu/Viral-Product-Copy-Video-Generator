@@ -97,6 +97,12 @@ def parse_args() -> argparse.Namespace:
     discovery.add_argument("--multi-query-platforms", default="", help="Defaults to --platforms.")
     discovery.add_argument("--multi-query-top-n", type=int, default=20)
     discovery.add_argument("--multi-query-html-snapshot-root", default="")
+    discovery.add_argument("--multi-query-browser-search-timeout-ms", type=int, default=30000)
+    discovery.add_argument(
+        "--multi-query-browser-search-wait-until",
+        default="networkidle",
+        choices=["load", "domcontentloaded", "networkidle"],
+    )
     discovery.add_argument("--multi-query-live-official", action="store_true")
     discovery.add_argument("--multi-query-run-creator-follow-up", action="store_true")
     discovery.add_argument("--multi-query-creator-follow-up-dry-run", action="store_true")
@@ -484,6 +490,10 @@ def build_multi_query_command(args: argparse.Namespace, manifest_path: Path, run
         str(args.multi_query_query_count),
         "--out-dir",
         str(run_dir),
+        "--browser-search-timeout-ms",
+        str(args.multi_query_browser_search_timeout_ms),
+        "--browser-search-wait-until",
+        args.multi_query_browser_search_wait_until,
     ]
     append_many(command, "--query", args.multi_query_query)
     append_if_present(command, "--html-snapshot-root", args.multi_query_html_snapshot_root)

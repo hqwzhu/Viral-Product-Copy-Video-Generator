@@ -161,6 +161,27 @@ python scripts\automation_scheduler.py windows-task --config ".\promotion-automa
 
 Scheduled jobs can prepare content, MP4s, publish queues, browser-assisted publish payloads, evidence recovery, and next-round optimization. They still cannot bypass credentials, platform review, `I_APPROVE_PUBLISH`, login, captcha, risk checks, or final browser publish review.
 
+## Dynamic Search Pages
+
+Some platform search pages keep network connections open and can time out if Playwright waits for `networkidle`. For Douyin, Xiaohongshu, or similar public search pages, use a bounded `domcontentloaded` wait in the multi-query discovery stage:
+
+```powershell
+python scripts\final_capability_runner.py `
+  --url "https://example.com/product" `
+  --platforms douyin,xiaohongshu `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --sample-video-frames `
+  --timeout-ms 15000 `
+  --wait-until domcontentloaded `
+  --multi-query-browser-search-timeout-ms 15000 `
+  --multi-query-browser-search-wait-until domcontentloaded `
+  --multi-query-run-follow-up-captures `
+  --multi-query-capture-browser-assisted-follow-ups `
+  --multi-query-sample-video-frames `
+  --out-dir ".\promotion-output"
+```
+
 ## Metrics And Next Round
 
 Register a real published URL:

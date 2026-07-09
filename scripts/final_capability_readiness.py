@@ -964,7 +964,9 @@ def video_platform_runner_command(out_dir: Path, platforms: list[str], product_u
         f"python scripts/final_capability_runner.py --url \"{product_url}\" "
         f"--platforms {platform_arg} --run-follow-up-captures --capture-browser-assisted-follow-ups "
         "--sample-video-frames --video-sample-count 2 --top-n 5 "
+        "--timeout-ms 15000 --wait-until domcontentloaded "
         "--multi-query-query-count 1 --multi-query-top-n 5 --multi-query-run-follow-up-captures "
+        "--multi-query-browser-search-timeout-ms 15000 --multi-query-browser-search-wait-until domcontentloaded "
         "--multi-query-capture-browser-assisted-follow-ups --multi-query-sample-video-frames "
         f"--multi-query-video-sample-count 2 --video-platforms {platform_arg} --out-dir \"{out_dir}\""
     )

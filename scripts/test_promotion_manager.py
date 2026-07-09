@@ -1100,6 +1100,10 @@ Prompt templates for product copy, SEO content, and video scripts.
             "2",
             "--multi-query-top-n",
             "5",
+            "--multi-query-browser-search-timeout-ms",
+            "15000",
+            "--multi-query-browser-search-wait-until",
+            "domcontentloaded",
             "--out-dir",
             str(out_dir / "output"),
         ]
@@ -1121,6 +1125,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         command_text = " ".join(multi_query["command"])
         self.assertIn("--workflow-manifest", command_text)
         self.assertIn("--dry-run", command_text)
+        self.assertIn("--browser-search-timeout-ms 15000", command_text)
+        self.assertIn("--browser-search-wait-until domcontentloaded", command_text)
         discovery_report = json.loads(Path(multi_query["report"]).read_text(encoding="utf-8"))
         self.assertEqual(discovery_report["summary"]["queries"], 2)
 
@@ -1407,6 +1413,10 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--sample-video-frames",
                 "--video-sample-count",
                 "3",
+                "--timeout-ms",
+                "15000",
+                "--wait-until",
+                "domcontentloaded",
             ]
             args = module.parse_args()
         finally:
@@ -1421,6 +1431,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--multi-query-sample-video-frames", command)
         self.assertIn("--multi-query-video-sample-count", command)
         self.assertEqual(command[command.index("--multi-query-video-sample-count") + 1], "3")
+        self.assertIn("--multi-query-browser-search-timeout-ms", command)
+        self.assertEqual(command[command.index("--multi-query-browser-search-timeout-ms") + 1], "15000")
+        self.assertIn("--multi-query-browser-search-wait-until", command)
+        self.assertEqual(command[command.index("--multi-query-browser-search-wait-until") + 1], "domcontentloaded")
 
     def test_final_capability_runner_orchestrates_safe_full_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-capability-runner-test-"))
@@ -2348,6 +2362,56 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(metrics["subscribers"]["normalized"], 20000.0)
         self.assertEqual(report["aggregatePatterns"]["recordsWithObservedMetrics"], 2)
 
+    def test_platform_search_capture_filters_non_content_platform_pages(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-non-content-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "douyin.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "AI product launch",
+                    "items": [
+                        {
+                            "title": "用户协议",
+                            "url": "https://www.douyin.com/agreements/?id=6773906068725565448",
+                            "content": "privacy policy and user terms",
+                        },
+                        {
+                            "title": "关于我们",
+                            "url": "https://www.douyin.com/aboutus/",
+                            "content": "company information",
+                        },
+                        {
+                            "title": "AI launch video teardown",
+                            "url": "https://www.douyin.com/video/7123456789012345678",
+                            "creator": "Launch Lab",
+                            "content": "A 30 second product launch teardown. 播放量 1.8万 点赞 2300 评论 91",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "douyin",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-douyin.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recordCount"], 1)
+        self.assertEqual(report["records"][0]["url"], "https://www.douyin.com/video/7123456789012345678")
+
     def test_viral_content_library_ranks_multiplatform_capture_reports(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-content-library-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2435,6 +2499,57 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(tasks["summary"]["modes"]["public_url_capture_candidate"], 1)
         self.assertEqual(tasks["summary"]["modes"]["browser_assisted_capture_required"], 1)
         self.assertIn(str(out_dir / "output"), tasks["tasks"][0]["command"])
+
+    def test_viral_content_library_filters_non_content_platform_pages(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-content-library-filter-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        capture_dir = out_dir / "captures"
+        capture_dir.mkdir()
+        (capture_dir / "captured-search-results-douyin.json").write_text(
+            json.dumps(
+                {
+                    "platform": "douyin",
+                    "query": "AI product launch",
+                    "records": [
+                        {
+                            "id": "search-result-001",
+                            "platform": "douyin",
+                            "rank": 1,
+                            "title": "用户协议",
+                            "url": "https://www.douyin.com/agreements/?id=6773906068725565448",
+                            "viralSignals": {"score": 9999},
+                        },
+                        {
+                            "id": "search-result-002",
+                            "platform": "douyin",
+                            "rank": 2,
+                            "title": "AI launch video teardown",
+                            "url": "https://www.douyin.com/video/7123456789012345678",
+                            "visibleMetrics": {"likes": {"raw": "2300", "normalized": 2300.0}},
+                            "viralSignals": {"score": 2300, "hasObservedMetrics": True},
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(VIRAL_CONTENT_LIBRARY),
+                "--search-capture-dir",
+                str(capture_dir),
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        library = json.loads((out_dir / "output/reports/promotion-manager/competitors/viral-content-library.json").read_text(encoding="utf-8"))
+        self.assertEqual(library["recordCount"], 1)
+        self.assertEqual(library["materials"][0]["title"], "AI launch video teardown")
 
     def test_creator_leaderboard_groups_viral_materials_by_creator(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="creator-leaderboard-test-"))
@@ -6958,6 +7073,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("--multi-query-sample-video-frames", capture_action["command"])
         self.assertIn("--multi-query-query-count 1", capture_action["command"])
         self.assertIn("--multi-query-top-n 5", capture_action["command"])
+        self.assertIn("--timeout-ms 15000", capture_action["command"])
+        self.assertIn("--wait-until domcontentloaded", capture_action["command"])
+        self.assertIn("--multi-query-browser-search-timeout-ms 15000", capture_action["command"])
+        self.assertIn("--multi-query-browser-search-wait-until domcontentloaded", capture_action["command"])
         self.assertIn("--multi-query-video-sample-count 2", capture_action["command"])
         self.assertIn("https://www.enhe-tech.com.cn/software/windows-ai", capture_action["command"])
         synthetic_action = next(item for item in report["actionQueue"] if item["id"] == "run_synthetic_evidence_validation")
@@ -7345,6 +7464,50 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["coverage"]["followUpCaptureStatus"], "skipped")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/viral-discovery-run.md").exists())
 
+    def test_viral_discovery_runner_passes_browser_search_wait_and_timeout(self) -> None:
+        module = load_script_module(VIRAL_DISCOVERY_RUNNER)
+        out_dir = Path(tempfile.mkdtemp(prefix="viral-discovery-browser-search-args-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        captured: dict[str, Any] = {}
+
+        def fake_run_command(name: str, command: list[str], check: bool = False) -> dict[str, Any]:
+            captured["name"] = name
+            captured["command"] = command
+            report_dir = out_dir / "reports/promotion-manager/competitors"
+            report_dir.mkdir(parents=True, exist_ok=True)
+            (report_dir / "browser-search-snapshots.json").write_text(
+                json.dumps({"snapshotDir": str(out_dir / "snapshots"), "records": []}),
+                encoding="utf-8",
+            )
+            return {"name": name, "command": command, "exitCode": 0, "stdoutTail": "", "stderrTail": ""}
+
+        original_run_command = module.run_command
+        try:
+            module.run_command = fake_run_command
+            args = module.argparse.Namespace(
+                query="AI product promotion",
+                platforms="douyin,xiaohongshu",
+                top_n=5,
+                out_dir=str(out_dir),
+                snapshot_dir="",
+                html_snapshot_dir="",
+                install_browser_if_missing=False,
+                skip_browser_search=False,
+                browser_search_timeout_ms=15000,
+                browser_search_wait_until="domcontentloaded",
+            )
+            result = module.run_browser_search(args, out_dir, [])
+        finally:
+            module.run_command = original_run_command
+
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(captured["name"], "platform_search_browser")
+        command = captured["command"]
+        self.assertIn("--timeout-ms", command)
+        self.assertEqual(command[command.index("--timeout-ms") + 1], "15000")
+        self.assertIn("--wait-until", command)
+        self.assertEqual(command[command.index("--wait-until") + 1], "domcontentloaded")
+
     def test_viral_discovery_runner_reports_deep_video_follow_up_evidence(self) -> None:
         if not playwright_chromium_available():
             self.skipTest("Playwright Chromium is not installed")
@@ -7474,6 +7637,10 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "youtube,zhihu,xiaohongshu,douyin,github",
                 "--query-count",
                 "6",
+                "--browser-search-timeout-ms",
+                "15000",
+                "--browser-search-wait-until",
+                "domcontentloaded",
                 "--dry-run",
                 "--out-dir",
                 str(out_dir / "output"),
@@ -7493,6 +7660,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(len(slugs), len(set(slugs)))
         self.assertEqual(report["summary"]["plannedRuns"], 6)
         self.assertTrue(all("--platforms" in run["command"] for run in report["runs"]))
+        for run in report["runs"]:
+            command = run["command"]
+            self.assertIn("--browser-search-timeout-ms", command)
+            self.assertEqual(command[command.index("--browser-search-timeout-ms") + 1], "15000")
+            self.assertIn("--browser-search-wait-until", command)
+            self.assertEqual(command[command.index("--browser-search-wait-until") + 1], "domcontentloaded")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-discovery.md").exists())
 
     def test_multi_query_viral_discovery_merges_existing_runs_and_creators(self) -> None:
@@ -7525,6 +7698,16 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "visibleMetrics": {"likes": 800},
                             "viralSignals": {"score": 8},
                             "reusablePatterns": ["case-study structure"],
+                        },
+                        {
+                            "platform": "douyin",
+                            "query": "AI product launch",
+                            "creatorName": "",
+                            "title": "用户协议",
+                            "url": "https://www.douyin.com/agreements/?id=6773906068725565448",
+                            "visibleMetrics": {},
+                            "viralSignals": {"score": 999},
+                            "reusablePatterns": ["needs_manual_pattern_review"],
                         },
                     ]
                 }
@@ -7574,6 +7757,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             (out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-content-library.json").read_text(encoding="utf-8")
         )
         self.assertEqual(library["recordCount"], 2)
+        self.assertTrue(all("agreements" not in item["url"] for item in library["materials"]))
         self.assertEqual(library["materials"][0]["title"], "New AI launch breakdown")
         self.assertEqual(library["materials"][0]["sourceQueries"], ["AI product launch", "AI viral launch"])
         self.assertEqual(library["aggregatePatterns"]["recordsWithObservedMetrics"], 2)

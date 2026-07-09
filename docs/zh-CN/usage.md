@@ -40,6 +40,27 @@ python scripts\multi_query_viral_discovery.py `
 
 ## 生成文案和视频
 
+### 动态搜索页超时处理
+
+抖音、小红书等公开搜索页可能长期保持网络连接，等待 `networkidle` 会超时。补采公开视频证据时，建议使用有界的 `domcontentloaded` 等待：
+
+```powershell
+python scripts\final_capability_runner.py `
+  --url "https://www.enhe-tech.com.cn/software/windows-ai" `
+  --platforms douyin,xiaohongshu `
+  --run-follow-up-captures `
+  --capture-browser-assisted-follow-ups `
+  --sample-video-frames `
+  --timeout-ms 15000 `
+  --wait-until domcontentloaded `
+  --multi-query-browser-search-timeout-ms 15000 `
+  --multi-query-browser-search-wait-until domcontentloaded `
+  --multi-query-run-follow-up-captures `
+  --multi-query-capture-browser-assisted-follow-ups `
+  --multi-query-sample-video-frames `
+  --out-dir ".\promotion-output\enhe-video-evidence-rerun"
+```
+
 ```powershell
 python scripts\render_video.py `
   --content-json ".\promotion-output\reports\promotion-manager\generated-content\product-platform-content.json" `

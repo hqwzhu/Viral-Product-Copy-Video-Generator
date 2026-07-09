@@ -123,6 +123,13 @@ def parse_args() -> argparse.Namespace:
     discovery.add_argument("--multi-query-platforms", default="")
     discovery.add_argument("--multi-query-top-n", type=int, default=20)
     discovery.add_argument("--multi-query-html-snapshot-root", default="", help="Directory of Codex/browser-rendered platform search HTML snapshots for multi-query discovery.")
+    discovery.add_argument("--multi-query-browser-search-timeout-ms", type=int, default=0, help="Defaults to --timeout-ms when omitted.")
+    discovery.add_argument(
+        "--multi-query-browser-search-wait-until",
+        default="",
+        choices=["", "load", "domcontentloaded", "networkidle"],
+        help="Defaults to --wait-until when omitted.",
+    )
     discovery.add_argument("--multi-query-live-official", action="store_true")
     discovery.add_argument("--multi-query-run-creator-follow-up", action="store_true")
     discovery.add_argument("--multi-query-run-follow-up-captures", action="store_true")
@@ -276,6 +283,16 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
     if not args.skip_multi_query_viral_discovery:
         command.append("--run-multi-query-viral-discovery")
         command.extend(["--multi-query-query-count", str(args.multi_query_query_count), "--multi-query-top-n", str(args.multi_query_top_n)])
+        multi_query_browser_timeout_ms = args.multi_query_browser_search_timeout_ms or args.timeout_ms
+        multi_query_browser_wait_until = args.multi_query_browser_search_wait_until or args.wait_until
+        command.extend(
+            [
+                "--multi-query-browser-search-timeout-ms",
+                str(multi_query_browser_timeout_ms),
+                "--multi-query-browser-search-wait-until",
+                multi_query_browser_wait_until,
+            ]
+        )
         append_many(command, "--multi-query-query", args.multi_query_query)
         append_if_present(command, "--multi-query-platforms", args.multi_query_platforms)
         append_if_present(command, "--multi-query-html-snapshot-root", args.multi_query_html_snapshot_root)

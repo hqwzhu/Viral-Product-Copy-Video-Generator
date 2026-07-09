@@ -58,6 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-dir", default="./promotion-output")
     parser.add_argument("--snapshot-dir", default="", help="Directory to write/read browser search snapshots.")
     parser.add_argument("--html-snapshot-dir", default="", help="Optional directory containing saved <platform>.html search pages.")
+    parser.add_argument("--browser-search-timeout-ms", type=int, default=30000)
+    parser.add_argument("--browser-search-wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--install-browser-if-missing", action="store_true")
     parser.add_argument("--live-official", action="store_true", help="Run supported official/public collectors for YouTube/GitHub.")
     parser.add_argument("--collector-platforms", default="youtube,github")
@@ -165,6 +167,10 @@ def run_browser_search(args: argparse.Namespace, out_dir: Path, steps: list[dict
         str(out_dir),
         "--snapshot-dir",
         str(snapshot_dir),
+        "--timeout-ms",
+        str(args.browser_search_timeout_ms),
+        "--wait-until",
+        args.browser_search_wait_until,
     ]
     if args.html_snapshot_dir:
         command.extend(["--html-snapshot-dir", args.html_snapshot_dir])

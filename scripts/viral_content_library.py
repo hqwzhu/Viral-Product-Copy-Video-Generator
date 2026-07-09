@@ -16,6 +16,29 @@ TODAY = date.today().isoformat()
 COMPETITOR_DIR = Path("reports/promotion-manager/competitors")
 PUBLIC_CAPTURE_PLATFORMS = {"github", "youtube"}
 BROWSER_ASSISTED_PLATFORMS = {"zhihu", "xiaohongshu", "douyin", "tiktok"}
+NON_CONTENT_PATH_PARTS = {
+    "about",
+    "aboutus",
+    "agreement",
+    "agreements",
+    "contact",
+    "help",
+    "privacy",
+    "recovery_account",
+    "terms",
+}
+NON_CONTENT_TITLE_TERMS = {
+    "about us",
+    "contact us",
+    "privacy policy",
+    "terms of service",
+    "user agreement",
+    "用户协议",
+    "隐私政策",
+    "关于我们",
+    "联系我们",
+    "账号找回",
+}
 
 
 def main() -> None:
@@ -116,6 +139,8 @@ def normalize_record(record: dict[str, Any], platform: str, query: str, source_r
     record_platform = normalize_space(record.get("platform") or platform or "unknown")
     title = first_non_empty(record.get("title"), "Untitled viral material")
     url = normalize_space(record.get("url") or "")
+    if is_non_content_result(record_platform, url, title):
+        return {}
     metrics = record.get("visibleMetrics") if isinstance(record.get("visibleMetrics"), dict) else {}
     viral_signals = record.get("viralSignals") if isinstance(record.get("viralSignals"), dict) else {}
     score = numeric(viral_signals.get("score"), 0.0)
@@ -299,6 +324,17 @@ def material_sort_key(item: dict[str, Any]) -> tuple[float, int, int]:
 def is_public_http_url(url: str) -> bool:
     parsed = urllib.parse.urlparse(url)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def is_non_content_result(platform: str, url: str, title: str = "") -> bool:
+    parsed = urllib.parse.urlparse(url)
+    path_parts = {part.lower() for part in parsed.path.split("/") if part}
+    normalized_title = normalize_space(title).lower()
+    if path_parts & NON_CONTENT_PATH_PARTS:
+        return True
+    if any(term in normalized_title for term in NON_CONTENT_TITLE_TERMS):
+        return True
+    return False
 
 
 def first_non_empty(*values: Any) -> str:
