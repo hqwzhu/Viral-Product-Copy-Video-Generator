@@ -75,7 +75,8 @@ h2 {
 }
 
 .status,
-.meter {
+.meter,
+.mode-chip {
   display: inline-flex;
   min-height: 24px;
   align-items: center;
@@ -226,6 +227,16 @@ button:active {
 
 .estimate-grid .checkline {
   grid-column: span 2;
+}
+
+.option-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.is-hidden {
+  display: none !important;
 }
 
 .command-panel {

@@ -12,6 +12,13 @@ const PLANS = {
 
 const COST_PER_CREDIT = 0.35;
 
+const COMMAND_LABELS = {
+  skill_entry: "Skill run",
+  browser_publish_session: "Publish session",
+  real_evidence_inbox: "Evidence inbox",
+  final_readiness: "Readiness audit"
+};
+
 const els = {
   licenseStatus: document.getElementById("licenseStatus"),
   productUrl: document.getElementById("productUrl"),
@@ -20,6 +27,15 @@ const els = {
   generate: document.getElementById("generate"),
   selectAll: document.getElementById("selectAll"),
   workflowDepth: document.getElementById("workflowDepth"),
+  commandType: document.getElementById("commandType"),
+  commandModeLabel: document.getElementById("commandModeLabel"),
+  outDir: document.getElementById("outDir"),
+  publishQueue: document.getElementById("publishQueue"),
+  platformPublishUrls: document.getElementById("platformPublishUrls"),
+  evidenceInbox: document.getElementById("evidenceInbox"),
+  runFormFill: document.getElementById("runFormFill"),
+  captureBrowserEvidence: document.getElementById("captureBrowserEvidence"),
+  allowLocalhost: document.getElementById("allowLocalhost"),
   plan: document.getElementById("plan"),
   monthlyRuns: document.getElementById("monthlyRuns"),
   deepReview: document.getElementById("deepReview"),
@@ -51,6 +67,13 @@ els.monthlyRuns.addEventListener("input", updateEstimate);
 els.deepReview.addEventListener("change", updateEstimate);
 els.hostedVideo.addEventListener("change", updateEstimate);
 els.workflowDepth.addEventListener("change", updateEstimate);
+els.commandType.addEventListener("change", handleCommandTypeChange);
+els.runFormFill.addEventListener("change", updateEstimate);
+els.captureBrowserEvidence.addEventListener("change", updateEstimate);
+els.allowLocalhost.addEventListener("change", updateEstimate);
+Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
+  input.addEventListener("change", updateEstimate);
+});
 
 async function init() {
   const stored = await chrome.storage.local.get(["licenseKey", "licenseEndpoint", "licensePlan", "licenseActive"]);
@@ -64,6 +87,7 @@ async function init() {
   }
   setLicenseStatus(stored.licenseActive ? "Active" : "Local", stored.licenseActive ? "active" : "");
   await useCurrentTab();
+  handleCommandTypeChange();
   updateEstimate();
 }
 
@@ -90,9 +114,27 @@ function selectAllPlatforms() {
   boxes.forEach((box) => {
     box.checked = !allChecked;
   });
+  updateEstimate();
 }
 
 function generateCommand() {
+  const commandType = els.commandType.value;
+  if (commandType === "browser_publish_session") {
+    generateBrowserPublishSessionCommand();
+    return;
+  }
+  if (commandType === "real_evidence_inbox") {
+    generateRealEvidenceInboxCommand();
+    return;
+  }
+  if (commandType === "final_readiness") {
+    generateFinalReadinessCommand();
+    return;
+  }
+  generateSkillEntryCommand();
+}
+
+function generateSkillEntryCommand() {
   const url = els.productUrl.value.trim();
   const platforms = selectedPlatforms();
   if (!url) {
@@ -107,7 +149,7 @@ function generateCommand() {
     "python scripts\\skill_entry.py",
     `--link ${quote(url)}`,
     `--platforms ${platforms.join(",")}`,
-    "--out-dir .\\promotion-output"
+    `--out-dir ${quote(outDir())}`
   ];
   if (els.workflowDepth.value === "playbook") {
     args.push("--skip-video");
@@ -124,6 +166,67 @@ function generateCommand() {
   if (els.deepReview.checked) {
     args.push("--multi-query-query-count 8");
   }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateBrowserPublishSessionCommand() {
+  const queuePath = els.publishQueue.value.trim();
+  if (!queuePath) {
+    els.commandOutput.value = "Enter a publish-queue.json path first.";
+    return;
+  }
+  const platforms = selectedPlatforms();
+  const args = [
+    "python scripts\\browser_publish_session.py",
+    `--publish-queue ${quote(queuePath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  if (platforms.length) {
+    args.push(`--platforms ${platforms.join(",")}`);
+  }
+  parseList(els.platformPublishUrls.value).forEach((value) => {
+    args.push(`--platform-publish-url ${quote(value)}`);
+  });
+  if (els.runFormFill.checked) {
+    args.push("--run-form-fill");
+  }
+  if (els.captureBrowserEvidence.checked) {
+    args.push("--open-browser");
+  }
+  if (els.allowLocalhost.checked) {
+    args.push("--allow-localhost");
+  }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateRealEvidenceInboxCommand() {
+  const inboxPath = els.evidenceInbox.value.trim();
+  if (!inboxPath) {
+    els.commandOutput.value = "Enter an evidence inbox folder first.";
+    return;
+  }
+  const args = [
+    "python scripts\\real_evidence_inbox.py",
+    `--inbox-dir ${quote(inboxPath)}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  if (els.captureBrowserEvidence.checked) {
+    args.push("--capture-browser-assisted");
+  }
+  if (els.allowLocalhost.checked) {
+    args.push("--allow-localhost");
+  }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
+}
+
+function generateFinalReadinessCommand() {
+  const args = [
+    "python scripts\\final_capability_readiness.py",
+    `--out-dir ${quote(outDir())}`
+  ];
   els.commandOutput.value = args.join(" ");
   updateEstimate();
 }
@@ -167,6 +270,7 @@ async function validateLicense() {
         requestedPlan: els.plan.value,
         extensionVersion: chrome.runtime.getManifest().version,
         website: ENHE_SITE,
+        commandType: els.commandType.value,
         estimatedMonthlyCredits: estimateCredits().credits
       })
     });
@@ -201,6 +305,7 @@ async function openCheckout() {
   url.searchParams.set("source", "extension");
   url.searchParams.set("credits", String(estimate.credits));
   url.searchParams.set("runs", String(estimate.runs));
+  url.searchParams.set("workflow", estimate.workflowType);
   await chrome.tabs.create({ url: url.toString() });
 }
 
@@ -216,7 +321,7 @@ function updateEstimate() {
   const plan = PLANS[els.plan.value] || PLANS.free;
   const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.creditMeter.textContent = `${estimate.credits} credits`;
-  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at USD ${plan.price}/month. Planned use: ${estimate.credits} credits, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
+  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at USD ${plan.price}/month. ${estimate.label}: ${estimate.creditsPerRun} credits/run, ${estimate.credits} credits planned, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
   if (estimate.credits > plan.credits && plan.price > 0) {
     els.costSummary.textContent += " Add prepaid credits or reduce automation depth.";
   }
@@ -224,20 +329,63 @@ function updateEstimate() {
 
 function estimateCredits() {
   const runs = Math.max(0, Number.parseInt(els.monthlyRuns.value || "0", 10));
+  const commandType = els.commandType.value;
   const depth = els.workflowDepth.value;
-  let creditsPerRun = depth === "playbook" ? 0 : depth === "research" ? 3 : 4;
-  if (els.deepReview.checked) {
+  let workflowType = commandType;
+  let label = COMMAND_LABELS[commandType] || "Workflow";
+  let creditsPerRun = 0;
+
+  if (commandType === "skill_entry") {
+    workflowType = depth === "playbook" ? "command_only" : depth === "research" ? "research_run" : "standard_run";
+    creditsPerRun = depth === "playbook" ? 0 : depth === "research" ? 3 : 4;
+    label = depth === "playbook" ? "Playbook command" : depth === "research" ? "Research run" : "Full Skill run";
+  }
+  if (commandType === "browser_publish_session") {
+    workflowType = "browser_publish_session";
+    creditsPerRun = 2;
+  }
+  if (commandType === "real_evidence_inbox") {
+    workflowType = "real_evidence_inbox";
+    creditsPerRun = 2;
+  }
+  if (commandType === "final_readiness") {
+    workflowType = "final_readiness_audit";
+    creditsPerRun = 1;
+  }
+  if (commandType === "skill_entry" && els.deepReview.checked) {
     creditsPerRun += 15;
   }
-  if (els.hostedVideo.checked) {
+  if (commandType === "skill_entry" && els.hostedVideo.checked) {
     creditsPerRun += 3;
   }
-  return { runs, creditsPerRun, credits: runs * creditsPerRun };
+  return { runs, workflowType, label, creditsPerRun, credits: runs * creditsPerRun };
 }
 
 function setLicenseStatus(label, className) {
   els.licenseStatus.textContent = label;
   els.licenseStatus.className = `status ${className || ""}`.trim();
+}
+
+function handleCommandTypeChange() {
+  const commandType = els.commandType.value;
+  const scope = commandType === "browser_publish_session" ? "publish" : commandType === "real_evidence_inbox" ? "evidence" : "";
+  els.commandModeLabel.textContent = COMMAND_LABELS[commandType] || "Workflow";
+  Array.from(document.querySelectorAll("[data-command-scope]")).forEach((node) => {
+    const scopes = String(node.dataset.commandScope || "").split(/\s+/);
+    node.classList.toggle("is-hidden", scope ? !scopes.includes(scope) : true);
+  });
+  updateEstimate();
+}
+
+function outDir() {
+  return els.outDir.value.trim() || ".\\promotion-output";
+}
+
+function parseList(value) {
+  return String(value || "")
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function quote(value) {

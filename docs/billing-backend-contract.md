@@ -52,6 +52,7 @@ Request:
   "requestedPlan": "growth",
   "extensionVersion": "0.2.0",
   "website": "https://www.enhe-tech.com.cn/",
+  "commandType": "skill_entry",
   "estimatedMonthlyCredits": 120
 }
 ```
@@ -69,6 +70,21 @@ Response:
   "hostedRunEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/run"
 }
 ```
+
+### Supported Workflow Types
+
+The backend should keep these credit costs in sync with `browser-extension/billing-contract.json` and the popup estimator.
+
+| Workflow type | Credits | Notes |
+| --- | ---: | --- |
+| `command_only` | 0 | Local command generation only. |
+| `standard_run` | 1 | Product intake, copy, scripts, and basic platform plan. |
+| `research_run` | 3 | Standard run plus viral discovery summary. |
+| `deep_strategy_review` | 15 | Higher-cost strategy review. |
+| `hosted_mp4_render` | 3 | Hosted render/storage add-on. |
+| `browser_publish_session` | 2 | Browser/manual publish payloads, optional visible-field fill coordination, screenshots, and follow-up commands. |
+| `real_evidence_inbox` | 2 | Published URL, metric, comment, order, and revenue evidence recovery. |
+| `final_readiness_audit` | 1 | Final capability matrix refresh. |
 
 ### Usage Authorization
 

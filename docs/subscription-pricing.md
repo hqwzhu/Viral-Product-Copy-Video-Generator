@@ -38,6 +38,9 @@ Use `safety_multiplier = 1.6` at launch until real logs are available.
 | Research run | Standard run plus viral discovery summary | 180K input, 65K output on mini tier | About 0.45 USD |
 | Deep strategy run | Research run plus high-quality strategic review | 250K input, 80K output on GPT-5.5 tier | About 5.90 USD |
 | Hosted MP4 add-on | Hosted render, storage, and download | No fixed token cost | Price separately if ENHE hosts compute |
+| Browser publish session | Payload preparation, visible-field form fill coordination, screenshots, and post-publish commands | Mostly local/browser automation plus hosted state | About 0.20 USD |
+| Real evidence inbox | Normalize published URLs, metric exports, comments, orders, revenue, and next-round recovery commands | Low hosted model usage unless ENHE adds hosted analysis | About 0.35 USD |
+| Final readiness audit | Merge generated reports into the final capability matrix | No heavy hosted model call | About 0.10 USD |
 
 ## Credit Model
 
@@ -50,6 +53,9 @@ Credits prevent heavy users from creating losses.
 | Research run | 3 |
 | Deep strategy run | 15 |
 | Hosted MP4 render | 3 |
+| Browser publish session | 2 |
+| Real evidence inbox | 2 |
+| Final readiness audit | 1 |
 | Scheduled weekly automation | Same credits as the run type |
 
 Internal planning value: `1 credit = up to 0.35 USD gross cost`.

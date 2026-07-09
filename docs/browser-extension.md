@@ -6,8 +6,9 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 
 - Reads the active tab URL and title after the user opens the extension.
 - Lets the operator select target platforms.
-- Builds a safe Codex command for `scripts/skill_entry.py`.
-- Shows whether the run will create a playbook only, a full workflow, or a full workflow with browser-assisted follow-up.
+- Builds safe Codex commands for `scripts/skill_entry.py`, `scripts/browser_publish_session.py`, `scripts/real_evidence_inbox.py`, and `scripts/final_capability_readiness.py`.
+- Shows whether the operator is running a one-link product cycle, a browser-assisted publishing session, a real evidence recovery pass, or a readiness audit.
+- Lets the operator provide the output directory, publish queue path, publisher URL overrides, and evidence inbox path.
 - Estimates token-backed subscription usage before the operator starts a hosted run.
 - Stores a license key locally.
 - Can validate the license against a configurable ENHE license endpoint when a backend is deployed.
@@ -35,10 +36,17 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 1. Open a product page in Chrome.
 2. Click the extension.
 3. Click Use current tab.
-4. Select platforms and workflow depth.
+4. Select platforms, workflow depth, and command type.
 5. Generate command.
 6. Copy the command.
 7. Run it from the repository root in Codex or PowerShell.
+
+Command types:
+
+- One-link Skill run: reads the product URL, runs research, content generation, publish-pack setup, and readiness refresh.
+- Browser publish session: reads a generated `publish-queue.json`, prepares browser/manual publish payloads, optionally fills visible fields, and stops before final publish.
+- Real evidence inbox: imports published URLs, platform metrics, comments, orders, and revenue evidence from a local folder.
+- Final readiness audit: refreshes the matrix that compares the current run against the requested final Agent scope.
 
 ## Subscription Flow
 

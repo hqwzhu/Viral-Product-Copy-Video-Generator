@@ -217,7 +217,16 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
         elif "includedCredits" not in plans[plan]:
             missing.append(f"plans.{plan}.includedCredits")
     credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
-    for workflow in ["command_only", "standard_run", "research_run", "deep_strategy_review", "hosted_mp4_render"]:
+    for workflow in [
+        "command_only",
+        "standard_run",
+        "research_run",
+        "deep_strategy_review",
+        "hosted_mp4_render",
+        "browser_publish_session",
+        "real_evidence_inbox",
+        "final_readiness_audit",
+    ]:
         if workflow not in credit_costs:
             missing.append(f"creditCosts.{workflow}")
     events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []

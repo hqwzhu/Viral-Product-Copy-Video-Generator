@@ -34,7 +34,7 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
-For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates the safe `scripts/skill_entry.py` command for Codex. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
+For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, and final readiness audits. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
 
 To validate the paid-subscription contract locally before deploying a backend:
 
@@ -1024,7 +1024,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `docs/final-capability-map.md`: requirement-to-capability map and remaining external gates.
 - `browser-extension/manifest.json`: Chrome MV3 extension manifest.
 - `browser-extension/billing-contract.json`: machine-readable subscription backend contract for the extension and ENHE website.
-- `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, command generator, subscription estimate, license hook, and ENHE website links.
+- `browser-extension/popup.html`, `browser-extension/popup.css`, `browser-extension/popup.js`: extension operator UI, multi-command generator, subscription estimate, license hook, and ENHE website links.
 - `scripts/promotion_manager.py`: deterministic report generator.
 - `scripts/run_promotion_workflow.py`: end-to-end local agent workflow runner.
 - `scripts/automation_scheduler.py`: JSON-configured periodic runner and Windows Task Scheduler script generator.

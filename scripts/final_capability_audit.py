@@ -553,12 +553,12 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
+                "The extension can generate Skill, browser publish session, real evidence inbox, and readiness audit commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
                 "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
@@ -593,8 +593,8 @@ def github_docs_status() -> dict[str, Any]:
         ],
         "docs/installation.md": ["Installation", "Install As A Codex Skill", "Verify"],
         "docs/usage.md": ["One Product URL", "Publishing", "Metrics And Next Round"],
-        "docs/browser-extension.md": ["Browser Extension", "Subscription Flow", "Reference Simulator", "Developer Info"],
-        "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Plans"],
+        "docs/browser-extension.md": ["Browser Extension", "Command types", "Subscription Flow", "Reference Simulator", "Developer Info"],
+        "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Browser publish session", "Plans"],
         "docs/billing-backend-contract.md": [
             "Billing Backend Contract",
             "Usage Authorization",
@@ -648,6 +648,13 @@ def browser_extension_status() -> dict[str, Any]:
         for key in ["checkoutUrl", "customerPortalUrl", "licenseEndpoint", "usageAuthorizeEndpoint", "usageCommitEndpoint"]:
             if not contract.get(key):
                 missing.append(f"browser-extension/billing-contract.json missing key: {key}")
+        credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
+        for workflow in ["browser_publish_session", "real_evidence_inbox", "final_readiness_audit"]:
+            if workflow not in credit_costs:
+                missing.append(f"browser-extension/billing-contract.json missing credit cost: {workflow}")
+        license_body = (contract.get("licenseRequest") or {}).get("body") if isinstance(contract.get("licenseRequest"), dict) else {}
+        if not isinstance(license_body, dict) or "commandType" not in license_body:
+            missing.append("browser-extension/billing-contract.json license request must include commandType")
         events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
         for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
             if event not in events:
@@ -656,14 +663,42 @@ def browser_extension_status() -> dict[str, Any]:
         missing.append("browser-extension/billing-contract.json is invalid JSON")
     if popup_path.exists():
         popup_text = safe_read(popup_path)
-        for marker in ["ENHE AI", "Subscription estimate", "License key", "Open checkout", "Billing portal", "www.enhe-tech.com.cn", "popup.js"]:
+        for marker in [
+            "ENHE AI",
+            "Subscription estimate",
+            "Command type",
+            "Browser publish session",
+            "Real evidence inbox",
+            "Final readiness audit",
+            "Publish queue JSON",
+            "Evidence inbox folder",
+            "License key",
+            "Open checkout",
+            "Billing portal",
+            "www.enhe-tech.com.cn",
+            "popup.js",
+        ]:
             if marker not in popup_text:
                 missing.append(f"browser-extension/popup.html missing marker: {marker}")
         if 'src="https://' in popup_text or "src='https://" in popup_text:
             missing.append("browser-extension/popup.html must not load remote scripts")
     if script_path.exists():
         script_text = safe_read(script_path)
-        for marker in ["chrome.storage.local", "validateLicense", "openCheckout", "openPortal", "estimatedMonthlyCredits", "COST_PER_CREDIT", "skill_entry.py"]:
+        for marker in [
+            "chrome.storage.local",
+            "validateLicense",
+            "openCheckout",
+            "openPortal",
+            "estimatedMonthlyCredits",
+            "COST_PER_CREDIT",
+            "skill_entry.py",
+            "browser_publish_session.py",
+            "real_evidence_inbox.py",
+            "final_capability_readiness.py",
+            "browser_publish_session",
+            "real_evidence_inbox",
+            "final_readiness_audit",
+        ]:
             if marker not in script_text:
                 missing.append(f"browser-extension/popup.js missing marker: {marker}")
     if style_path.exists():

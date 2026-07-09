@@ -48,6 +48,52 @@
             <option value="playbook">Playbook only</option>
           </select>
         </label>
+        <label class="field compact">
+          <span>Command type</span>
+          <select id="commandType">
+            <option value="skill_entry" selected>One-link Skill run</option>
+            <option value="browser_publish_session">Browser publish session</option>
+            <option value="real_evidence_inbox">Real evidence inbox</option>
+            <option value="final_readiness">Final readiness audit</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Workflow paths</h2>
+          <span class="mode-chip" id="commandModeLabel">Skill run</span>
+        </div>
+        <label class="field compact">
+          <span>Output directory</span>
+          <input id="outDir" type="text" value=".\promotion-output">
+        </label>
+        <label class="field compact" data-command-scope="publish">
+          <span>Publish queue JSON</span>
+          <input id="publishQueue" type="text" value=".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json">
+        </label>
+        <label class="field compact" data-command-scope="publish">
+          <span>Publisher URL overrides</span>
+          <textarea id="platformPublishUrls" spellcheck="false" placeholder="xiaohongshu=https://creator.xiaohongshu.com/"></textarea>
+        </label>
+        <label class="field compact" data-command-scope="evidence">
+          <span>Evidence inbox folder</span>
+          <input id="evidenceInbox" type="text" value=".\promotion-evidence-inbox">
+        </label>
+        <div class="option-list">
+          <label class="checkline" data-command-scope="publish">
+            <input id="runFormFill" type="checkbox" checked>
+            <span>Fill visible publisher fields</span>
+          </label>
+          <label class="checkline" data-command-scope="publish evidence">
+            <input id="captureBrowserEvidence" type="checkbox">
+            <span>Use browser-visible capture</span>
+          </label>
+          <label class="checkline" data-command-scope="publish evidence">
+            <input id="allowLocalhost" type="checkbox">
+            <span>Allow localhost test URLs</span>
+          </label>
+        </div>
       </section>
 
       <section class="panel">

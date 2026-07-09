@@ -44,7 +44,10 @@
     "standard_run": 1,
     "research_run": 3,
     "deep_strategy_review": 15,
-    "hosted_mp4_render": 3
+    "hosted_mp4_render": 3,
+    "browser_publish_session": 2,
+    "real_evidence_inbox": 2,
+    "final_readiness_audit": 1
   },
   "licenseRequest": {
     "method": "POST",
@@ -53,6 +56,7 @@
       "requestedPlan": "free|starter|growth|scale",
       "extensionVersion": "string",
       "website": "string",
+      "commandType": "skill_entry|browser_publish_session|real_evidence_inbox|final_readiness",
       "estimatedMonthlyCredits": "number"
     }
   },

@@ -120,8 +120,8 @@ The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/
 
 - Captures the active tab URL and title.
 - Lets the user select target platforms and run depth.
-- Generates a Codex command for `scripts/skill_entry.py`.
-- Estimates token-backed subscription usage from planned runs.
+- Generates Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, and final readiness audits.
+- Estimates token-backed subscription usage from command type, run depth, hosted MP4, browser publish, and evidence-recovery options.
 - Stores a license key locally and can call a configurable ENHE license endpoint.
 - Opens ENHE checkout and customer billing portal URLs.
 - Documents the backend license, usage ledger, and webhook contract needed for real paid hosted runs.

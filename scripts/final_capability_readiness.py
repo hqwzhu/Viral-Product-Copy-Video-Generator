@@ -46,7 +46,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "browser_extension_operator_ui_subscription",
-        "label": "Provide a Chrome extension operator UI with subscription estimate, license hook, billing contract simulator, developer info, and ENHE website traffic links.",
+        "label": "Provide a Chrome extension operator UI with multi-command workflow launcher, subscription estimate, license hook, billing contract simulator, developer info, and ENHE website traffic links.",
     },
 ]
 
