@@ -158,7 +158,11 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--published-url", action="append", default=[])
     metrics.add_argument("--metrics-github-repo", action="append", default=[])
     metrics.add_argument("--metrics-youtube-video-id", action="append", default=[])
+    metrics.add_argument("--metrics-csv", action="append", default=[])
     metrics.add_argument("--metrics-xlsx", action="append", default=[])
+    metrics.add_argument("--metrics-json", action="append", default=[])
+    metrics.add_argument("--metrics-text", action="append", default=[])
+    metrics.add_argument("--metrics-structured-json", action="append", default=[])
     metrics.add_argument("--business-csv", action="append", default=[])
     metrics.add_argument("--business-xlsx", action="append", default=[])
     metrics.add_argument("--business-json", action="append", default=[])
@@ -167,8 +171,14 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--post-publish-metrics-allow-localhost", action="store_true")
     metrics.add_argument("--post-publish-metrics-capture-browser-assisted", action="store_true")
     metrics.add_argument("--skip-comment-evidence-capture", action="store_true")
+    metrics.add_argument("--comment-evidence-limit", type=int, default=20)
+    metrics.add_argument("--comment-evidence-platform", default="")
+    metrics.add_argument("--comment-evidence-structured-json", default="")
+    metrics.add_argument("--comment-evidence-html-file", default="")
+    metrics.add_argument("--comment-evidence-text-file", default="")
     metrics.add_argument("--comment-evidence-allow-localhost", action="store_true")
     metrics.add_argument("--comment-evidence-capture-browser-assisted", action="store_true")
+    metrics.add_argument("--comment-evidence-install-browser-if-missing", action="store_true")
     metrics.add_argument("--skip-business-attribution", action="store_true")
     metrics.add_argument("--skip-next-round-optimization", action="store_true")
     metrics.add_argument("--skip-real-evidence-setup", action="store_true")
@@ -281,7 +291,11 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
     append_many(command, "--published-url", args.published_url)
     append_many(command, "--metrics-github-repo", args.metrics_github_repo)
     append_many(command, "--metrics-youtube-video-id", args.metrics_youtube_video_id)
+    append_many(command, "--metrics-csv", args.metrics_csv)
     append_many(command, "--metrics-xlsx", args.metrics_xlsx)
+    append_many(command, "--metrics-json", args.metrics_json)
+    append_many(command, "--metrics-text", args.metrics_text)
+    append_many(command, "--metrics-structured-json", args.metrics_structured_json)
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--business-xlsx", args.business_xlsx)
     append_many(command, "--business-json", args.business_json)
@@ -294,10 +308,17 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
         command.append("--post-publish-metrics-capture-browser-assisted")
     if not args.skip_comment_evidence_capture:
         command.append("--run-comment-evidence-capture")
+    command.extend(["--comment-evidence-limit", str(args.comment_evidence_limit)])
+    append_if_present(command, "--comment-evidence-platform", args.comment_evidence_platform)
+    append_if_present(command, "--comment-evidence-structured-json", args.comment_evidence_structured_json)
+    append_if_present(command, "--comment-evidence-html-file", args.comment_evidence_html_file)
+    append_if_present(command, "--comment-evidence-text-file", args.comment_evidence_text_file)
     if args.comment_evidence_allow_localhost:
         command.append("--comment-evidence-allow-localhost")
     if args.comment_evidence_capture_browser_assisted:
         command.append("--comment-evidence-capture-browser-assisted")
+    if args.comment_evidence_install_browser_if_missing:
+        command.append("--comment-evidence-install-browser-if-missing")
     if not args.skip_business_attribution:
         command.append("--run-business-attribution")
     if not args.skip_next_round_optimization:
@@ -753,8 +774,12 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
         .get("multiQueryViralDiscovery", {})
         .get("summary", {})
     )
+    recovered_metric_records = max(
+        int_value(post_metrics.get("capturedMetricRecords")),
+        int_value(metrics.get("recordsWithMetrics")),
+    )
     return {
-        "capturedMetricRecords": int_value(post_metrics.get("capturedMetricRecords")),
+        "capturedMetricRecords": recovered_metric_records,
         "commentCount": comment_count,
         "matchedBusinessRows": matched_business_rows,
         "recordsWithMetrics": int_value(metrics.get("recordsWithMetrics")),

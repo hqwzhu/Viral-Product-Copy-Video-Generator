@@ -34,6 +34,20 @@ python scripts/skill_entry.py \
   --out-dir "./promotion-output"
 ```
 
+When real published URLs, platform exports, browser snapshots, comment evidence, or business exports already exist, pass them into the same one-link entry so the Skill can recover evidence and generate the next round:
+
+```bash
+python scripts/skill_entry.py \
+  --link "https://example.com/product-or-site" \
+  --platforms youtube,zhihu,xiaohongshu,douyin,github \
+  --published-url "xiaohongshu=https://www.xiaohongshu.com/explore/real-note-id" \
+  --metrics-csv "./real-platform-metrics.csv" \
+  --metrics-structured-json "./published-metrics-snapshot.json" \
+  --comment-evidence-html-file "./visible-comments.html" \
+  --business-csv "./orders-and-revenue.csv" \
+  --out-dir "./promotion-output"
+```
+
 When browser-assisted platforms have known creator entry URLs, the one-link entry can also fill visible fields and stop before final publish:
 
 ```bash

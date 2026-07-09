@@ -1474,6 +1474,25 @@ Prompt templates for product copy, SEO content, and video scripts.
                 ["order-1", "xiaohongshu", "note123", "88.00", "paid"],
             ],
         )
+        metrics_csv = out_dir / "platform-metrics.csv"
+        metrics_csv.write_text(
+            "\n".join(
+                [
+                    "platform,publishedUrl,title,views,likes,comments,evidence",
+                    "xiaohongshu,https://www.xiaohongshu.com/explore/note123,Launch Note,4200,360,41,xhs-export.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        comment_html = out_dir / "comments.html"
+        comment_html.write_text(
+            """<!doctype html>
+<html><body>
+  <p>Comment by Alice: How does pricing work? likes: 9</p>
+  <p>Bob: Need Zapier integration replies: 2</p>
+</body></html>""",
+            encoding="utf-8",
+        )
 
         subprocess.run(
             [
@@ -1507,8 +1526,14 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "unlisted",
                 "--youtube-category-id",
                 "28",
+                "--published-url",
+                "xiaohongshu=https://www.xiaohongshu.com/explore/note123",
+                "--metrics-csv",
+                str(metrics_csv),
                 "--business-xlsx",
                 str(business_xlsx),
+                "--comment-evidence-html-file",
+                str(comment_html),
                 "--skip-platform-access-audit",
                 "--skip-final-capability-audit",
                 "--skip-self-evolution-audit",
@@ -1552,8 +1577,16 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("unlisted", final_command)
         self.assertIn("--youtube-category-id", final_command)
         self.assertIn("28", final_command)
+        self.assertIn("--published-url", final_command)
+        self.assertIn("xiaohongshu=https://www.xiaohongshu.com/explore/note123", final_command)
+        self.assertIn("--metrics-csv", final_command)
+        self.assertIn(str(metrics_csv), final_command)
         self.assertIn("--business-xlsx", final_command)
         self.assertIn(str(business_xlsx), final_command)
+        self.assertIn("--comment-evidence-html-file", final_command)
+        self.assertIn(str(comment_html), final_command)
+        self.assertGreaterEqual(report["summary"]["capturedMetricRecords"], 1)
+        self.assertGreaterEqual(report["summary"]["commentCount"], 2)
         self.assertTrue((out_dir / "output/reports/promotion-manager/skill-entry/skill-entry.md").exists())
 
     def test_skill_entry_can_run_browser_form_fill_from_one_link(self) -> None:

@@ -49,8 +49,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--browser-form-fill-install-browser-if-missing", action="store_true")
     parser.add_argument("--browser-form-fill-timeout-ms", type=int, default=30000)
     parser.add_argument("--browser-form-fill-wait-until", default="domcontentloaded", choices=["load", "domcontentloaded", "networkidle"])
+    parser.add_argument("--metrics-csv", action="append", default=[], help="Platform metrics CSV export. Can repeat.")
+    parser.add_argument("--metrics-xlsx", action="append", default=[], help="Platform metrics Excel .xlsx export. Can repeat.")
+    parser.add_argument("--metrics-json", action="append", default=[], help="Platform metrics JSON export. Can repeat.")
+    parser.add_argument("--metrics-text", action="append", default=[], help="Platform metrics text evidence. Can repeat.")
     parser.add_argument("--business-csv", action="append", default=[], help="Business orders/revenue CSV export. Can repeat.")
     parser.add_argument("--business-xlsx", action="append", default=[], help="Business orders/revenue Excel .xlsx export. Can repeat.")
+    parser.add_argument("--business-json", action="append", default=[], help="Business orders/revenue JSON export. Can repeat.")
+    parser.add_argument("--business-text", action="append", default=[], help="Business orders/revenue text evidence. Can repeat.")
     parser.add_argument("--published-url", action="append", default=[], help="Known published URL as platform=url. Can repeat.")
     parser.add_argument("--metrics-structured-json", default="./published-metrics-snapshot.json")
     parser.add_argument("--automation-config", default="./promotion-automation.json")
@@ -86,8 +92,14 @@ def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "douyinVideoFile": args.douyin_video_file,
             "platformPublishUrl": args.platform_publish_url,
             "runBrowserFormFill": bool(args.run_browser_form_fill),
+            "metricsCsv": args.metrics_csv,
+            "metricsXlsx": args.metrics_xlsx,
+            "metricsJson": args.metrics_json,
+            "metricsText": args.metrics_text,
             "businessCsv": args.business_csv,
             "businessXlsx": args.business_xlsx,
+            "businessJson": args.business_json,
+            "businessText": args.business_text,
             "publishedUrl": args.published_url,
             "metricsStructuredJson": args.metrics_structured_json,
         },
@@ -446,8 +458,15 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
             command.append("--browser-form-fill-install-browser-if-missing")
         command.extend(["--browser-form-fill-timeout-ms", str(args.browser_form_fill_timeout_ms)])
         command.extend(["--browser-form-fill-wait-until", args.browser_form_fill_wait_until])
+    append_many(command, "--metrics-csv", args.metrics_csv)
+    append_many(command, "--metrics-xlsx", args.metrics_xlsx)
+    append_many(command, "--metrics-json", args.metrics_json)
+    append_many(command, "--metrics-text", args.metrics_text)
+    append_if(command, "--metrics-structured-json", args.metrics_structured_json)
     append_many(command, "--business-csv", args.business_csv)
     append_many(command, "--business-xlsx", args.business_xlsx)
+    append_many(command, "--business-json", args.business_json)
+    append_many(command, "--business-text", args.business_text)
     append_many(command, "--published-url", args.published_url)
     command.extend(["--out-dir", str(out_dir)])
     return command
@@ -536,6 +555,10 @@ def business_attribution_command(args: argparse.Namespace, run_root: Path) -> li
         append_many(command, "--business-csv", args.business_csv)
     elif args.business_xlsx:
         append_many(command, "--business-xlsx", args.business_xlsx)
+    elif args.business_json:
+        append_many(command, "--business-json", args.business_json)
+    elif args.business_text:
+        append_many(command, "--business-text", args.business_text)
     else:
         command.extend(["--business-csv", "./orders-and-revenue.csv"])
     return command
@@ -554,11 +577,19 @@ def metrics_recovery_command(args: argparse.Namespace, run_root: Path) -> list[s
         "--out-dir",
         str(run_root),
     ]
+    append_many(command, "--metrics-csv", args.metrics_csv)
+    append_many(command, "--metrics-xlsx", args.metrics_xlsx)
+    append_many(command, "--metrics-json", args.metrics_json)
+    append_many(command, "--metrics-text", args.metrics_text)
     append_if(command, "--metrics-structured-json", args.metrics_structured_json)
     if args.business_csv:
         append_many(command, "--business-csv", args.business_csv)
     elif args.business_xlsx:
         append_many(command, "--business-xlsx", args.business_xlsx)
+    elif args.business_json:
+        append_many(command, "--business-json", args.business_json)
+    elif args.business_text:
+        append_many(command, "--business-text", args.business_text)
     else:
         command.extend(["--business-csv", "./orders-and-revenue.csv"])
     return command
