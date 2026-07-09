@@ -12,6 +12,7 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 - Estimates token-backed subscription usage before the operator starts a hosted run.
 - Stores a license key locally.
 - Can validate the license against a configurable ENHE license endpoint when a backend is deployed.
+- Can reserve hosted usage credits against the ENHE usage authorization endpoint before a hosted run.
 - Opens the ENHE checkout URL with the selected plan and estimated monthly credits.
 - Opens the ENHE customer billing portal.
 - Links to ENHE website and project documentation for traffic.
@@ -64,8 +65,9 @@ Recommended flow:
 3. Backend creates a license key with plan, quota, renewal date, and status.
 4. Extension stores the license key in `chrome.storage.local`.
 5. Extension calls the license API to check status and remaining credits.
-6. Hosted API refuses runs that exceed credits.
-7. Local Codex command generation remains free or trial-limited.
+6. Extension can call the usage authorization API to reserve credits for the selected workflow.
+7. Hosted API refuses runs that exceed credits and commits actual usage after completion.
+8. Local Codex command generation remains free or trial-limited.
 
 Customer self-service billing uses the Billing portal button. The extension opens:
 
@@ -79,6 +81,12 @@ Default planned endpoint:
 
 ```text
 https://www.enhe-tech.com.cn/api/promotion-manager/license
+```
+
+Default usage authorization endpoint:
+
+```text
+https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize
 ```
 
 Expected response:
@@ -119,6 +127,8 @@ The simulator writes:
 - `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator-state.json`
 
 The state file stores a license hash, subscription status, remaining credits, usage reservations, usage commits, and handled webhook event IDs. It does not store plaintext license keys or payment provider secrets.
+
+The extension's Reserve credits button sends the selected workflow type, estimated credits, and an idempotency key to the usage authorization endpoint. Production hosted runs should commit actual usage server-side after completion; local Codex command generation does not need a hosted usage reservation.
 
 ## Security Notes
 

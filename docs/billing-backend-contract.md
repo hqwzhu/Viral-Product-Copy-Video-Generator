@@ -50,7 +50,7 @@ Request:
 {
   "licenseKey": "pm_live_xxx",
   "requestedPlan": "growth",
-  "extensionVersion": "0.3.0",
+  "extensionVersion": "0.4.0",
   "website": "https://www.enhe-tech.com.cn/",
   "commandType": "skill_entry",
   "estimatedMonthlyCredits": 120
@@ -105,7 +105,10 @@ Request:
   "licenseKey": "pm_live_xxx",
   "workflowType": "research_run",
   "estimatedCredits": 3,
-  "idempotencyKey": "uuid"
+  "idempotencyKey": "uuid",
+  "commandType": "skill_entry",
+  "extensionVersion": "0.4.0",
+  "website": "https://www.enhe-tech.com.cn/"
 }
 ```
 
@@ -211,6 +214,7 @@ Minimum tables:
 - Call the license validation endpoint.
 - Show current plan, credits, and renewal date.
 - Estimate credits before the operator starts a hosted run.
+- Reserve hosted credits by calling the usage authorization endpoint with workflow type, estimated credits, and an idempotency key.
 - Never store provider secret keys or webhook secrets.
 
 ## Backend Responsibilities

@@ -553,12 +553,12 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, reference backend simulator, developer info, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands and validate a license endpoint; the local simulator proves the contract shape for license, usage, and webhook flows.",
+                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, and reserve hosted usage credits; the local simulator proves the contract shape for license, usage, and webhook flows.",
                 "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
@@ -662,6 +662,13 @@ def browser_extension_status() -> dict[str, Any]:
         license_body = (contract.get("licenseRequest") or {}).get("body") if isinstance(contract.get("licenseRequest"), dict) else {}
         if not isinstance(license_body, dict) or "commandType" not in license_body:
             missing.append("browser-extension/billing-contract.json license request must include commandType")
+        usage_body = (contract.get("usageAuthorizeRequest") or {}).get("body") if isinstance(contract.get("usageAuthorizeRequest"), dict) else {}
+        if not isinstance(usage_body, dict):
+            missing.append("browser-extension/billing-contract.json must include usageAuthorizeRequest.body")
+        else:
+            for key in ["licenseKey", "workflowType", "estimatedCredits", "idempotencyKey", "commandType"]:
+                if key not in usage_body:
+                    missing.append(f"browser-extension/billing-contract.json usageAuthorizeRequest missing key: {key}")
         events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
         for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
             if event not in events:
@@ -684,6 +691,8 @@ def browser_extension_status() -> dict[str, Any]:
             "Evidence inbox folder",
             "Automation config",
             "License key",
+            "Usage authorization endpoint",
+            "Reserve credits",
             "Open checkout",
             "Billing portal",
             "www.enhe-tech.com.cn",
@@ -700,6 +709,9 @@ def browser_extension_status() -> dict[str, Any]:
             "validateLicense",
             "openCheckout",
             "openPortal",
+            "authorizeUsage",
+            "usageAuthorizeEndpoint",
+            "idempotencyKey",
             "estimatedMonthlyCredits",
             "COST_PER_CREDIT",
             "skill_entry.py",

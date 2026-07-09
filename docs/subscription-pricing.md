@@ -110,6 +110,8 @@ python scripts\billing_contract_simulator.py demo --plan growth --workflow-type 
 
 Use it to verify that a plan's included credits, workflow credit costs, usage reservation, usage commit, and renewal webhook behavior match the pricing model before building the production backend.
 
+The browser extension can call the usage authorization endpoint before a hosted run to reserve the selected workflow's estimated credits. The hosted backend should commit actual token and rendering usage after completion; local command generation does not need a reservation.
+
 ## Launch Rule
 
 Before public release, collect real usage logs for at least 50 workflows:

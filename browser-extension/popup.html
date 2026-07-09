@@ -199,15 +199,21 @@
           <span>License endpoint</span>
           <input id="licenseEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/license">
         </label>
+        <label class="field">
+          <span>Usage authorization endpoint</span>
+          <input id="usageAuthorizeEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize">
+        </label>
         <div class="button-row">
           <button id="saveLicense" type="button" class="secondary">Save</button>
           <button id="validateLicense" type="button" class="secondary">Validate</button>
+          <button id="authorizeUsage" type="button" class="secondary">Reserve credits</button>
         </div>
         <div class="button-row">
           <button id="openCheckout" type="button" class="primary">Open checkout</button>
           <button id="openPortal" type="button" class="secondary">Billing portal</button>
         </div>
         <p id="licenseMessage" class="hint">Use ENHE website billing for production licenses.</p>
+        <p id="usageMessage" class="hint">Reserve hosted credits only before a hosted ENHE run.</p>
       </section>
 
       <section class="panel command-panel">

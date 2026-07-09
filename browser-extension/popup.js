@@ -1,5 +1,6 @@
 const ENHE_SITE = "https://www.enhe-tech.com.cn/";
 const DEFAULT_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/license";
+const DEFAULT_USAGE_AUTHORIZE_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize";
 const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
 
@@ -62,11 +63,14 @@ const els = {
   costSummary: document.getElementById("costSummary"),
   licenseKey: document.getElementById("licenseKey"),
   licenseEndpoint: document.getElementById("licenseEndpoint"),
+  usageAuthorizeEndpoint: document.getElementById("usageAuthorizeEndpoint"),
   saveLicense: document.getElementById("saveLicense"),
   validateLicense: document.getElementById("validateLicense"),
+  authorizeUsage: document.getElementById("authorizeUsage"),
   openCheckout: document.getElementById("openCheckout"),
   openPortal: document.getElementById("openPortal"),
   licenseMessage: document.getElementById("licenseMessage"),
+  usageMessage: document.getElementById("usageMessage"),
   commandOutput: document.getElementById("commandOutput"),
   copyCommand: document.getElementById("copyCommand")
 };
@@ -78,6 +82,7 @@ els.selectAll.addEventListener("click", selectAllPlatforms);
 els.copyCommand.addEventListener("click", copyCommand);
 els.saveLicense.addEventListener("click", saveLicense);
 els.validateLicense.addEventListener("click", validateLicense);
+els.authorizeUsage.addEventListener("click", authorizeUsage);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
 els.plan.addEventListener("change", updateEstimate);
@@ -103,9 +108,16 @@ Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
 });
 
 async function init() {
-  const stored = await chrome.storage.local.get(["licenseKey", "licenseEndpoint", "licensePlan", "licenseActive"]);
+  const stored = await chrome.storage.local.get([
+    "licenseKey",
+    "licenseEndpoint",
+    "usageAuthorizeEndpoint",
+    "licensePlan",
+    "licenseActive"
+  ]);
   els.licenseKey.value = stored.licenseKey || "";
   els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
+  els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
   if (stored.licensePlan) {
     const planKey = String(stored.licensePlan).toLowerCase();
     if (PLANS[planKey]) {
@@ -363,9 +375,58 @@ async function saveLicense() {
   await chrome.storage.local.set({
     licenseKey: els.licenseKey.value.trim(),
     licenseEndpoint: els.licenseEndpoint.value.trim() || DEFAULT_ENDPOINT,
+    usageAuthorizeEndpoint: els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT,
     licensePlan: els.plan.value
   });
   els.licenseMessage.textContent = "License settings saved locally.";
+}
+
+async function authorizeUsage() {
+  const licenseKey = els.licenseKey.value.trim();
+  const endpoint = els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
+  const estimate = estimateCredits();
+  if (!licenseKey) {
+    els.usageMessage.textContent = "Paste a license key before reserving hosted credits.";
+    return;
+  }
+  if (estimate.creditsPerRun <= 0) {
+    els.usageMessage.textContent = "This command type does not need hosted credits.";
+    return;
+  }
+  els.usageMessage.textContent = "Requesting usage authorization...";
+  const idempotencyKey = createIdempotencyKey();
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        licenseKey,
+        workflowType: estimate.workflowType,
+        estimatedCredits: estimate.creditsPerRun,
+        idempotencyKey,
+        commandType: els.commandType.value,
+        extensionVersion: chrome.runtime.getManifest().version,
+        website: ENHE_SITE
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    if (!payload.allowed) {
+      els.usageMessage.textContent = `Usage blocked: ${payload.reason || "not_allowed"}.`;
+      return;
+    }
+    await chrome.storage.local.set({
+      usageAuthorizeEndpoint: endpoint,
+      lastUsageId: payload.usageId || "",
+      lastUsageWorkflowType: estimate.workflowType,
+      lastUsageCreditsReserved: payload.creditsReserved ?? estimate.creditsPerRun
+    });
+    els.usageMessage.textContent = `Reserved ${payload.creditsReserved ?? estimate.creditsPerRun} credits. Remaining: ${payload.creditsRemainingAfterReservation ?? "unknown"}.`;
+  } catch (error) {
+    els.usageMessage.textContent = `Usage API not reachable. Run locally or manage billing on ENHE website. ${error.message}`;
+  }
 }
 
 async function validateLicense() {
@@ -553,4 +614,11 @@ function positiveInt(value, fallback) {
     return fallback;
   }
   return parsed;
+}
+
+function createIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `pm_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }

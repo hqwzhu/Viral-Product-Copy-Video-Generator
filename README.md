@@ -122,7 +122,7 @@ The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/
 - Lets the user select target platforms and run depth.
 - Generates Codex commands for one-link Skill runs, browser publish sessions, real evidence inbox recovery, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts.
 - Estimates token-backed subscription usage from command type, run depth, hosted MP4, browser publish, and evidence-recovery options.
-- Stores a license key locally and can call a configurable ENHE license endpoint.
+- Stores a license key locally, validates it against a configurable ENHE license endpoint, and can reserve hosted usage credits through the ENHE usage authorization endpoint before a hosted run.
 - Opens ENHE checkout and customer billing portal URLs.
 - Documents the backend license, usage ledger, and webhook contract needed for real paid hosted runs.
 - Shows developer and website links for ENHE traffic.
@@ -138,7 +138,7 @@ Full guide: [docs/browser-extension.md](docs/browser-extension.md)
 
 ## Subscription Model
 
-The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, a machine-readable backend contract, and a local reference simulator for license, usage, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
+The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, a machine-readable backend contract, and a local reference simulator for license, usage, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
 
 The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
 

@@ -244,6 +244,13 @@ def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
     ]:
         if event not in events:
             missing.append(f"requiredWebhookEvents.{event}")
+    usage_body = (contract.get("usageAuthorizeRequest") or {}).get("body") if isinstance(contract.get("usageAuthorizeRequest"), dict) else {}
+    if not isinstance(usage_body, dict):
+        missing.append("usageAuthorizeRequest.body")
+    else:
+        for key in ["licenseKey", "workflowType", "estimatedCredits", "idempotencyKey", "commandType"]:
+            if key not in usage_body:
+                missing.append(f"usageAuthorizeRequest.body.{key}")
     return {
         "status": "ready" if not missing else "invalid",
         "missing": missing,

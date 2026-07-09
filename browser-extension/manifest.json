@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ENHE Promotion Manager",
   "short_name": "ENHE Promote",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Capture a product page and build guarded Codex commands for viral product copy, video, publishing, and retrospective workflows.",
   "action": {
     "default_title": "ENHE Promotion Manager",
