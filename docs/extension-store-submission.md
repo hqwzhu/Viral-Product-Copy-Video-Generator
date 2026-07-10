@@ -36,6 +36,19 @@ Upload the zip file to the store. Keep the report as release evidence.
 - A public privacy policy URL is ready, recommended: `https://www.enhe-tech.com.cn/privacy`.
 - A support URL is ready, recommended: `https://www.enhe-tech.com.cn/`.
 
+## Commercial Launch Gate
+
+Before submitting a paid extension listing:
+
+- Deploy `backend/license-service/` or an equivalent production License service behind HTTPS.
+- Configure real Stripe Checkout prices, Customer Portal, and signed webhooks.
+- Verify `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_succeeded`, and `invoice.payment_failed` in Stripe test mode.
+- Confirm the extension can validate a real test license and reserve hosted usage credits through the deployed API.
+- Publish privacy policy, support, refund/contact, and product pages.
+- Prepare screenshots that show local command generation, license validation, credit reservation, and hosted-run payload review.
+- Keep all extension logic packaged locally; remote endpoints must return data only.
+- Treat Chrome Web Store and Microsoft Edge Add-ons review as an external gate. Packaging can be automated, but store approval remains external.
+
 ## Chrome Web Store Steps
 
 1. Create or open a Chrome Web Store Developer Dashboard account.

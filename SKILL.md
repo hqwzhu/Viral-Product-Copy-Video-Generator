@@ -13,6 +13,8 @@ Act as a product promotion manager, not a generic copywriter. Convert a product 
 
 Never auto-publish, auto-login, save cookies/tokens/passwords, bypass captcha, or fabricate platform metrics.
 
+Current publishing policy: manual publish packages are the primary path; auto-publish ports are reserved for later official API-only upgrades. Generate publish queues, browser/manual payloads, launch unlock packs, and evidence templates first. Keep GitHub, YouTube, and Douyin official API executors as dry-run-first integration ports, but do not continue pursuing true automatic publishing unless the operator supplies official credentials, app authorization, and explicit approval.
+
 ## Quick Start
 
 When the user sends a product link, do this:

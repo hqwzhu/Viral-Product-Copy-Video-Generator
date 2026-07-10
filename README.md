@@ -27,7 +27,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can initialize a fillable evidence inbox, run a post-publish performance monitor, import evidence files, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | Store-ready package included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3, icons, permissions, and remote-code guardrails before building a Chrome/Edge submission zip. `scripts/billing_contract_simulator.py` proves the license, quota, usage, hosted-run request, and webhook contract locally before a real payment backend is deployed. |
+| Browser extension | Store package and backend reference included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3, icons, permissions, and remote-code guardrails before building a Chrome/Edge submission zip. `scripts/billing_contract_simulator.py` proves the contract locally, and `backend/license-service/` provides a Stripe Checkout, webhook, License, usage reservation, usage commit, and hosted-run reference service. Store review and production deployment remain external gates. |
 
 ## Install
 
@@ -195,7 +195,7 @@ Store listing and submission guide: [docs/extension-store-submission.md](docs/ex
 
 ## Subscription Model
 
-The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, hosted-run payload handoff, a machine-readable backend contract, and a local reference simulator for license, usage, hosted-run, and webhook flows. Real billing must still be handled by a backend payment provider and license API. Chrome Web Store Payments is deprecated, so do not rely on the old Web Store billing API for a new paid extension.
+The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, hosted-run payload handoff, a machine-readable backend contract, a local reference simulator for license, usage, hosted-run, and webhook flows, and a production reference License service under `backend/license-service/`. Chrome Web Store Payments is deprecated, so use the ENHE backend payment provider and License API rather than the old Web Store billing API for a new paid extension.
 
 The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
 
@@ -214,6 +214,17 @@ python scripts\billing_contract_simulator.py demo `
 ```
 
 The simulator writes `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json` and keeps only hashed license keys in its state file.
+
+Run the production reference License service locally:
+
+```powershell
+cd backend\license-service
+npm install
+copy .env.example .env
+npm run start
+```
+
+Before public launch, deploy it behind HTTPS, configure Stripe live prices and signed webhooks, replace the JSON state file with a database, connect hosted workers, publish privacy/support/refund pages, and pass Chrome/Edge store review.
 
 Validate the hosted-run handoff used by the extension after reserving credits:
 

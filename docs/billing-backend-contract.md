@@ -241,6 +241,36 @@ python scripts\billing_contract_simulator.py hosted-run `
 
 The simulator rejects hosted runs when the license is inactive, the `usageId` is missing, the reserved workflow does not match the hosted request, reserved credits are too low, required product/platform fields are missing, or safety flags are absent.
 
+## Production Reference Service
+
+The repository now includes a deployable reference backend at `backend/license-service/`. It is the bridge between the packaged extension and real commercialization infrastructure:
+
+- Stripe Checkout subscription session creation with `mode: "subscription"`.
+- Stripe Customer Portal session creation.
+- Stripe webhook signature verification with `stripe.webhooks.constructEvent` and the raw request body.
+- Hashed license-key records using `LICENSE_PEPPER`.
+- Usage reservation, usage commit, and hosted-run queue intake.
+- Server-side storage of Stripe secrets, webhook secrets, price IDs, and quota state.
+
+Local run:
+
+```powershell
+cd backend\license-service
+npm install
+copy .env.example .env
+npm run start
+```
+
+Webhook test:
+
+```powershell
+stripe listen --forward-to localhost:3000/api/promotion-manager/webhooks/stripe
+```
+
+Copy the Stripe CLI webhook signing secret into `STRIPE_WEBHOOK_SECRET`, then restart the service.
+
+The reference service stores state in a local JSON file by default. For production, replace that with database tables and transactions for accounts, licenses, subscriptions, usage ledger, hosted runs, and audit logs. Store approval remains external: after the backend is deployed, submit the extension through the official Chrome Web Store and Microsoft Edge Add-ons dashboards.
+
 ## Webhooks
 
 Backend endpoint:

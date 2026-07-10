@@ -29,7 +29,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "official_or_browser_assisted_publish",
-        "label": "Publish through official APIs where authorized, or browser/manual payloads where direct APIs are unavailable.",
+        "label": "manual publish packages are the primary path; auto-publish ports are reserved for official API-only upgrades.",
     },
     {
         "id": "real_metrics_comments_orders_revenue",
@@ -49,7 +49,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "browser_extension_operator_ui_subscription",
-        "label": "Provide a Chrome extension operator UI with multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, billing contract simulator, developer info, and ENHE website traffic links.",
+        "label": "Provide a Chrome extension operator UI with subscription hooks, production license-service reference, store package, developer info, and ENHE website traffic links.",
     },
     {
         "id": "phase_progress_reporting",
@@ -395,6 +395,8 @@ def publish_row(
         status = "partial_ready_external_approval_required"
     if manual_required:
         status = "partial_ready_browser_or_manual_required"
+    if readiness_records:
+        status = "manual_package_ready_auto_ports_reserved"
     return row(
         "official_or_browser_assisted_publish",
         status,
@@ -407,6 +409,9 @@ def publish_row(
             "readyToExecute": ready_to_execute,
             "dryRunReady": dry_run_ready,
             "manualOrBrowserRequired": manual_required,
+            "manualPublishPackagesPrimary": True,
+            "autoPublishPortsReserved": True,
+            "officialApiOnly": True,
         },
     )
 
@@ -680,6 +685,7 @@ def row(
             "ready_with_video_evidence",
             "ready_with_full_funnel_evidence",
             "ready_review_gated_autonomy",
+            "manual_package_ready_auto_ports_reserved",
         },
         "blocked": blocked,
         "evidence": [str(item) for item in evidence if item],
@@ -768,7 +774,7 @@ def build_action_queue(
     if "no MP4 generated" in " ".join(by_id["copy_and_real_video_generation"]["missing"]):
         actions.append(action(30, "render_video", "Run without --skip-video or provide a voiceover file for MP4 rendering.", final_runner_command(out_dir, product_url)))
     publish_status = by_id["official_or_browser_assisted_publish"]["status"]
-    if publish_status.startswith("partial_ready"):
+    if publish_status.startswith("partial_ready") or publish_status == "manual_package_ready_auto_ports_reserved":
         actions.extend(publish_actions(out_dir, readiness_reports, setup_reports))
         actions.append(
             action(

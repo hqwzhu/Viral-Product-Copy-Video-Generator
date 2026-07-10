@@ -94,6 +94,8 @@ The review step writes `reports\promotion-manager\cheat-review\*-cheat-review-pa
 
 ## Publishing
 
+Current publishing policy: manual publish packages are the primary path; auto-publish ports are reserved for later official API-only upgrades. The default operating flow is to build the publish queue, browser/manual payloads, launch unlock pack, and real-evidence templates, then let the operator publish manually or in a visible browser session. GitHub, YouTube, and Douyin executor ports remain available as dry-run-first interfaces, but do not continue chasing real automatic publishing until official credentials, app authorization, account review, and explicit approval are available.
+
 Build the guarded queue:
 
 ```powershell

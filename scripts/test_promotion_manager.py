@@ -79,6 +79,7 @@ PACKAGE_BROWSER_EXTENSION = ROOT / "scripts" / "package_browser_extension.py"
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
 BROWSER_EXTENSION = ROOT / "browser-extension"
+LICENSE_SERVICE = ROOT / "backend" / "license-service"
 
 
 def load_script_module(path: Path):
@@ -6548,6 +6549,66 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon48.png", names)
         self.assertIn("icons/icon128.png", names)
 
+    def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
+        package_json_path = LICENSE_SERVICE / "package.json"
+        server_path = LICENSE_SERVICE / "src" / "server.js"
+        env_example_path = LICENSE_SERVICE / ".env.example"
+        readme_path = LICENSE_SERVICE / "README.md"
+
+        for path in [package_json_path, server_path, env_example_path, readme_path]:
+            self.assertTrue(path.exists(), path)
+
+        package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
+        dependencies = package_json.get("dependencies", {})
+        self.assertIn("express", dependencies)
+        self.assertIn("stripe", dependencies)
+
+        server = server_path.read_text(encoding="utf-8")
+        for endpoint in [
+            "/health",
+            "/promotion-manager/checkout",
+            "/promotion-manager/billing",
+            "/api/promotion-manager/license",
+            "/api/promotion-manager/usage/authorize",
+            "/api/promotion-manager/usage/commit",
+            "/api/promotion-manager/run",
+            "/api/promotion-manager/webhooks/stripe",
+        ]:
+            self.assertIn(endpoint, server)
+        for marker in [
+            "stripe.checkout.sessions.create",
+            'mode: "subscription"',
+            "stripe.webhooks.constructEvent",
+            "express.raw",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "LICENSE_PEPPER",
+            "licenseKeyHash",
+            "idempotencyKey",
+        ]:
+            self.assertIn(marker, server)
+
+        env_example = env_example_path.read_text(encoding="utf-8")
+        for marker in [
+            "STRIPE_SECRET_KEY=",
+            "STRIPE_WEBHOOK_SECRET=",
+            "STRIPE_PRICE_STARTER=",
+            "STRIPE_PRICE_GROWTH=",
+            "ENHE_PUBLIC_BASE_URL=",
+            "LICENSE_PEPPER=",
+            "LICENSE_SERVICE_STATE_FILE=",
+        ]:
+            self.assertIn(marker, env_example)
+        for forbidden in ["sk_live_", "whsec_", "github_pat_", "GITHUB_TOKEN=" + "github_"]:
+            self.assertNotIn(forbidden, env_example)
+            self.assertNotIn(forbidden, server)
+
+        readme = readme_path.read_text(encoding="utf-8")
+        self.assertIn("npm install", readme)
+        self.assertIn("npm run start", readme)
+        self.assertIn("Stripe CLI", readme)
+        self.assertIn("store approval remains external", readme)
+
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
         chinese = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
@@ -6564,6 +6625,42 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("remote code", text.lower())
         self.assertIn("收费订阅", zh_extension)
         self.assertIn("上架", chinese)
+
+    def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:
+        files = [
+            ROOT / "SKILL.md",
+            DOCS / "usage.md",
+            DOCS / "final-capability-map.md",
+        ]
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("manual publish packages are the primary path", text)
+            self.assertIn("auto-publish ports are reserved", text)
+            self.assertIn("official API-only", text)
+        capability_map = (DOCS / "final-capability-map.md").read_text(encoding="utf-8")
+        self.assertIn("Generate publish packages first; keep auto-publish ports reserved", capability_map)
+
+    def test_final_readiness_publish_row_uses_manual_package_first_strategy(self) -> None:
+        module = load_script_module(FINAL_CAPABILITY_READINESS)
+        row = module.publish_row(
+            {},
+            {},
+            [
+                {
+                    "records": [
+                        {"platform": "github", "readiness": "dry_run_ready"},
+                        {"platform": "xiaohongshu", "readiness": "manual_publish_required"},
+                    ]
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(row["id"], "official_or_browser_assisted_publish")
+        self.assertEqual(row["status"], "manual_package_ready_auto_ports_reserved")
+        self.assertIn("manual publish packages", row["label"])
+        self.assertTrue(row["metrics"]["autoPublishPortsReserved"])
+        self.assertEqual(row["metrics"]["manualOrBrowserRequired"], 1)
 
     def test_billing_contract_simulator_runs_license_usage_and_webhook_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="billing-simulator-test-"))
@@ -6768,6 +6865,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
         self.assertIn("browser-extension/icons/icon128.png", files)
+        self.assertIn("backend/license-service/package.json", files)
+        self.assertIn("backend/license-service/package-lock.json", files)
+        self.assertIn("backend/license-service/.env.example", files)
+        self.assertIn("backend/license-service/src/server.js", files)
+        self.assertIn("backend/license-service/README.md", files)
+        self.assertFalse(any("/node_modules/" in item for item in files))
+        self.assertFalse(any("/var/" in item for item in files))
         self.assertIn("scripts/billing_contract_simulator.py", files)
         self.assertIn("scripts/package_browser_extension.py", files)
         self.assertIn("scripts/launch_unlock_pack.py", files)
@@ -8959,7 +9063,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         video_path = out_dir / "draft.mp4"
         video_path.write_bytes(b"not a real video but enough for blocked execute")
         env = os.environ.copy()
-        env["YOUTUBE_ACCESS_TOKEN"] = "ya29.unit-test-secret"
+        env["YOUTUBE_ACCESS_TOKEN"] = "oauth-unit-test-secret"
         env.pop("I_APPROVE_PUBLISH", None)
         env["PUBLISH_DRY_RUN"] = "false"
         subprocess.run(
@@ -8988,7 +9092,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["credentialStatus"], "present")
         self.assertEqual(report["status"], "blocked")
         self.assertIn("I_APPROVE_PUBLISH=true", report["reason"])
-        self.assertNotIn("ya29.unit-test-secret", report_text)
+        self.assertNotIn("oauth-unit-test-secret", report_text)
 
     def test_publish_executor_douyin_dry_run_uses_official_upload_and_create_boundary(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-douyin-test-"))
