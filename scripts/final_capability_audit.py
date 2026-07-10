@@ -67,6 +67,7 @@ SCRIPT_REQUIREMENTS = {
     "promotion_cycle_runner": "promotion_cycle_runner.py",
     "real_run_playbook": "real_run_playbook.py",
     "skill_entry": "skill_entry.py",
+    "final_capability_audit": "final_capability_audit.py",
     "final_capability_runner": "final_capability_runner.py",
     "final_capability_readiness": "final_capability_readiness.py",
     "self_evolution_audit": "self_evolution_audit.py",
@@ -438,6 +439,12 @@ def requirement_status(
     real_metrics_ready = metrics_ready and (
         credentials["youtube_search_metrics"]["ready"] or credentials["github_write"]["ready"]
     )
+    self_evolution_report = read_report_reference(str(self_evolution_audit.get("report", ""))) if self_evolution_audit.get("reportExists") else {}
+    self_evolution_operational = (
+        scripts_ready(scripts, ["final_capability_audit", "self_evolution_audit"])
+        and bool(self_evolution_audit.get("ready"))
+        and str(self_evolution_report.get("status", "")).startswith(("ready_", "partial_ready_"))
+    )
 
     return [
         {
@@ -618,13 +625,14 @@ def requirement_status(
         {
             "id": "fully_autonomous_self_evolution",
             "label": "Research, install tools, keep learning, and upgrade the Skill itself",
-            "status": "blocked_by_safety_boundary",
+            "status": "ready_review_gated_autonomy" if self_evolution_operational else "partial_ready_review_gated_autonomy",
             "evidence": scripts_present(scripts, ["final_capability_audit", "self_evolution_audit"])
             + ([str(self_evolution_audit.get("report"))] if self_evolution_audit.get("reportExists") else []),
-            "missing": ["explicit review/approval for dependency upgrades and self-modifying code"],
+            "missing": [] if self_evolution_operational else ["self_evolution_audit.py did not produce a ready controlled-autonomy report"],
             "limits": [
                 "The Skill can audit runtime tools, repository state, installed Skill drift, and safe upgrade actions.",
                 "The Skill can install explicit allowlisted runtime dependencies and sync reviewed local Skill files when commanded with approval.",
+                "It emits a reviewRequiredUpgradeRequests queue for tool installs, Skill sync, and platform-learning refreshes.",
                 "It must not silently download unreviewed network code, store secrets, or replace itself without a clear source/risk note.",
             ],
         },
@@ -894,9 +902,15 @@ def missing_publish_credentials(credentials: dict[str, dict[str, Any]]) -> list[
 
 
 def self_evolution_status(tools: dict[str, dict[str, Any]], audit: dict[str, Any]) -> dict[str, Any]:
+    audit_report = read_report_reference(str(audit.get("report", ""))) if audit.get("reportExists") else {}
     return {
         "mode": "controlled_autonomy",
         "audit": audit,
+        "reviewRequiredUpgradeRequests": audit_report.get("reviewRequiredUpgradeRequests", []),
+        "reviewQueueSummary": audit_report.get(
+            "reviewQueueSummary",
+            {"total": 0, "agentExecutableNow": 0, "requiresApprovalOrManualReview": 0},
+        ),
         "canDoNow": [
             "audit local scripts, tools, and credential presence",
             "audit installed Skill drift against the reviewed local repository",
@@ -1374,6 +1388,15 @@ def read_json_file(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def read_report_reference(path_value: str) -> dict[str, Any]:
+    if not path_value:
+        return {}
+    path = Path(path_value)
+    if not path.is_absolute() and not path.exists():
+        path = ROOT / path
+    return read_json_file(path)
 
 
 def safe_read(path: Path) -> str:

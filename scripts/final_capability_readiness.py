@@ -465,6 +465,10 @@ def self_evolution_row(
     elif learning["officialDocGapResearchMissingCapabilities"] > 0:
         missing.append("official platform doc gap research still has unresolved missing capabilities")
     status = audit_item.get("status") or self_evolution.get("status") or "unknown"
+    if status == "blocked_by_safety_boundary":
+        status = "partial_ready_review_gated_autonomy"
+    elif status == "ready_review_gated_autonomy" and missing:
+        status = "partial_ready_review_gated_autonomy"
     return row(
         "controlled_self_evolution",
         status,
@@ -484,6 +488,13 @@ def self_evolution_row(
             "officialDocGapResearchRecords": learning["officialDocGapResearchRecords"],
             "officialDocGapResearchMissingCapabilities": learning["officialDocGapResearchMissingCapabilities"],
             "officialDocGapResearchManualFallbacks": learning["officialDocGapResearchManualFallbacks"],
+            "reviewQueueTotal": int_value((self_evolution.get("reviewQueueSummary") or {}).get("total")),
+            "reviewQueueRequiresApprovalOrManualReview": int_value(
+                (self_evolution.get("reviewQueueSummary") or {}).get("requiresApprovalOrManualReview")
+            ),
+            "reviewQueueAgentExecutableNow": int_value(
+                (self_evolution.get("reviewQueueSummary") or {}).get("agentExecutableNow")
+            ),
         },
     )
 
@@ -566,7 +577,14 @@ def row(
         "id": requirement_id,
         "label": definition["label"],
         "status": status or "unknown",
-        "satisfied": status in {"ready", "full_ready", "ready_with_video_evidence", "ready_with_full_funnel_evidence"},
+        "satisfied": status
+        in {
+            "ready",
+            "full_ready",
+            "ready_with_video_evidence",
+            "ready_with_full_funnel_evidence",
+            "ready_review_gated_autonomy",
+        },
         "blocked": blocked,
         "evidence": [str(item) for item in evidence if item],
         "missing": [str(item) for item in missing if item],

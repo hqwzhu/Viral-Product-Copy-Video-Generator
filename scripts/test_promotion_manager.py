@@ -6808,6 +6808,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("repository", report)
         self.assertTrue(any(item["id"] == "playwright_chromium" for item in report["safeInstallCandidates"]))
         self.assertEqual(report["platformLearning"]["status"], "missing_platform_access_audit")
+        self.assertIn("reviewRequiredUpgradeRequests", report)
+        self.assertIn("reviewQueueSummary", report)
+        self.assertTrue(
+            any(item["id"] == "refresh_platform_access_learning" for item in report["reviewRequiredUpgradeRequests"])
+        )
+        self.assertGreaterEqual(report["reviewQueueSummary"]["total"], 1)
+        self.assertGreaterEqual(report["reviewQueueSummary"]["agentExecutableNow"], 1)
         self.assertTrue(any(item["area"] == "learning_loop" for item in report["nextActions"]))
         self.assertEqual(report["syncInstalledSkill"]["status"], "not_requested")
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
@@ -6861,9 +6868,9 @@ Prompt templates for product copy, SEO content, and video scripts.
             by_requirement["all_platform_auto_publish"]["status"],
             "blocked_by_authorization_or_platform_limits",
         )
-        self.assertEqual(
+        self.assertIn(
             by_requirement["fully_autonomous_self_evolution"]["status"],
-            "blocked_by_safety_boundary",
+            {"ready_review_gated_autonomy", "partial_ready_review_gated_autonomy"},
         )
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
         self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
@@ -6897,6 +6904,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["product_batch_runner"]["exists"])
         self.assertTrue(report["scripts"]["real_run_playbook"]["exists"])
         self.assertTrue(report["scripts"]["skill_entry"]["exists"])
+        self.assertTrue(report["scripts"]["final_capability_audit"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_readiness"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
@@ -6964,6 +6972,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(any(item["purpose"] == "optimize_next_round_from_recovered_evidence" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "audit_platform_official_access_with_live_docs" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "sync_installed_skill_when_approved" for item in report["recommendedCommands"]))
+        self.assertIn("reviewQueueSummary", report["selfEvolution"])
+        self.assertIn("reviewRequiredUpgradeRequests", report["selfEvolution"])
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
@@ -7055,7 +7065,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                         },
                         {
                             "id": "fully_autonomous_self_evolution",
-                            "status": "blocked_by_safety_boundary",
+                            "status": "ready_review_gated_autonomy",
                             "evidence": ["scripts/self_evolution_audit.py"],
                             "missing": ["explicit review/approval"],
                         },
@@ -7091,6 +7101,11 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "installedSkill": {
                         "status": "drift_detected",
                         "syncCommand": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC",
+                    },
+                    "reviewQueueSummary": {
+                        "total": 2,
+                        "agentExecutableNow": 1,
+                        "requiresApprovalOrManualReview": 1,
                     },
                 }
             ),
@@ -7176,7 +7191,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         report_text = report_path.read_text(encoding="utf-8")
         self.assertNotIn(secret_value, report_text)
         report = json.loads(report_text)
-        self.assertEqual(report["status"], "partial_ready_blocked_by_platform_or_safety_limits")
+        self.assertEqual(report["status"], "partial_ready_waiting_external_evidence")
         by_requirement = {item["id"]: item for item in report["requirements"]}
         self.assertEqual(by_requirement["product_url_codex_structured_intake"]["status"], "ready")
         self.assertEqual(by_requirement["viral_creator_video_research"]["status"], "ready_with_video_evidence")
@@ -7189,6 +7204,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchStatus"], "unresolved_missing_official_docs")
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchRecords"], 2)
         self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["officialDocGapResearchMissingCapabilities"], 2)
+        self.assertEqual(by_requirement["controlled_self_evolution"]["status"], "partial_ready_review_gated_autonomy")
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["reviewQueueTotal"], 2)
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["reviewQueueAgentExecutableNow"], 1)
+        self.assertEqual(by_requirement["controlled_self_evolution"]["metrics"]["reviewQueueRequiresApprovalOrManualReview"], 1)
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
         self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
         self.assertEqual(by_requirement["phase_progress_reporting"]["status"], "ready")

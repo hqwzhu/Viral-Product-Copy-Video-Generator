@@ -143,6 +143,7 @@ def build_report(
     installed = installed_skill_status()
     runtime_gaps = runtime_gap_list(tools)
     platform_learning = platform_learning_status(out_dir)
+    review_queue = review_required_upgrade_requests(installed, runtime_gaps, platform_learning, tools, out_dir)
     report = {
         "generatedAt": TODAY,
         "status": audit_status(installed, runtime_gaps, args.skip_runtime_checks),
@@ -155,6 +156,8 @@ def build_report(
         "safeInstallCandidates": safe_install_candidates(tools, out_dir),
         "installResults": install_results,
         "platformLearning": platform_learning,
+        "reviewRequiredUpgradeRequests": review_queue,
+        "reviewQueueSummary": review_queue_summary(review_queue),
         "syncInstalledSkill": sync_result
         or {
             "requested": False,
@@ -393,6 +396,130 @@ def safe_install_candidates(tools: dict[str, dict[str, Any]], out_dir: Path) -> 
     ]
 
 
+def review_required_upgrade_requests(
+    installed: dict[str, Any],
+    runtime_gaps: list[dict[str, str]],
+    platform_learning: dict[str, Any],
+    tools: dict[str, dict[str, Any]],
+    out_dir: Path,
+) -> list[dict[str, Any]]:
+    requests: list[dict[str, Any]] = []
+    for gap in runtime_gaps:
+        tool = gap.get("tool", "")
+        if tool == "playwright_chromium":
+            requests.append(
+                upgrade_request(
+                    "install_playwright_chromium",
+                    "runtime_tool",
+                    "install_allowlisted_runtime",
+                    "explicit_command",
+                    (
+                        "python scripts/self_evolution_audit.py --install-safe-missing-tools "
+                        f"--safe-install playwright_chromium --out-dir \"{out_dir}\""
+                    ),
+                    gap.get("impact", ""),
+                    "Official Playwright browser runtime installer; no arbitrary package install.",
+                    agent_can_execute=False,
+                )
+            )
+        elif tool == "playwright":
+            requests.append(
+                upgrade_request(
+                    "review_python_playwright_package",
+                    "python_dependency",
+                    "manual_dependency_review",
+                    "manual_review",
+                    "python -m pip install playwright",
+                    gap.get("impact", ""),
+                    "Requires reviewed dependency change before installing a Python package.",
+                    agent_can_execute=False,
+                )
+            )
+        elif tool == "ffmpeg":
+            requests.append(
+                upgrade_request(
+                    "review_ffmpeg_install",
+                    "system_binary",
+                    "manual_binary_review",
+                    "manual_review",
+                    "winget install Gyan.FFmpeg",
+                    gap.get("impact", ""),
+                    "Requires reviewed system binary installation outside the Skill repository.",
+                    agent_can_execute=False,
+                )
+            )
+    if installed.get("status") != "synced":
+        requests.append(
+            upgrade_request(
+                "sync_installed_skill",
+                "installed_skill",
+                "sync_reviewed_skill_files",
+                SKILL_SYNC_APPROVAL,
+                installed.get("syncCommand", ""),
+                "Installed Codex Skill does not match reviewed repository files.",
+                "Copies managed local files only; does not delete unmanaged installed files.",
+                agent_can_execute=False,
+            )
+        )
+    if platform_learning.get("status") != "fresh_live_checked":
+        requests.append(
+            upgrade_request(
+                "refresh_platform_access_learning",
+                "platform_learning",
+                "refresh_official_docs",
+                "",
+                platform_learning.get("refreshCommand") or f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
+                "Publishing and metrics executors should be changed only after fresh official/public source checks.",
+                "Read-only official documentation reachability check; records gaps and keeps unsafe platforms on manual/browser fallback.",
+                agent_can_execute=True,
+            )
+        )
+    if not tools.get("git", {}).get("available"):
+        requests.append(
+            upgrade_request(
+                "review_git_install",
+                "system_binary",
+                "manual_binary_review",
+                "manual_review",
+                "install Git from the official installer or winget after review",
+                "Repository state and reviewed GitHub sync cannot be verified without Git.",
+                "System binary install must be reviewed by the operator.",
+                agent_can_execute=False,
+            )
+        )
+    return requests
+
+
+def upgrade_request(
+    request_id: str,
+    area: str,
+    action: str,
+    approval_required: str,
+    command: str,
+    reason: str,
+    safety_note: str,
+    agent_can_execute: bool,
+) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "area": area,
+        "action": action,
+        "approvalRequired": approval_required,
+        "agentCanExecuteWithoutFurtherApproval": agent_can_execute and not approval_required,
+        "command": command,
+        "reason": reason,
+        "safetyNote": safety_note,
+    }
+
+
+def review_queue_summary(queue: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "total": len(queue),
+        "agentExecutableNow": sum(1 for item in queue if item.get("agentCanExecuteWithoutFurtherApproval")),
+        "requiresApprovalOrManualReview": sum(1 for item in queue if not item.get("agentCanExecuteWithoutFurtherApproval")),
+    }
+
+
 def learning_and_upgrade_loop(out_dir: Path) -> list[dict[str, Any]]:
     return [
         {
@@ -567,6 +694,16 @@ def render_markdown(report: dict[str, Any]) -> str:
     if learning.get("report"):
         lines.append(f"- Report: {learning['report']}")
     lines.append(f"- Refresh command: `{learning.get('refreshCommand', '')}`")
+    lines.extend(["", "## Review Required Upgrade Requests"])
+    queue = report.get("reviewRequiredUpgradeRequests", [])
+    if queue:
+        for item in queue:
+            approval = item.get("approvalRequired") or "none"
+            lines.append(f"- `{item['id']}` area=`{item['area']}` approval=`{approval}`")
+            lines.append(f"  Command: `{item.get('command', '')}`")
+            lines.append(f"  Reason: {item.get('reason', '')}")
+    else:
+        lines.append("- none")
     lines.extend(["", "## Next Actions"])
     for action in report["nextActions"]:
         lines.append(f"- P{action['priority']} {action['area']}: {action['action']}")
