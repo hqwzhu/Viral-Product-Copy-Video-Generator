@@ -8834,6 +8834,93 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["request"]["method"], "PUT")
         self.assertNotIn("GITHUB_TOKEN", json.dumps(report))
 
+    def test_publish_executor_github_dry_run_can_plan_pull_request_from_env(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-pr-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        body_path = out_dir / "README-promo.md"
+        body_path.write_text("# Launch draft\n\nPromotion copy for PR.", encoding="utf-8")
+        env = os.environ.copy()
+        env["GITHUB_OWNER"] = "hqwzhu"
+        env["GITHUB_REPO"] = "Viral-Product-Copy-Video-Generator"
+        env["GITHUB_CREATE_PR"] = "true"
+        env["GITHUB_PR_BASE"] = "main"
+        env["GITHUB_PR_BRANCH_PREFIX"] = "auto-publish"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "github",
+                "--github-action",
+                "pull_request",
+                "--path",
+                "PROMOTION.md",
+                "--content-file",
+                str(body_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["repository"], "hqwzhu/Viral-Product-Copy-Video-Generator")
+        self.assertTrue(report["request"]["createPullRequest"])
+        self.assertEqual(report["request"]["baseBranch"], "main")
+        self.assertTrue(report["request"]["branch"].startswith("auto-publish/"))
+        self.assertEqual(report["publishPreview"]["platform"], "github")
+        audit_path = out_dir / "reports/promotion-manager/publish-results/publish-audit-log.jsonl"
+        audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(audit[-1]["platform"], "github")
+        self.assertEqual(audit[-1]["status"], "dry_run")
+        self.assertNotIn("GITHUB_TOKEN", report_path.read_text(encoding="utf-8"))
+
+    def test_publish_executor_execute_requires_environment_publish_gate(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-env-gate-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        body_path = out_dir / "README-promo.md"
+        body_path.write_text("# Launch draft\n\nPromotion copy.", encoding="utf-8")
+        env = os.environ.copy()
+        env["GITHUB_TOKEN"] = "unit-test-github-token-secret"
+        env.pop("I_APPROVE_PUBLISH", None)
+        env["PUBLISH_DRY_RUN"] = "false"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "github",
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--github-action",
+                "file",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--path",
+                "PROMOTION.md",
+                "--content-file",
+                str(body_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("I_APPROVE_PUBLISH=true", report["reason"])
+        self.assertNotIn("unit-test-github-token-secret", report_text)
+        audit_path = out_dir / "reports/promotion-manager/publish-results/publish-audit-log.jsonl"
+        audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(audit[-1]["status"], "blocked")
+
     def test_publish_executor_youtube_dry_run_uses_oauth_boundary(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -8864,6 +8951,44 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["officialApi"], "YouTube Data API videos.insert")
         self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
+        self.assertEqual(report["publishPreview"]["privacyStatus"], "private")
+
+    def test_publish_executor_youtube_accepts_access_token_alias_before_gate(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-env-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for blocked execute")
+        env = os.environ.copy()
+        env["YOUTUBE_ACCESS_TOKEN"] = "ya29.unit-test-secret"
+        env.pop("I_APPROVE_PUBLISH", None)
+        env["PUBLISH_DRY_RUN"] = "false"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "youtube",
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["credentialStatus"], "present")
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("I_APPROVE_PUBLISH=true", report["reason"])
+        self.assertNotIn("ya29.unit-test-secret", report_text)
 
     def test_publish_executor_douyin_dry_run_uses_official_upload_and_create_boundary(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-douyin-test-"))
