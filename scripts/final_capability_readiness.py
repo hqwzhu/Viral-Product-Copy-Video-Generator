@@ -383,7 +383,9 @@ def publish_row(
         for item in readiness_records
         if item.get("readiness") in {"manual_publish_required", "browser_assisted_or_official_app_required"}
     )
-    missing: list[str] = list(audit_item.get("missing") or [])
+    missing: list[str] = publish_missing_from_readiness(readiness_records)
+    if not readiness_records:
+        missing.extend(audit_item.get("missing") or [])
     if not readiness_records and final_run:
         missing.append("no publish readiness records generated")
     if not setup_records and final_run:
@@ -407,6 +409,37 @@ def publish_row(
             "manualOrBrowserRequired": manual_required,
         },
     )
+
+
+def publish_missing_from_readiness(readiness_records: list[dict[str, Any]]) -> list[str]:
+    missing: list[str] = []
+    for item in readiness_records:
+        platform = str(item.get("platform") or "").strip().lower()
+        readiness = str(item.get("readiness") or "")
+        if readiness == "missing_credentials":
+            missing.append(platform_credential_missing_message(platform, item.get("credentialStatus")))
+        target = item.get("targetStatus") if isinstance(item.get("targetStatus"), dict) else {}
+        if target and not target.get("ready", False):
+            detail = str(target.get("missing") or target.get("field") or "publish target").strip()
+            missing.append(f"{platform or 'platform'} target missing: {detail}")
+    return ordered_unique(missing)
+
+
+def platform_credential_missing_message(platform: str, credential_status: Any) -> str:
+    if platform == "github":
+        return "GITHUB_TOKEN or GH_TOKEN for GitHub writes"
+    if platform == "youtube":
+        return "YouTube OAuth access token or OAuth client credentials"
+    if platform == "douyin":
+        return "Douyin open-platform app credentials and user authorization"
+    if platform == "tiktok":
+        return "TikTok open-platform app credentials and user authorization"
+    missing_env: list[str] = []
+    if isinstance(credential_status, dict):
+        missing_env = [str(item) for item in credential_status.get("missingEnv", []) if str(item).strip()]
+    if missing_env:
+        return f"{platform or 'platform'} credentials missing: {', '.join(missing_env)}"
+    return f"{platform or 'platform'} credentials missing"
 
 
 def metrics_row(

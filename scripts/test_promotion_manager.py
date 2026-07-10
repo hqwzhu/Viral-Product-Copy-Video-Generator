@@ -7705,7 +7705,10 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "id": "all_platform_auto_publish",
                             "status": "blocked_by_authorization_or_platform_limits",
                             "evidence": [],
-                            "missing": [],
+                            "missing": [
+                                "GITHUB_TOKEN or GH_TOKEN for GitHub writes",
+                                "YouTube OAuth access token or OAuth client credentials",
+                            ],
                         },
                         {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
                         {"id": "retrospective_next_round_optimization", "status": "partial_ready", "evidence": [], "missing": []},
@@ -7743,6 +7746,17 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "status": "partial_ready",
                     "records": [
                         {"platform": "github", "readiness": "dry_run_ready"},
+                        {
+                            "platform": "youtube",
+                            "readiness": "missing_credentials",
+                            "credentialStatus": {
+                                "missingEnv": [
+                                    "YOUTUBE_OAUTH_ACCESS_TOKEN",
+                                    "GOOGLE_OAUTH_CLIENT_ID",
+                                    "GOOGLE_OAUTH_CLIENT_SECRET",
+                                ]
+                            },
+                        },
                     ],
                 }
             )
@@ -7785,8 +7799,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(len(report["sourceReports"]["publishReadiness"]), 1)
         self.assertEqual(report["sourceReports"]["publishReadiness"][0]["path"], str(explicit_readiness))
         publish_row = {item["id"]: item for item in report["requirements"]}["official_or_browser_assisted_publish"]
-        self.assertEqual(publish_row["metrics"]["readinessRecords"], 1)
+        self.assertEqual(publish_row["metrics"]["readinessRecords"], 2)
         self.assertEqual(publish_row["metrics"]["setupRecords"], 1)
+        self.assertNotIn("GITHUB_TOKEN or GH_TOKEN for GitHub writes", publish_row["missing"])
+        self.assertIn("YouTube OAuth access token or OAuth client credentials", publish_row["missing"])
         metrics_row = {item["id"]: item for item in report["requirements"]}["real_metrics_comments_orders_revenue"]
         self.assertEqual(metrics_row["metrics"]["realEvidenceSetupTargets"], 1)
 
