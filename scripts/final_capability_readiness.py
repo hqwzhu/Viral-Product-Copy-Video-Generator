@@ -97,45 +97,52 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
     self_evolution_path = first_existing(
         [args.self_evolution_audit, out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.json"]
     )
-    publish_readiness_paths = unique_paths(
-        explicit_existing(args.publish_readiness)
-        + glob_existing(out_dir, "reports/promotion-manager/publish-readiness/publish-readiness.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/publish-readiness/publish-readiness.json")
+    publish_readiness_paths = explicit_or_discovered(
+        args.publish_readiness,
+        out_dir,
+        "reports/promotion-manager/publish-readiness/publish-readiness.json",
+        "product-batch-runs/*/reports/promotion-manager/publish-readiness/publish-readiness.json",
     )
-    publish_setup_paths = unique_paths(
-        explicit_existing(args.publish_setup)
-        + glob_existing(out_dir, "reports/promotion-manager/publish-setup/publish-setup.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/publish-setup/publish-setup.json")
+    publish_setup_paths = explicit_or_discovered(
+        args.publish_setup,
+        out_dir,
+        "reports/promotion-manager/publish-setup/publish-setup.json",
+        "product-batch-runs/*/reports/promotion-manager/publish-setup/publish-setup.json",
     )
-    real_evidence_setup_paths = unique_paths(
-        explicit_existing(args.real_evidence_setup)
-        + glob_existing(out_dir, "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json")
+    real_evidence_setup_paths = explicit_or_discovered(
+        args.real_evidence_setup,
+        out_dir,
+        "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json",
+        "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json",
     )
-    real_evidence_inbox_setup_paths = unique_paths(
-        explicit_existing(args.real_evidence_inbox_setup)
-        + glob_existing(out_dir, "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json")
+    real_evidence_inbox_setup_paths = explicit_or_discovered(
+        args.real_evidence_inbox_setup,
+        out_dir,
+        "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json",
+        "product-batch-runs/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json",
     )
-    viral_evidence_inbox_setup_paths = unique_paths(
-        explicit_existing(args.viral_evidence_inbox_setup)
-        + glob_existing(out_dir, "reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json")
+    viral_evidence_inbox_setup_paths = explicit_or_discovered(
+        args.viral_evidence_inbox_setup,
+        out_dir,
+        "reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json",
+        "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json",
     )
-    viral_evidence_inbox_paths = unique_paths(
-        explicit_existing(args.viral_evidence_inbox)
-        + glob_existing(out_dir, "reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json")
-        + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json")
+    viral_evidence_inbox_paths = explicit_or_discovered(
+        args.viral_evidence_inbox,
+        out_dir,
+        "reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json",
+        "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json",
     )
     launch_unlock_paths = unique_paths(
         glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
     )
-    synthetic_evidence_paths = unique_paths(
-        explicit_existing(args.synthetic_evidence)
-        + glob_existing(out_dir, "reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
-        + glob_existing(out_dir, "*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
-        + glob_existing(out_dir, "*/*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
+    synthetic_evidence_paths = explicit_or_discovered(
+        args.synthetic_evidence,
+        out_dir,
+        "reports/promotion-manager/synthetic-evidence/synthetic-evidence.json",
+        "*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json",
+        "*/*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json",
     )
     return {
         "finalRunPath": final_run_path,
@@ -1399,6 +1406,16 @@ def first_existing(values: list[Any]) -> Path | None:
 
 def explicit_existing(values: list[str]) -> list[Path]:
     return [Path(value) for value in values if value and Path(value).exists()]
+
+
+def explicit_or_discovered(values: list[str], base: Path, *patterns: str) -> list[Path]:
+    explicit = explicit_existing(values)
+    if explicit:
+        return unique_paths(explicit)
+    discovered: list[Path] = []
+    for pattern in patterns:
+        discovered.extend(glob_existing(base, pattern))
+    return unique_paths(discovered)
 
 
 def glob_existing(base: Path, pattern: str) -> list[Path]:

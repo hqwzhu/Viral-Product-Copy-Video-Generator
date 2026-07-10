@@ -7664,6 +7664,132 @@ Prompt templates for product copy, SEO content, and video scripts.
                     self.assertTrue(report["sourceReports"]["realEvidenceSetup"][0]["exists"])
                     self.assertFalse(any(item["id"] == "build_real_evidence_setup" for item in report["actionQueue"]))
 
+    def test_final_capability_readiness_explicit_sources_override_discovery(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-explicit-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+
+        final_run_dir = out_dir / "reports/promotion-manager/final-run"
+        final_run_dir.mkdir(parents=True)
+        (final_run_dir / "final-capability-run.json").write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-10",
+                    "status": "partial_ready",
+                    "input": {"codexReadFirst": True, "platforms": "youtube,github"},
+                    "summary": {
+                        "promotionRuns": 1,
+                        "multiQueryDiscoveryRuns": 1,
+                        "multiQueryMergedMaterials": 1,
+                        "multiQueryMergedCreators": 1,
+                        "multiQueryVideoSampleFrames": 1,
+                        "contentArtifacts": 1,
+                        "videoFilesGenerated": 1,
+                    },
+                    "productBatch": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        capability_dir = out_dir / "reports/promotion-manager/capability"
+        capability_dir.mkdir(parents=True)
+        (capability_dir / "final-capability-audit.json").write_text(
+            json.dumps(
+                {
+                    "requirements": [
+                        {"id": "product_url_structured_intake", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "viral_creator_content_research", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "copy_and_real_video_generation", "status": "ready", "evidence": [], "missing": []},
+                        {
+                            "id": "all_platform_auto_publish",
+                            "status": "blocked_by_authorization_or_platform_limits",
+                            "evidence": [],
+                            "missing": [],
+                        },
+                        {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "retrospective_next_round_optimization", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "fully_autonomous_self_evolution", "status": "blocked_by_safety_boundary", "evidence": [], "missing": []},
+                    ],
+                    "platforms": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        default_readiness_dir = out_dir / "reports/promotion-manager/publish-readiness"
+        default_readiness_dir.mkdir(parents=True)
+        (default_readiness_dir / "publish-readiness.json").write_text(
+            json.dumps(
+                {
+                    "status": "partial_ready",
+                    "records": [
+                        {"platform": "old-youtube", "readiness": "manual_publish_required"},
+                        {"platform": "old-github", "readiness": "manual_publish_required"},
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        explicit_dir = out_dir / "explicit"
+        explicit_dir.mkdir()
+        explicit_readiness = explicit_dir / "publish-readiness.json"
+        explicit_readiness.write_text(
+            json.dumps(
+                {
+                    "status": "partial_ready",
+                    "records": [
+                        {"platform": "github", "readiness": "dry_run_ready"},
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        explicit_setup = explicit_dir / "publish-setup.json"
+        explicit_setup.write_text(
+            json.dumps({"status": "ready", "records": [{"platform": "github"}]}) + "\n",
+            encoding="utf-8",
+        )
+        explicit_evidence_setup = explicit_dir / "real-evidence-setup.json"
+        explicit_evidence_setup.write_text(
+            json.dumps({"status": "ready", "summary": {"targets": 1}, "records": []}) + "\n",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_READINESS),
+                "--out-dir",
+                str(out_dir),
+                "--publish-readiness",
+                str(explicit_readiness),
+                "--publish-setup",
+                str(explicit_setup),
+                "--real-evidence-setup",
+                str(explicit_evidence_setup),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report = json.loads(
+            (out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(len(report["sourceReports"]["publishReadiness"]), 1)
+        self.assertEqual(report["sourceReports"]["publishReadiness"][0]["path"], str(explicit_readiness))
+        publish_row = {item["id"]: item for item in report["requirements"]}["official_or_browser_assisted_publish"]
+        self.assertEqual(publish_row["metrics"]["readinessRecords"], 1)
+        self.assertEqual(publish_row["metrics"]["setupRecords"], 1)
+        metrics_row = {item["id"]: item for item in report["requirements"]}["real_metrics_comments_orders_revenue"]
+        self.assertEqual(metrics_row["metrics"]["realEvidenceSetupTargets"], 1)
+
     def test_platform_access_audit_maps_official_paths_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-access-audit-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
