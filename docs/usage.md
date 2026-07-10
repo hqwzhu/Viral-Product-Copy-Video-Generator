@@ -262,6 +262,8 @@ python scripts\synthetic_evidence_generator.py `
 
 The synthetic inbox and report are marked `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT`. Use them only to validate local wiring; replace them with real published URLs, platform exports, comments, and business exports before any live retrospective.
 
+`final_capability_readiness.py` now surfaces synthetic validation separately in the metrics and next-round rows. A synthetic-ready row proves the local recovery loop ran, but the real performance row remains `waiting_real_data` until real published URLs and exports are imported.
+
 Optimize the next round:
 
 ```powershell

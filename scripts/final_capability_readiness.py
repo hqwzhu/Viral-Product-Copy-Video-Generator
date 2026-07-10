@@ -79,6 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--real-evidence-inbox-setup", action="append", default=[], help="Path to a real-evidence-inbox-setup.json file. Can repeat.")
     parser.add_argument("--viral-evidence-inbox-setup", action="append", default=[], help="Path to a viral-evidence-inbox-setup.json file. Can repeat.")
     parser.add_argument("--viral-evidence-inbox", action="append", default=[], help="Path to a viral-evidence-inbox.json file. Can repeat.")
+    parser.add_argument("--synthetic-evidence", action="append", default=[], help="Path to a synthetic-evidence.json file. Can repeat.")
     return parser.parse_args()
 
 
@@ -129,6 +130,12 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
     )
+    synthetic_evidence_paths = unique_paths(
+        explicit_existing(args.synthetic_evidence)
+        + glob_existing(out_dir, "reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
+        + glob_existing(out_dir, "*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
+        + glob_existing(out_dir, "*/*/reports/promotion-manager/synthetic-evidence/synthetic-evidence.json")
+    )
     return {
         "finalRunPath": final_run_path,
         "finalAuditPath": final_audit_path,
@@ -141,6 +148,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "viralEvidenceInboxSetupPaths": viral_evidence_inbox_setup_paths,
         "viralEvidenceInboxPaths": viral_evidence_inbox_paths,
         "launchUnlockPaths": launch_unlock_paths,
+        "syntheticEvidencePaths": synthetic_evidence_paths,
         "finalRun": read_json(final_run_path),
         "finalAudit": read_json(final_audit_path),
         "platformAccess": read_json(platform_access_path),
@@ -152,6 +160,7 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "viralEvidenceInboxSetup": [read_json(path) for path in viral_evidence_inbox_setup_paths],
         "viralEvidenceInbox": [read_json(path) for path in viral_evidence_inbox_paths],
         "launchUnlock": [read_json(path) for path in launch_unlock_paths],
+        "syntheticEvidence": [read_json_with_source(path) for path in synthetic_evidence_paths],
     }
 
 
@@ -163,6 +172,7 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
     readiness = sources["publishReadiness"]
     setup = sources["publishSetup"]
     real_evidence_setup = [*sources["realEvidenceSetup"], *sources["realEvidenceInboxSetup"]]
+    synthetic_evidence = sources["syntheticEvidence"]
     rows = [
         product_intake_row(final_run, final_audit),
         viral_research_row(
@@ -174,8 +184,8 @@ def build_matrix(args: argparse.Namespace, out_dir: Path, sources: dict[str, Any
         ),
         copy_video_row(final_run, final_audit),
         publish_row(final_run, final_audit, readiness, setup),
-        metrics_row(final_run, final_audit, real_evidence_setup),
-        optimization_row(final_run, final_audit),
+        metrics_row(final_run, final_audit, real_evidence_setup, synthetic_evidence),
+        optimization_row(final_run, final_audit, synthetic_evidence),
         self_evolution_row(self_evolution, final_audit, platform_access),
         github_docs_row(final_audit),
         browser_extension_row(final_audit),
@@ -391,10 +401,17 @@ def publish_row(
     )
 
 
-def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any], evidence_setup_reports: list[dict[str, Any]]) -> dict[str, Any]:
+def metrics_row(
+    final_run: dict[str, Any],
+    final_audit: dict[str, Any],
+    evidence_setup_reports: list[dict[str, Any]],
+    synthetic_reports: list[dict[str, Any]],
+) -> dict[str, Any]:
     audit_item = requirement(final_audit, "real_metrics_orders_revenue_recovery")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     metrics = real_evidence_metrics(summary)
+    synthetic_metrics = synthetic_validation_metrics(synthetic_reports)
+    metrics.update(synthetic_metrics)
     setup_targets = max(
         int_value(summary.get("realEvidenceSetupTargets")),
         sum(evidence_setup_target_count(report) for report in evidence_setup_reports if isinstance(report, dict)),
@@ -425,26 +442,60 @@ def metrics_row(final_run: dict[str, Any], final_audit: dict[str, Any], evidence
         ]:
             if not metrics[key]:
                 missing.append(f"no real {label} evidence in final run")
+    limits = list(audit_item.get("limits") or [])
+    if synthetic_metrics["syntheticValidationReports"]:
+        limits.extend(
+            [
+                "Synthetic/demo evidence validates the recovery loop only and does not count as real platform, order, or revenue performance.",
+                "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT",
+            ]
+        )
+    evidence = list(audit_item.get("evidence") or [])
+    evidence.extend(synthetic_metrics["syntheticValidationReportPaths"])
     return row(
         "real_metrics_comments_orders_revenue",
         status,
-        audit_item.get("evidence") or [],
+        evidence,
         ordered_unique(missing),
-        audit_item.get("limits") or [],
+        ordered_unique(limits),
         metrics,
     )
 
 
-def optimization_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> dict[str, Any]:
+def optimization_row(
+    final_run: dict[str, Any],
+    final_audit: dict[str, Any],
+    synthetic_reports: list[dict[str, Any]],
+) -> dict[str, Any]:
     audit_item = requirement(final_audit, "retrospective_next_round_optimization")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     next_count = int_value(summary.get("nextRoundContent"))
+    metrics = synthetic_validation_metrics(synthetic_reports)
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
     if final_run and next_count == 0:
         status = "waiting_real_data"
         missing.append("no next-round content was generated from real evidence")
-    return row("next_round_optimization", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], audit_item.get("limits") or [])
+        if metrics["syntheticNextRoundValidated"]:
+            missing.append("synthetic/demo next-round validation exists but real evidence is still required")
+    evidence = list(audit_item.get("evidence") or [])
+    evidence.extend(metrics["syntheticValidationReportPaths"])
+    limits = list(audit_item.get("limits") or [])
+    if metrics["syntheticValidationReports"]:
+        limits.extend(
+            [
+                "Synthetic/demo next-round recommendations are validation evidence only.",
+                "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT",
+            ]
+        )
+    return row(
+        "next_round_optimization",
+        status,
+        evidence,
+        missing or audit_item.get("missing") or [],
+        ordered_unique(limits),
+        metrics,
+    )
 
 
 def self_evolution_row(
@@ -734,14 +785,16 @@ def build_action_queue(
                     launch_unlock_command(out_dir),
                 )
             )
-        actions.append(
-            action(
-                63,
-                "run_synthetic_evidence_validation",
-                "Generate clearly marked synthetic/demo evidence to validate the retrospective loop without treating it as real performance.",
-                f"python scripts/synthetic_evidence_generator.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --run-recovery --out-dir \"{out_dir}/synthetic-validation\"",
+        metrics = by_id["real_metrics_comments_orders_revenue"]["metrics"]
+        if not metrics.get("syntheticValidationReady"):
+            actions.append(
+                action(
+                    63,
+                    "run_synthetic_evidence_validation",
+                    "Generate clearly marked synthetic/demo evidence to validate the retrospective loop without treating it as real performance.",
+                    f"python scripts/synthetic_evidence_generator.py --product-url \"{product_url}\" --platforms youtube,zhihu,xiaohongshu,douyin,github --run-recovery --out-dir \"{out_dir}/synthetic-validation\"",
+                )
             )
-        )
         actions.append(
             action(
                 60,
@@ -1077,6 +1130,7 @@ def source_report_summary(sources: dict[str, Any]) -> dict[str, Any]:
         "viralEvidenceInboxSetup": [report_source(path) for path in sources.get("viralEvidenceInboxSetupPaths", [])],
         "viralEvidenceInbox": [report_source(path) for path in sources.get("viralEvidenceInboxPaths", [])],
         "launchUnlock": [report_source(path) for path in sources.get("launchUnlockPaths", [])],
+        "syntheticEvidence": [report_source(path) for path in sources.get("syntheticEvidencePaths", [])],
     }
 
 
@@ -1184,6 +1238,54 @@ def real_evidence_metrics(summary: dict[str, Any]) -> dict[str, Any]:
         "hasAnySocialOrCommentEvidence": has_views or has_likes or has_comments or counts["favoritesEvidenceRecords"] > 0 or counts["sharesEvidenceRecords"] > 0,
         "hasAnyBusinessEvidence": has_orders or has_revenue,
         "hasFullFunnelEvidence": has_views and has_likes and has_comments and has_orders and has_revenue,
+    }
+
+
+def synthetic_validation_metrics(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    valid_reports = [
+        report
+        for report in reports
+        if isinstance(report, dict)
+        and report.get("synthetic") is True
+        and report.get("warning") == "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT"
+    ]
+    ready_reports = 0
+    recovery_validated = 0
+    next_round_validated = 0
+    metric_rows = 0
+    comment_lines = 0
+    business_rows = 0
+    platforms: list[str] = []
+    report_paths: list[str] = []
+    for report in valid_reports:
+        summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+        recovery = report.get("recovery") if isinstance(report.get("recovery"), dict) else {}
+        recovery_reports = recovery.get("reports") if isinstance(recovery.get("reports"), dict) else {}
+        ready = report.get("status") == "synthetic_validation_ready"
+        recovery_ok = int_value(summary.get("recoveryExitCode") if "recoveryExitCode" in summary else recovery.get("exitCode")) == 0
+        next_round_ok = bool(recovery_reports.get("nextRoundOptimization"))
+        ready_reports += int(ready)
+        recovery_validated += int(ready and recovery_ok)
+        next_round_validated += int(ready and recovery_ok and next_round_ok)
+        metric_rows += int_value(summary.get("metricRows"))
+        comment_lines += int_value(summary.get("commentLines"))
+        business_rows += int_value(summary.get("businessRows"))
+        input_payload = report.get("input") if isinstance(report.get("input"), dict) else {}
+        platforms.extend(split_platform_values(input_payload.get("platforms")))
+        if report.get("_sourcePath"):
+            report_paths.append(str(report["_sourcePath"]))
+    return {
+        "syntheticValidationReports": len(valid_reports),
+        "syntheticValidationReadyReports": ready_reports,
+        "syntheticValidationReady": ready_reports > 0,
+        "syntheticRecoveryValidated": recovery_validated > 0,
+        "syntheticNextRoundValidated": next_round_validated > 0,
+        "syntheticValidationMetricRows": metric_rows,
+        "syntheticValidationCommentLines": comment_lines,
+        "syntheticValidationBusinessRows": business_rows,
+        "syntheticValidationPlatforms": sorted(set(platforms)),
+        "syntheticValidationWarning": "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT" if valid_reports else "",
+        "syntheticValidationReportPaths": ordered_unique(report_paths),
     }
 
 
@@ -1305,6 +1407,13 @@ def read_json(path: Path | None) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def read_json_with_source(path: Path | None) -> dict[str, Any]:
+    payload = read_json(path)
+    if payload and path:
+        payload["_sourcePath"] = str(path)
+    return payload
+
+
 def ordered_unique(values: list[Any]) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
@@ -1410,6 +1519,26 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"revenue={metrics.get('revenueEvidenceRecords', 0)}, "
                 f"evidenceTemplates={metrics.get('realEvidenceSetupTargets', 0)}"
             )
+            if metrics.get("syntheticValidationReports"):
+                lines.append(
+                    "  Synthetic validation: "
+                    f"ready={metrics.get('syntheticValidationReady', False)}, "
+                    f"recovery={metrics.get('syntheticRecoveryValidated', False)}, "
+                    f"nextRound={metrics.get('syntheticNextRoundValidated', False)}, "
+                    f"metricRows={metrics.get('syntheticValidationMetricRows', 0)}, "
+                    f"commentLines={metrics.get('syntheticValidationCommentLines', 0)}, "
+                    f"businessRows={metrics.get('syntheticValidationBusinessRows', 0)}, "
+                    f"warning={metrics.get('syntheticValidationWarning', '')}"
+                )
+        if item["id"] == "next_round_optimization" and item.get("metrics"):
+            metrics = item["metrics"]
+            if metrics.get("syntheticValidationReports"):
+                lines.append(
+                    "  Synthetic next-round validation: "
+                    f"ready={metrics.get('syntheticValidationReady', False)}, "
+                    f"nextRound={metrics.get('syntheticNextRoundValidated', False)}, "
+                    f"warning={metrics.get('syntheticValidationWarning', '')}"
+                )
         if item["id"] == "controlled_self_evolution" and item.get("metrics"):
             metrics = item["metrics"]
             lines.append(

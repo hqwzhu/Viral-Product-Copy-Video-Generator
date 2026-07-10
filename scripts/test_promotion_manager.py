@@ -7224,6 +7224,111 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
+    def test_final_capability_readiness_surfaces_synthetic_validation_without_satisfying_real_data(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-synthetic-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        final_run_dir = out_dir / "reports/promotion-manager/final-run"
+        final_run_dir.mkdir(parents=True)
+        (final_run_dir / "final-capability-run.json").write_text(
+            json.dumps(
+                {
+                    "generatedAt": "2026-07-10",
+                    "status": "partial_ready",
+                    "input": {
+                        "codexReadFirst": True,
+                        "platforms": "youtube,github",
+                        "urls": ["https://www.enhe-tech.com.cn/software/windows-ai"],
+                    },
+                    "summary": {
+                        "promotionRuns": 1,
+                        "contentArtifacts": 1,
+                        "videoFilesGenerated": 1,
+                        "capturedMetricRecords": 0,
+                        "recordsWithMetrics": 0,
+                        "commentCount": 0,
+                        "matchedBusinessRows": 0,
+                        "nextRoundContent": 0,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        capability_dir = out_dir / "reports/promotion-manager/capability"
+        capability_dir.mkdir(parents=True)
+        (capability_dir / "final-capability-audit.json").write_text(
+            json.dumps(
+                {
+                    "requirements": [
+                        {"id": "product_url_structured_intake", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "viral_creator_content_research", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "copy_and_real_video_generation", "status": "ready", "evidence": [], "missing": []},
+                        {"id": "all_platform_auto_publish", "status": "blocked_by_authorization_or_platform_limits", "evidence": [], "missing": []},
+                        {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "retrospective_next_round_optimization", "status": "partial_ready", "evidence": [], "missing": []},
+                        {"id": "fully_autonomous_self_evolution", "status": "blocked_by_safety_boundary", "evidence": [], "missing": []},
+                    ],
+                    "platforms": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        synthetic_dir = out_dir / "synthetic-validation/reports/promotion-manager/synthetic-evidence"
+        synthetic_dir.mkdir(parents=True)
+        (synthetic_dir / "synthetic-evidence.json").write_text(
+            json.dumps(
+                {
+                    "status": "synthetic_validation_ready",
+                    "synthetic": True,
+                    "warning": "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT",
+                    "input": {"platforms": ["youtube", "github"]},
+                    "summary": {
+                        "metricRows": 2,
+                        "commentLines": 4,
+                        "businessRows": 2,
+                        "recoveryExitCode": 0,
+                    },
+                    "recovery": {
+                        "exitCode": 0,
+                        "reports": {
+                            "metricsRecovery": "synthetic-validation/reports/promotion-manager/metrics-recovery/metrics-recovery.json",
+                            "nextRoundOptimization": "synthetic-validation/reports/promotion-manager/optimization/next-round-optimization.json",
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run([sys.executable, str(FINAL_CAPABILITY_READINESS), "--out-dir", str(out_dir)], check=True, cwd=ROOT)
+
+        report_path = out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        by_requirement = {item["id"]: item for item in report["requirements"]}
+        metrics_row = by_requirement["real_metrics_comments_orders_revenue"]
+        self.assertEqual(metrics_row["status"], "waiting_real_data")
+        self.assertFalse(metrics_row["satisfied"])
+        self.assertFalse(metrics_row["metrics"]["hasFullFunnelEvidence"])
+        self.assertEqual(metrics_row["metrics"]["capturedMetricRecords"], 0)
+        self.assertTrue(metrics_row["metrics"]["syntheticValidationReady"])
+        self.assertTrue(metrics_row["metrics"]["syntheticRecoveryValidated"])
+        self.assertTrue(metrics_row["metrics"]["syntheticNextRoundValidated"])
+        self.assertEqual(metrics_row["metrics"]["syntheticValidationMetricRows"], 2)
+        self.assertEqual(metrics_row["metrics"]["syntheticValidationCommentLines"], 4)
+        self.assertEqual(metrics_row["metrics"]["syntheticValidationBusinessRows"], 2)
+        self.assertEqual(metrics_row["metrics"]["syntheticValidationWarning"], "SYNTHETIC_DEMO_DATA_DO_NOT_REPORT")
+        self.assertIn("SYNTHETIC_DEMO_DATA_DO_NOT_REPORT", metrics_row["limits"])
+        next_round_row = by_requirement["next_round_optimization"]
+        self.assertEqual(next_round_row["status"], "waiting_real_data")
+        self.assertTrue(next_round_row["metrics"]["syntheticNextRoundValidated"])
+        self.assertIn("synthetic/demo next-round validation exists but real evidence is still required", next_round_row["missing"])
+        self.assertTrue(report["sourceReports"]["syntheticEvidence"][0]["exists"])
+        self.assertFalse(any(item["id"] == "run_synthetic_evidence_validation" for item in report["actionQueue"]))
+        report_markdown = (out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Synthetic validation", report_markdown)
+        self.assertIn("SYNTHETIC_DEMO_DATA_DO_NOT_REPORT", report_markdown)
+
     def test_final_capability_readiness_flags_missing_requested_video_platform_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-video-gap-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -230,6 +230,8 @@ python scripts\synthetic_evidence_generator.py `
 
 生成结果会带有 `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT` 标记，只能用于本地流程验证，不能当作真实播放量、订单或收入数据汇报。
 
+`final_capability_readiness.py` 会把 synthetic 验证单独显示在真实数据和下一轮优化两项里。synthetic ready 只证明本地回收链路跑通，真实表现项仍会保持 `waiting_real_data`，直到导入真实发布 URL、平台导出、评论和业务数据。
+
 如果没有真实指标或业务证据，优化器会输出 `waiting_real_data`，不会编造表现。
 ## 爆款证据收件箱 fallback
 
