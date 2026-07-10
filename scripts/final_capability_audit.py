@@ -41,6 +41,7 @@ SCRIPT_REQUIREMENTS = {
     "follow_up_capture_runner": "follow_up_capture_runner.py",
     "competitor_content_enhancer": "competitor_content_enhancer.py",
     "render_video": "render_video.py",
+    "media_asset_pack": "media_asset_pack.py",
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
     "publish_setup_assistant": "publish_setup_assistant.py",
@@ -123,6 +124,7 @@ OFFICIAL_SOURCES = [
 GITHUB_DOC_FILES = [
     "README.md",
     "README.zh-CN.md",
+    "README.en.md",
     "docs/installation.md",
     "docs/zh-CN/installation.md",
     "docs/usage.md",
@@ -375,7 +377,7 @@ def requirement_status(
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
     )
-    video_scripts_ready = scripts_ready(scripts, ["render_video"])
+    video_scripts_ready = scripts_ready(scripts, ["render_video", "media_asset_pack"])
     video_ready = video_scripts_ready and bool(tools["ffmpeg"]["available"])
     search_ready = scripts_ready(
         scripts,
@@ -491,10 +493,10 @@ def requirement_status(
         },
         {
             "id": "copy_and_real_video_generation",
-            "label": "Generate real copy, scripts, storyboards, and MP4 video files",
+            "label": "Generate real copy, scripts, storyboards, MP4 video files, cover images, and detail images",
             "status": "ready" if video_ready else "partial_ready",
-            "evidence": scripts_present(scripts, ["competitor_content_enhancer", "render_video"]),
-            "missing": [] if video_ready else ["ffmpeg runtime"] if video_scripts_ready else ["render_video.py"],
+            "evidence": scripts_present(scripts, ["competitor_content_enhancer", "render_video", "media_asset_pack"]),
+            "missing": [] if video_ready else ["ffmpeg runtime"] if video_scripts_ready else ["render_video.py", "media_asset_pack.py"],
         },
         {
             "id": "all_platform_auto_publish",

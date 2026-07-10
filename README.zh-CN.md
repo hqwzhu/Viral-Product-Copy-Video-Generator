@@ -2,7 +2,7 @@
 
 ENHE Promotion Manager 是一个 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库转成可重复执行的产品推广闭环。
 
-[English README](README.md)
+[English README](README.en.md)
 
 ## 能做什么
 

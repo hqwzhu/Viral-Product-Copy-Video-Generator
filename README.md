@@ -1,75 +1,125 @@
 # ENHE Promotion Manager
 
-ENHE Promotion Manager is a Codex Skill for turning any product URL, website URL, app page, or GitHub repository into a repeatable product promotion loop.
+[![ZH](https://img.shields.io/badge/README-ZH-blue)](README.zh-CN.md)
+[![English](https://img.shields.io/badge/README-English-gray)](README.en.md)
 
-The Skill is designed for operators who want Codex to work as a website and product promotion manager:
+语言切换 / Language switch: [中文](README.zh-CN.md) | [English](README.en.md)
 
-- Read one or many product URLs and pass structured browser evidence into product intake.
-- Search and rank viral creators, posts, videos, and repositories across YouTube, Zhihu, Xiaohongshu, Douyin, GitHub, TikTok, and similar platforms.
-- Generate platform-native titles, articles, notes, voiceover scripts, storyboards, README copy, release copy, and MP4 draft videos.
-- Prepare guarded publish queues for official APIs where supported and browser/manual payloads where direct publishing is not safe or available.
-- Recover real post-publish metrics, comments, demand signals, orders, and revenue only from real evidence.
-- Run retrospective and next-round optimization without fabricating performance data.
+English quick links: [Install](README.en.md#install) / [Installation](docs/installation.md) / [Quick Start](README.en.md#quick-start) / [Browser Extension](README.en.md#browser-extension) / [Subscription Model](README.en.md#subscription-model) / [Safety Gates](README.en.md#safety-gates) / `I_APPROVE_SKILL_SYNC`
 
-Repository: [hqwzhu/Viral-Product-Copy-Video-Generator](https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git)
+ENHE Promotion Manager 是一个本地 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库，转换成可重复执行的产品推广系统。
 
-Chinese version: [README.zh-CN.md](README.zh-CN.md)
+它适合独立开发者、AI 工具站运营者、SaaS 团队和内容营销团队，让 Codex 像一个“网站及产品推广经理”一样工作：
 
-## Current Capability
+```text
+产品链接
+  -> 产品信息读取
+  -> 爆款竞品研究
+  -> 多平台标题、文案、脚本生成
+  -> 视频、封面、详情图资产生成
+  -> 安全发布包
+  -> 真实数据回收
+  -> 下一轮复盘优化
+```
 
-The repository implements the local Codex Skill workflow and safety gates. It does not bypass platform login, captcha, risk controls, app review, or account authorization.
+仓库地址：[hqwzhu/Viral-Product-Copy-Video-Generator](https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git)
 
-| Area | Status | Notes |
+## 这个项目是做什么的
+
+你给它一个产品链接或网站链接，它可以帮助你完成从推广研究到发布包准备的整套流程：
+
+- 读取一个或多个产品 URL，生成结构化产品资料。
+- 在 YouTube、知乎、小红书、抖音、GitHub、TikTok 等平台上整理公开或浏览器可见的爆款素材证据。
+- 拆解爆款标题、钩子、内容结构、视频结构、创作者模式和可见互动数据。
+- 生成平台原生的爆款标题、正式文案、标签、首批评论/回复、口播脚本、分镜脚本。
+- 生成或挂载 MP4 视频、封面图、详情图，并写入完整发布包。
+- 为支持官方 API 的平台准备 dry-run 发布计划，为其他平台生成浏览器辅助/手动发布包。
+- 发布后导入真实 URL、指标、评论、订单和收入证据，生成复盘和下一轮优化建议。
+
+## 使用后能得到什么
+
+一次正常运行会在本地 `promotion-output` 目录里生成这些产物：
+
+- 产品资料和事实提取报告。
+- 竞品搜索任务、爆款素材库、创作者榜单和补充证据请求。
+- YouTube、知乎、小红书、抖音、GitHub 等平台的内容草稿。
+- 完整发布包：爆款标题、正式文案、标签、首批互动内容、视频状态/路径、封面图、详情图、追踪链接、风险提示和发布步骤。
+- 可选 MP4 草稿视频，依赖 `ffmpeg`。
+- 可选 PNG 封面图和详情图，依赖 `Pillow`。
+- 浏览器辅助/手动发布 payload 和检查清单。
+- 发布后真实证据收件箱模板：发布 URL、平台指标、评论、订单、收入。
+- 有真实数据后生成复盘报告和下一轮选题/标题/脚本建议。
+
+## 它不会做什么
+
+项目默认遵守平台安全边界：
+
+- 不绕过登录、验证码、平台风控、账号验证或应用审核。
+- 不使用 Cookie 抓包、私有接口、隐藏 token 或模拟登录。
+- 浏览器辅助发布不会点击最终发布按钮。
+- 不伪造播放量、点赞、评论、订单、收入或已发布 URL。
+- 官方 API 发布端口默认 dry-run，真实发布必须有官方凭证、账号授权和显式批准。
+
+## 当前能力状态
+
+| 模块 | 状态 | 说明 |
 | --- | --- | --- |
-| Product URL reading | Ready | Browser snapshots, structured JSON intake, static fallback, public web-text fallback, URL discovery, and batch runner are included. |
-| Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
-| Copy and video generation | Ready | Platform-native copy and ffmpeg MP4 rendering are included. Voiceover can use an audio file or Windows review-quality TTS. |
-| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
-| Metrics and revenue | Waiting for real evidence | The Skill can initialize a fillable evidence inbox, run a post-publish performance monitor, import evidence files, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
-| Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | Store package and backend reference included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3, icons, permissions, and remote-code guardrails before building a Chrome/Edge submission zip. `scripts/billing_contract_simulator.py` proves the contract locally, and `backend/license-service/` provides a Stripe Checkout, webhook, License, usage reservation, usage commit, and hosted-run reference service. Store review and production deployment remain external gates. |
+| 产品 URL 读取 | 已具备 | 支持浏览器快照、结构化 JSON、静态 HTML、公网页面文本 fallback、URL 发现和批量运行。 |
+| 爆款研究 | 已具备但受平台限制 | YouTube/GitHub 可走公开或官方路径；知乎、小红书、抖音、TikTok 以公开页面、浏览器可见证据或用户导出为准。 |
+| 文案和媒体生成 | 已具备 | 可生成平台文案、首批互动提示、脚本、分镜、MP4 草稿视频、PNG 封面图和详情图。 |
+| 发布 | 手动发布包优先 | GitHub、YouTube、抖音保留官方 API dry-run 端口；知乎、小红书默认浏览器辅助或手动发布。 |
+| 指标和收入回收 | 等待真实证据 | 可生成证据收件箱、导入真实指标/评论/订单/收入并复盘；不会编造数据。 |
+| 自我进化 | 受控 | 可审计本地工具、仓库状态和 Skill 同步差异；安装或同步需要显式命令。 |
+| 浏览器插件 | 可打包，商业化需外部上线 | 已有 Chrome MV3 插件、打包脚本、License 服务参考实现和计费模拟器；生产支付、License 服务部署和商店审核仍是外部门槛。 |
 
-## Install
+## 安装
 
-Clone the repo:
+克隆仓库：
 
 ```powershell
 git clone https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git
 cd Viral-Product-Copy-Video-Generator
 ```
 
-Verify Python:
+检查 Python：
 
 ```powershell
 python --version
 ```
 
-Optional browser runtime for rendered product pages and platform search:
+可选：安装浏览器运行时，用于读取动态网页和公开平台搜索页：
 
 ```powershell
 python -m pip install playwright
 python -m playwright install chromium
 ```
 
-Optional MP4 rendering runtime:
+可选：安装 MP4 渲染运行时：
 
 ```powershell
 winget install Gyan.FFmpeg
 ```
 
-Run tests:
+可选：安装封面图/详情图运行时：
+
+```powershell
+python -m pip install pillow
+```
+
+运行验证：
 
 ```powershell
 python scripts\test_promotion_manager.py
 python -m compileall -q scripts
 ```
 
-More detail: [docs/installation.md](docs/installation.md)
-中文安装教程: [docs/zh-CN/installation.md](docs/zh-CN/installation.md)
+更详细安装说明：[docs/installation.md](docs/installation.md)
 
-## Quick Start
+中文安装说明：[docs/zh-CN/installation.md](docs/zh-CN/installation.md)
 
-Run the one-link Codex Skill entry:
+## 快速开始
+
+推广单个产品链接：
 
 ```powershell
 python scripts\skill_entry.py `
@@ -78,7 +128,7 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-Run a website URL and discover product pages from it:
+如果输入的是网站首页，让系统先发现产品页：
 
 ```powershell
 python scripts\skill_entry.py `
@@ -88,243 +138,50 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-Run the final capability runner directly:
-
-```powershell
-python scripts\final_capability_runner.py `
-  --discover-from-url "https://example.com" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --run-follow-up-captures `
-  --sample-video-frames `
-  --out-dir ".\promotion-output"
-```
-
-Review readiness:
-
-```powershell
-python scripts\final_capability_audit.py --out-dir ".\promotion-output"
-python scripts\self_evolution_audit.py --out-dir ".\promotion-output"
-python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
-```
-
-Use `reports\promotion-manager\final-readiness\final-capability-readiness.md` as the phase progress report after each major stage. It should cover the current stage, completed goals, unfinished goals, next plan, and estimated remaining time.
-
-Build one launch unlock pack for platform access, publish setup, browser-assisted publishing, and real evidence collection:
-
-```powershell
-python scripts\launch_unlock_pack.py `
-  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
-  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
-  --out-dir ".\promotion-output"
-```
-
-The unlock pack writes a checklist, next-action commands, credential variable-name templates, browser payload references, and real-evidence templates. It does not read or store secret values and does not bypass account authorization.
-
-`scripts\final_capability_runner.py` now builds this unlock pack automatically for each product run when a publish queue exists. Use the standalone command when you want to rebuild the pack after changing credentials, target files, or publisher entry URLs.
-
-Content review now also writes a cheat-on-content bridge pack under `reports\promotion-manager\cheat-review\`. It creates one draft file per platform plus Codex `cheat-score` prompts, but it does not create immutable prediction logs unless you explicitly start a prediction cycle.
-
-After publishing, put real evidence files into a local inbox and recover the loop:
-
-```powershell
-python scripts\performance_monitor.py `
-  --out-dir ".\promotion-output"
-```
-
-Use the monitor after published URLs have been registered. It captures public/browser-visible metrics, captures visible comments and demand signals, attributes optional business exports, runs metrics recovery, writes a history file, and generates next-round recommendations. Before or after publishing, create a fillable evidence inbox:
-
-```powershell
-python scripts\real_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --inbox-dir ".\promotion-evidence-inbox" `
-  --out-dir ".\promotion-output"
-```
-
-For several export files, import the evidence inbox:
-
-```powershell
-python scripts\real_evidence_inbox.py `
-  --inbox-dir ".\promotion-evidence-inbox" `
-  --out-dir ".\promotion-output"
-```
-
-The inbox can contain files such as `published-urls.csv`, `metrics.csv`, `metrics.xlsx`, `comments.txt`, `comments.html`, `orders.csv`, `orders.xlsx`, or an optional `inbox-manifest.json` with explicit file roles. The runner registers real published URLs, imports visible/exported metrics, captures comment demand signals, attributes orders/revenue, and runs the next-round optimizer.
-
-If no real data exists yet and you only want to validate the recovery loop, generate a clearly marked synthetic/demo inbox:
-
-```powershell
-python scripts\synthetic_evidence_generator.py `
-  --product-url "https://example.com/product" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --run-recovery `
-  --out-dir ".\promotion-output\synthetic-validation"
-```
-
-Synthetic reports carry `SYNTHETIC_DEMO_DATA_DO_NOT_REPORT`. They are only for local pipeline validation and must not be reported as real platform, order, or revenue performance.
-
-## Browser Extension
-
-The Chrome Manifest V3 extension lives in [browser-extension](browser-extension/). It is a lightweight operator cockpit:
-
-- Captures the active tab URL and title.
-- Lets the user select target platforms and run depth.
-- Generates Codex commands for one-link Skill runs, browser publish sessions, evidence inbox setup/recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts.
-- Estimates token-backed subscription usage from command type, run depth, hosted MP4, browser publish, and evidence-recovery options.
-- Stores a license key locally, validates it against a configurable ENHE license endpoint, reserves hosted usage credits through the ENHE usage authorization endpoint, and can copy or submit a hosted run payload to the ENHE hosted run endpoint.
-- Opens ENHE checkout and customer billing portal URLs.
-- Documents the backend license, usage ledger, hosted run, and webhook contract needed for real paid hosted runs.
-- Shows developer and website links for ENHE traffic.
-
-Load it in Chrome:
-
-1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Click Load unpacked.
-4. Select the `browser-extension` folder.
-
-Full guide: [docs/browser-extension.md](docs/browser-extension.md)
-
-Build the Chrome/Edge store submission package:
-
-```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
-```
-
-Store listing and submission guide: [docs/extension-store-submission.md](docs/extension-store-submission.md)
-
-## Subscription Model
-
-The extension includes a pricing calculator, checkout entry, billing portal entry, license validation, usage credit reservation, hosted-run payload handoff, a machine-readable backend contract, a local reference simulator for license, usage, hosted-run, and webhook flows, and a production reference License service under `backend/license-service/`. Chrome Web Store Payments is deprecated, so use the ENHE backend payment provider and License API rather than the old Web Store billing API for a new paid extension.
-
-The starter commercial model is in [docs/subscription-pricing.md](docs/subscription-pricing.md). It uses a credit quota so heavy token users cannot create a loss:
-
-- Free: local command generation and limited trial credits.
-- Starter: USD 29/month for small operators.
-- Growth: USD 99/month for repeated product promotion.
-- Scale: USD 299/month for agencies or teams.
-
-Run the local billing contract simulator:
-
-```powershell
-python scripts\billing_contract_simulator.py demo `
-  --plan growth `
-  --workflow-type research_run `
-  --out-dir ".\promotion-output"
-```
-
-The simulator writes `promotion-output\reports\promotion-manager\billing-simulator\billing-simulator.json` and keeps only hashed license keys in its state file.
-
-Run the production reference License service locally:
-
-```powershell
-cd backend\license-service
-npm install
-copy .env.example .env
-npm run start
-```
-
-Before public launch, deploy it behind HTTPS, configure Stripe live prices and signed webhooks, replace the JSON state file with a database, connect hosted workers, publish privacy/support/refund pages, and pass Chrome/Edge store review.
-
-Validate the hosted-run handoff used by the extension after reserving credits:
-
-```powershell
-python scripts\billing_contract_simulator.py demo-hosted-run `
-  --plan growth `
-  --workflow-type standard_run `
-  --product-url "https://example.com/product" `
-  --out-dir ".\promotion-output"
-```
-
-Validate the periodic automation credit path:
-
-```powershell
-python scripts\billing_contract_simulator.py demo `
-  --plan growth `
-  --workflow-type automation_due_run `
-  --out-dir ".\promotion-output"
-```
-
-The docs include the formulas, cost assumptions, and backend usage-control contract used for the initial launch model. Recalculate the numbers from real usage logs before public launch.
-
-## Safety Gates
-
-The Skill intentionally blocks unsafe claims and unsafe platform operations:
-
-- No auto-login.
-- No captcha or risk-control bypass.
-- No cookie, token, password, or hidden credential extraction.
-- No final publish click in browser-assisted flows.
-- No fabricated views, likes, comments, orders, or revenue.
-- Official publishing requires credentials, target data, and `I_APPROVE_PUBLISH`.
-- Installed Skill sync requires `I_APPROVE_SKILL_SYNC`.
-
-## Typical Workflow
+在 Codex 里也可以直接这样说：
 
 ```text
-product URL or website URL
-  -> Codex/browser structured intake
-  -> platform and competitor discovery
-  -> viral material library
-  -> creator leaderboard and follow-up capture
-  -> copy, script, storyboard, MP4 draft
-  -> cheat-on-content review pack and scorecard
-  -> guarded publish queue
-  -> official or browser/manual publish
-  -> real metrics, comments, order, and revenue import
-  -> retrospective and next-round optimization
+执行 viral-product-copy-video-generator，推广这个链接：https://example.com/product
+平台：youtube,zhihu,xiaohongshu,douyin,github
 ```
 
-## Key Commands
+运行结束后重点查看：
 
-Product URL reader:
-
-```powershell
-python scripts\product_url_reader.py --url "https://example.com/product" --out-dir ".\promotion-output"
+```text
+promotion-output/reports/promotion-manager/
+promotion-output/media-assets/
+promotion-output/videos/
 ```
 
-When a public product page cannot be reached by local Chromium or static HTML fetch, the reader saves a web-text fallback file and routes the next workflow through `--text-file`. Use `--disable-web-text-fallback` when you do not want the public third-party reader fallback, or `--web-text-fallback-file` when Codex has already captured page text.
+## 生成完整发布包
 
-Viral discovery:
-
-```powershell
-python scripts\viral_discovery_runner.py `
-  --query "AI product copy generator" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --top-n 20 `
-  --out-dir ".\promotion-output"
-```
-
-Viral evidence inbox fallback for risk-controlled platforms:
+如果已经生成内容和视频，可以单独生成媒体资产包，并写回发布包：
 
 ```powershell
-python scripts\viral_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --inbox-dir ".\viral-evidence-inbox" `
-  --out-dir ".\promotion-output"
-```
-
-After adding real competitor URLs, visible page text, transcripts, exports, or screenshot OCR text:
-
-```powershell
-python scripts\viral_evidence_inbox.py `
-  --inbox-dir ".\viral-evidence-inbox" `
-  --out-dir ".\promotion-output"
-```
-
-This inbox is for real competitor evidence only. It does not seed fake creators or metrics; screenshots are recorded as needing OCR/copied text before import.
-
-Render MP4:
-
-```powershell
-python scripts\render_video.py `
+python scripts\media_asset_pack.py `
   --content-json ".\promotion-output\reports\promotion-manager\generated-content\product-platform-content.json" `
-  --platform douyin `
-  --out ".\promotion-output\videos\product-douyin.mp4"
+  --publish-pack ".\promotion-output\reports\promotion-manager\publish-packs\product-publish-pack.json" `
+  --video-file "youtube=.\promotion-output\videos\product-youtube.mp4" `
+  --video-file "douyin=.\promotion-output\videos\product-douyin.mp4" `
+  --out-dir ".\promotion-output"
 ```
 
-Publish readiness:
+发布包会包含：
+
+- 爆款标题
+- 正式文案
+- 平台标签
+- 首批评论、置顶评论、回复提示和启动动作
+- 视频成品状态和路径
+- 封面图
+- 详情图
+- 统一 `assets` 列表
+
+完整工作流会在视频渲染后自动运行这一步。如果使用 `--skip-video`，系统会继续生成封面和详情图，并把缺失视频标记为 `missing`，不会伪造成品视频。
+
+## 发布与复盘
+
+生成发布准备报告：
 
 ```powershell
 python scripts\publish_readiness_runner.py `
@@ -334,7 +191,7 @@ python scripts\publish_readiness_runner.py `
   --out-dir ".\promotion-output"
 ```
 
-Browser-assisted publishing payloads:
+生成浏览器辅助/手动发布包：
 
 ```powershell
 python scripts\browser_publish_assistant.py `
@@ -342,79 +199,17 @@ python scripts\browser_publish_assistant.py `
   --out-dir ".\promotion-output"
 ```
 
-Launch unlock pack for publish and evidence gates:
+发布后登记真实 URL：
 
 ```powershell
-python scripts\launch_unlock_pack.py `
-  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
-  --publish-readiness ".\promotion-output\reports\promotion-manager\publish-readiness\publish-readiness.json" `
+python scripts\published_items.py `
+  --platform xiaohongshu `
+  --published-url "https://www.xiaohongshu.com/explore/real-note-id" `
+  --evidence ".\screenshots\xhs-published.png" `
   --out-dir ".\promotion-output"
 ```
 
-Browser-assisted publish session with visible-field fill and no final publish click:
-
-```powershell
-python scripts\browser_publish_session.py `
-  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
-  --platform-publish-url "xiaohongshu=https://creator.xiaohongshu.com/" `
-  --run-form-fill `
-  --out-dir ".\promotion-output"
-```
-
-Periodic automation config:
-
-```powershell
-python scripts\automation_scheduler.py init `
-  --config ".\promotion-automation.json" `
-  --job-id "product-weekly" `
-  --browser-url "https://example.com/product" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --interval-days 7 `
-  --output-root ".\promotion-output\automation" `
-  --auto-search-competitors `
-  --enable-multi-query-viral-discovery `
-  --run-follow-up-captures `
-  --capture-browser-assisted-follow-ups `
-  --enable-publish-queue `
-  --enable-browser-publish-assistant `
-  --enable-metrics-recovery `
-  --enable-next-round-optimization
-```
-
-Run due scheduled jobs or write a Windows Task Scheduler registration script:
-
-```powershell
-python scripts\automation_scheduler.py run --config ".\promotion-automation.json" --force
-python scripts\automation_scheduler.py windows-task --config ".\promotion-automation.json" --out-file ".\register-enhe-promotion-task.ps1" --time "09:00"
-```
-
-Recover metrics:
-
-```powershell
-python scripts\performance_monitor.py `
-  --out-dir ".\promotion-output"
-```
-
-Recover metrics manually:
-
-```powershell
-python scripts\metrics_recovery.py `
-  --metrics-json ".\promotion-output\reports\promotion-manager\post-publish-capture\post-publish-metrics-export.json" `
-  --business-csv ".\orders-and-revenue.csv" `
-  --out-dir ".\promotion-output"
-```
-
-Validate the recovery loop with synthetic/demo evidence only:
-
-```powershell
-python scripts\synthetic_evidence_generator.py `
-  --product-url "https://example.com/product" `
-  --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --run-recovery `
-  --out-dir ".\promotion-output\synthetic-validation"
-```
-
-Set up and recover a whole real-evidence inbox:
+导入真实证据并复盘：
 
 ```powershell
 python scripts\real_evidence_inbox_setup.py `
@@ -425,23 +220,51 @@ python scripts\real_evidence_inbox_setup.py `
 
 python scripts\real_evidence_inbox.py `
   --inbox-dir ".\promotion-evidence-inbox" `
-  --skip-post-publish-capture `
   --out-dir ".\promotion-output"
 ```
 
-## Documentation
+## 浏览器插件
 
-- [Installation](docs/installation.md)
-- [Usage](docs/usage.md)
-- [中文安装教程](docs/zh-CN/installation.md)
+浏览器插件位于 [browser-extension](browser-extension/)。
+
+它可以：
+
+- 读取当前浏览器标签页 URL。
+- 选择目标平台和运行深度。
+- 生成 Codex 命令、发布包命令、证据收件箱命令和周期自动化命令。
+- 估算订阅积分消耗。
+- 连接 ENHE License/Usage/Hosted Run API。
+- 打包为 Chrome/Edge 插件提交包。
+
+本地加载：
+
+1. 打开 `chrome://extensions`。
+2. 开启 Developer mode。
+3. 点击 Load unpacked。
+4. 选择 `browser-extension` 目录。
+
+打包：
+
+```powershell
+python scripts\package_browser_extension.py --out-dir ".\dist"
+```
+
+商业化上线还需要部署后端 License 服务、配置 Stripe、准备隐私政策/截图/商店说明，并通过 Chrome Web Store 或 Microsoft Edge Add-ons 审核。
+
+## 文档
+
+- [英文 README](README.en.md)
+- [安装说明](docs/installation.md)
+- [使用说明](docs/usage.md)
+- [中文安装说明](docs/zh-CN/installation.md)
 - [中文使用说明](docs/zh-CN/usage.md)
-- [Browser extension](docs/browser-extension.md)
-- [Extension store submission](docs/extension-store-submission.md)
+- [浏览器插件说明](docs/browser-extension.md)
+- [插件上架指南](docs/extension-store-submission.md)
 - [中文浏览器插件说明](docs/zh-CN/browser-extension.md)
 - [中文插件上架指南](docs/zh-CN/extension-store-submission.md)
-- [Subscription pricing](docs/subscription-pricing.md)
-- [Billing backend contract](docs/billing-backend-contract.md)
-- [Final capability map](docs/final-capability-map.md)
+- [订阅定价模型](docs/subscription-pricing.md)
+- [计费后端合约](docs/billing-backend-contract.md)
+- [最终能力矩阵](docs/final-capability-map.md)
 
 ## License
 

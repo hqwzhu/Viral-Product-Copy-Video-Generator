@@ -168,17 +168,22 @@ def browser_form_fill_info(out_dir: Path, payload_json: str) -> dict[str, Any]:
 
 
 def payload_from_draft(platform: str, draft: str, item: dict[str, Any]) -> dict[str, Any]:
-    title = first_labeled_value(draft, "Title") or clean_text(item.get("title")) or f"{platform} promotion draft"
-    tags = split_tags(first_labeled_value(draft, "Tags"))
+    title = first_labeled_value(draft, "Viral title") or first_labeled_value(draft, "Title") or clean_text(item.get("viralTitle")) or clean_text(item.get("title")) or f"{platform} promotion draft"
+    tags = split_tags(first_labeled_value(draft, "Tags")) or clean_list(item.get("tags"))
     body = body_from_draft(draft)
     cover_text = first_labeled_value(draft, "Cover text")
     cta = first_labeled_value(draft, "CTA")
     tracking = item.get("trackingPlan") if isinstance(item.get("trackingPlan"), dict) else {}
     return {
         "title": title,
-        "body": body,
+        "body": clean_text(item.get("copy")) or body,
         "tags": tags,
         "coverText": cover_text,
+        "firstBatch": item.get("firstBatch", {}),
+        "video": item.get("video", {}),
+        "cover": item.get("cover", {}),
+        "detailImages": item.get("detailImages", []),
+        "assets": item.get("assets", []),
         "cta": cta,
         "trackedUrl": tracking.get("trackedUrl", ""),
         "trackingPlan": tracking,
@@ -246,6 +251,8 @@ def render_clipboard(payload: dict[str, Any]) -> str:
         lines.extend(["", "Tags: " + " ".join(payload["tags"])])
     if payload["coverText"]:
         lines.extend(["", "Cover: " + payload["coverText"]])
+    lines.extend(["", "First batch:", render_first_batch(payload.get("firstBatch", {}))])
+    lines.extend(["", "Media assets:", render_payload_assets(payload)])
     if payload.get("trackedUrl"):
         lines.extend(["", "Tracked URL: " + payload["trackedUrl"]])
     return "\n".join(lines).strip()
@@ -288,7 +295,19 @@ def render_checklist(platform: str, payload: dict[str, Any], queue_item: dict[st
         "## Before Publish",
         "",
         "- Confirm the logged-in account is the intended account.",
-        "- Paste or fill the prepared title, body, cover text, tags, and media.",
+        "- Paste or fill the prepared viral title, body, tags, first-batch comments, cover text, and media.",
+        "- Upload or attach the video, cover, and detail images from the media asset paths below.",
+        "",
+        "## Media Assets",
+        "",
+        render_payload_assets(payload),
+        "",
+        "## First Batch",
+        "",
+        render_first_batch(payload.get("firstBatch", {})),
+        "",
+        "## Final Review",
+        "",
         "- Review platform warnings, commercial disclosure requirements, and visibility settings.",
         "- Let the user perform the final publish action.",
         "",
@@ -299,6 +318,35 @@ def render_checklist(platform: str, payload: dict[str, Any], queue_item: dict[st
         "- Run metrics recovery only after real public/analytics evidence exists.",
     ]
     return "\n".join(lines)
+
+
+def render_payload_assets(payload: dict[str, Any]) -> str:
+    assets = payload.get("assets") if isinstance(payload.get("assets"), list) else []
+    if not assets:
+        return "- Media assets: missing or pending media asset pack."
+    lines = []
+    for asset in assets:
+        if isinstance(asset, dict):
+            lines.append(f"- {asset.get('type', 'asset')}: `{asset.get('status', '')}` {asset.get('path', '')}")
+    return "\n".join(lines) if lines else "- Media assets: missing or pending media asset pack."
+
+
+def render_first_batch(first_batch: Any) -> str:
+    if not isinstance(first_batch, dict) or not first_batch:
+        return "- First batch: pending."
+    lines = []
+    if first_batch.get("pinnedComment"):
+        lines.append(f"- Pinned comment: {first_batch['pinnedComment']}")
+    for key, label in [
+        ("firstComments", "First comments"),
+        ("replyPrompts", "Reply prompts"),
+        ("launchActions", "Launch actions"),
+    ]:
+        values = first_batch.get(key)
+        if isinstance(values, list) and values:
+            lines.append(f"- {label}:")
+            lines.extend(f"  - {value}" for value in values)
+    return "\n".join(lines) if lines else "- First batch: pending."
 
 
 def register_published_urls(
@@ -430,6 +478,14 @@ def split_tags(value: str) -> list[str]:
 
 def split_csv(value: str) -> list[str]:
     return [item.strip().lower() for item in value.split(",") if item.strip()]
+
+
+def clean_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
 
 
 def read_json(path: Path) -> dict[str, Any]:

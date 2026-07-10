@@ -124,6 +124,14 @@ def build_queue(
             "platform": platform,
             "publishMode": mode,
             "approvalRequired": bool(pack.get("approvalRequired", True)),
+            "viralTitle": pack.get("viralTitle") or content_title(platform_content),
+            "copy": pack.get("copy", ""),
+            "tags": pack.get("tags") or platform_content.get("tags", []),
+            "firstBatch": pack.get("firstBatch", {}),
+            "video": pack.get("video", {}),
+            "cover": pack.get("cover", {}),
+            "detailImages": pack.get("detailImages", []),
+            "assets": pack.get("assets", []),
             "contentDraft": str(draft_path),
             "scheduleSuggestion": pack.get("scheduleSuggestion", ""),
             "trackingFields": pack.get("trackingFields", []),
@@ -131,7 +139,7 @@ def build_queue(
             "warnings": pack.get("warnings", []),
         }
         if (platform in OFFICIAL_PLATFORMS or official_douyin_requested) and mode == "official_api_publish":
-            record.update(run_official_queue_item(args, out_dir, promotion_dir, manifest, platform, platform_content, draft_path))
+            record.update(run_official_queue_item(args, out_dir, promotion_dir, manifest, platform, platform_content, draft_path, pack))
         elif mode in MANUAL_MODES:
             record.update(manual_queue_item(mode, platform))
         else:
@@ -165,11 +173,12 @@ def run_official_queue_item(
     platform: str,
     content: dict[str, Any],
     draft_path: Path,
+    pack: dict[str, Any],
 ) -> dict[str, Any]:
     if platform == "github":
         return run_github_queue_item(args, out_dir, content, draft_path)
     if platform == "youtube":
-        return run_youtube_queue_item(args, out_dir, promotion_dir, manifest, content, draft_path)
+        return run_youtube_queue_item(args, out_dir, promotion_dir, manifest, content, draft_path, pack)
     if platform == "douyin":
         return run_douyin_queue_item(args, out_dir, content)
     return {"status": "unsupported", "reason": f"No official queue runner for {platform}."}
@@ -214,8 +223,9 @@ def run_youtube_queue_item(
     manifest: dict[str, Any],
     content: dict[str, Any],
     draft_path: Path,
+    pack: dict[str, Any],
 ) -> dict[str, Any]:
-    video_file = Path(args.youtube_video_file) if args.youtube_video_file else youtube_video_from_manifest(manifest, promotion_dir)
+    video_file = Path(args.youtube_video_file) if args.youtube_video_file else video_from_pack(pack) or youtube_video_from_manifest(manifest, promotion_dir)
     if not video_file or not video_file.exists():
         return {
             "status": "blocked",
@@ -325,13 +335,28 @@ def render_platform_draft(platform: str, content: dict[str, Any], pack: dict[str
     lines = [
         f"# {platform} Publish Draft",
         "",
+        f"- Viral title: {pack.get('viralTitle') or content_title(content)}",
         f"- Title: {content_title(content)}",
         f"- Content type: {content.get('contentType', '')}",
         f"- CTA: {content.get('cta', '')}",
         f"- Cover text: {content.get('coverText', '')}",
-        f"- Tags: {', '.join(str(tag) for tag in content.get('tags', []))}",
+        f"- Tags: {', '.join(str(tag) for tag in (pack.get('tags') or content.get('tags', [])))}",
         f"- Publish mode: `{pack.get('publishMode', '')}`",
         f"- Approval required: {pack.get('approvalRequired', True)}",
+        "",
+        "## Required Publish Package",
+        "",
+        f"- Video: `{(pack.get('video') or {}).get('status', '')}` {(pack.get('video') or {}).get('path', '')}",
+        f"- Cover: `{(pack.get('cover') or {}).get('status', '')}` {(pack.get('cover') or {}).get('path', '')}",
+        f"- Detail images: {len(pack.get('detailImages', []))}",
+        "",
+        "## Media Assets",
+        "",
+        render_media_assets(pack),
+        "",
+        "## First Batch",
+        "",
+        render_first_batch(pack.get("firstBatch", {})),
         "",
         "## Tracking Plan",
         "",
@@ -357,6 +382,38 @@ def render_platform_draft(platform: str, content: dict[str, Any], pack: dict[str
     return "\n".join(lines)
 
 
+def render_media_assets(pack: dict[str, Any]) -> str:
+    assets = pack.get("assets") if isinstance(pack.get("assets"), list) else []
+    if not assets:
+        return "- Media assets: pending media_asset_pack.py"
+    lines = []
+    for asset in assets:
+        if isinstance(asset, dict):
+            label = asset.get("type") or "asset"
+            status = asset.get("status") or ""
+            path = asset.get("path") or ""
+            lines.append(f"- {label}: `{status}` {path}")
+    return "\n".join(lines) if lines else "- Media assets: pending media_asset_pack.py"
+
+
+def render_first_batch(first_batch: Any) -> str:
+    if not isinstance(first_batch, dict) or not first_batch:
+        return "- First batch: pending"
+    lines = []
+    if first_batch.get("pinnedComment"):
+        lines.append(f"- Pinned comment: {first_batch['pinnedComment']}")
+    for key, label in [
+        ("firstComments", "First comments"),
+        ("replyPrompts", "Reply prompts"),
+        ("launchActions", "Launch actions"),
+    ]:
+        values = first_batch.get(key)
+        if isinstance(values, list) and values:
+            lines.append(f"- {label}:")
+            lines.extend(f"  - {value}" for value in values)
+    return "\n".join(lines) if lines else "- First batch: pending"
+
+
 def render_tracking_plan(tracking: Any) -> str:
     if not isinstance(tracking, dict) or not tracking:
         return "- Tracking plan: not generated"
@@ -380,6 +437,15 @@ def youtube_video_from_manifest(manifest: dict[str, Any], promotion_dir: Path) -
                 return path
             return promotion_dir / path
     return None
+
+
+def video_from_pack(pack: dict[str, Any]) -> Path | None:
+    video = pack.get("video") if isinstance(pack.get("video"), dict) else {}
+    path_value = str(video.get("path") or "").strip()
+    if not path_value:
+        return None
+    path = Path(path_value)
+    return path if path.exists() else None
 
 
 def write_queue(out_dir: Path, queue: dict[str, Any]) -> None:
@@ -430,6 +496,10 @@ def render_queue_markdown(queue: dict[str, Any]) -> str:
                 f"- Mode: `{record['publishMode']}`",
                 f"- Draft: {record['contentDraft']}",
                 f"- Reason: {record.get('reason', '')}",
+                f"- Viral title: {record.get('viralTitle', '')}",
+                f"- Video: `{(record.get('video') or {}).get('status', '')}` {(record.get('video') or {}).get('path', '')}",
+                f"- Cover: `{(record.get('cover') or {}).get('status', '')}` {(record.get('cover') or {}).get('path', '')}",
+                f"- Detail images: {len(record.get('detailImages', []))}",
             ]
         )
         official = record.get("officialExecution") or {}

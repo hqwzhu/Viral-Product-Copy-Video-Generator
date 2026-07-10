@@ -11,6 +11,7 @@ This project is a local Codex Skill plus scripts. It can run without a SaaS back
 - Git.
 - Optional: Playwright Chromium for rendered page reading and platform search snapshots.
 - Optional: ffmpeg for MP4 rendering.
+- Optional: Pillow for PNG cover and detail image generation.
 
 ## Clone
 
@@ -55,6 +56,14 @@ Verify:
 ffmpeg -version
 ```
 
+## Optional Image Runtime
+
+Use this when you want `media_asset_pack.py` to generate PNG covers and detail images:
+
+```powershell
+python -m pip install pillow
+```
+
 ## Install As A Codex Skill
 
 Copy or sync the reviewed files into the installed Skill directory only after verification:
@@ -66,7 +75,7 @@ python scripts\self_evolution_audit.py `
   --out-dir ".\promotion-output"
 ```
 
-This copies only managed files such as `SKILL.md`, `references`, `scripts`, `docs`, `README.md`, and `browser-extension`.
+This copies only managed files such as `SKILL.md`, `references`, `scripts`, `docs`, `README.md`, `README.en.md`, `README.zh-CN.md`, and `browser-extension`.
 
 ## Verify
 

@@ -25,7 +25,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "copy_and_real_video_generation",
-        "label": "Generate platform-native copy, scripts, storyboards, and real MP4 video files.",
+        "label": "Generate platform-native viral titles, copy, tags, first-batch comments, MP4 videos, covers, and detail images.",
     },
     {
         "id": "official_or_browser_assisted_publish",
@@ -356,6 +356,8 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     content_count = int_value(summary.get("contentArtifacts"))
     video_count = int_value(summary.get("videoFilesGenerated"))
+    cover_count = int_value(summary.get("mediaAssetCoversReady"))
+    detail_count = int_value(summary.get("mediaAssetDetailImagesReady"))
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
     if final_run and content_count == 0:
@@ -364,7 +366,19 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
     if final_run and video_count == 0:
         status = "partial_ready"
         missing.append("no MP4 generated in the final run")
-    return row("copy_and_real_video_generation", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], [])
+    if final_run and cover_count == 0:
+        status = "partial_ready"
+        missing.append("no cover images generated in the final run")
+    if final_run and detail_count == 0:
+        status = "partial_ready"
+        missing.append("no detail images generated in the final run")
+    metrics = {
+        "contentArtifacts": content_count,
+        "videoFilesGenerated": video_count,
+        "coverImagesGenerated": cover_count,
+        "detailImagesGenerated": detail_count,
+    }
+    return row("copy_and_real_video_generation", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], [], metrics)
 
 
 def publish_row(

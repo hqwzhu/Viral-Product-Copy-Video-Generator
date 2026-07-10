@@ -79,6 +79,19 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
+Generate covers, detail images, and a media asset manifest, then write those paths back into the publish pack:
+
+```powershell
+python scripts\media_asset_pack.py `
+  --content-json ".\promotion-output\reports\promotion-manager\generated-content\product-platform-content.json" `
+  --publish-pack ".\promotion-output\reports\promotion-manager\publish-packs\product-publish-pack.json" `
+  --video-file "youtube=.\promotion-output\videos\product-youtube.mp4" `
+  --video-file "douyin=.\promotion-output\videos\product-douyin.mp4" `
+  --out-dir ".\promotion-output"
+```
+
+The full workflow runs this step automatically after video rendering. The publish pack must contain viral title, copy, tags, first-batch comments/replies, video, cover image, detail images, and an `assets` list. If `--skip-video` is used, cover and detail images are still generated and missing videos are marked instead of fabricated.
+
 Review packs:
 
 ```powershell

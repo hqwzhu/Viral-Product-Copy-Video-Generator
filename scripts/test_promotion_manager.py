@@ -28,6 +28,7 @@ PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
 PRODUCT_URL_DISCOVERY = ROOT / "scripts" / "product_url_discovery.py"
 PRODUCT_BATCH_RUNNER = ROOT / "scripts" / "product_batch_runner.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
+MEDIA_ASSET_PACK = ROOT / "scripts" / "media_asset_pack.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
@@ -275,6 +276,15 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertTrue(all(item["publishSteps"] for item in publish_pack))
         self.assertTrue(all(item["trackingPlan"]["utm"]["utm_content"] for item in publish_pack))
         self.assertTrue(all("utm_campaign=" in item["trackingPlan"]["trackedUrl"] for item in publish_pack))
+        for item in publish_pack:
+            self.assertTrue(item["viralTitle"])
+            self.assertTrue(item["copy"])
+            self.assertIsInstance(item["tags"], list)
+            self.assertTrue(item["tags"])
+            self.assertTrue(item["firstBatch"]["pinnedComment"])
+            self.assertIn("video", item)
+            self.assertIn("cover", item)
+            self.assertIn("detailImages", item)
         self.assertIn("utm_content", publish_pack[0]["trackingFields"])
         warnings = " ".join(" ".join(item["warnings"]) for item in publish_pack)
         self.assertIn("No cookie/token/password storage", warnings)
@@ -287,6 +297,49 @@ class PromotionManagerScriptTest(unittest.TestCase):
         retrospective = self.load_json(out_dir, "reports/promotion-manager/retrospectives/ai-prompt-kit-retrospective.json")
         self.assertEqual(retrospective["status"], "waiting_real_data")
         self.assertEqual(retrospective["publishedItems"], [])
+
+    def test_media_asset_pack_generates_required_assets_and_updates_publish_pack(self) -> None:
+        out_dir = self.run_all()
+        content_path = out_dir / "reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json"
+        publish_pack_path = out_dir / "reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json"
+        video_path = out_dir / "videos" / "ai-prompt-kit-youtube.mp4"
+        video_path.parent.mkdir(parents=True, exist_ok=True)
+        video_path.write_bytes(b"dry-run video placeholder")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(MEDIA_ASSET_PACK),
+                "--content-json",
+                str(content_path),
+                "--publish-pack",
+                str(publish_pack_path),
+                "--video-file",
+                f"youtube={video_path}",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/media-assets/media-asset-pack.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertGreaterEqual(report["summary"]["coversReady"], 5)
+        self.assertGreater(report["summary"]["detailImagesReady"], 0)
+
+        publish_pack = json.loads(publish_pack_path.read_text(encoding="utf-8"))
+        by_platform = {item["platform"]: item for item in publish_pack}
+        youtube = by_platform["youtube"]
+        self.assertEqual(youtube["video"]["status"], "ready")
+        self.assertEqual(Path(youtube["video"]["path"]), video_path)
+        for item in publish_pack:
+            self.assertTrue(Path(item["cover"]["path"]).exists(), item["platform"])
+            self.assertTrue(item["detailImages"], item["platform"])
+            self.assertTrue(all(Path(image["path"]).exists() for image in item["detailImages"]), item["platform"])
+            self.assertTrue(item["assets"], item["platform"])
+            self.assertTrue(item["firstBatch"]["pinnedComment"], item["platform"])
 
     def test_product_intake_extracts_profile_from_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-intake-test-"))
@@ -6853,6 +6906,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         module = load_script_module(SELF_EVOLUTION_AUDIT)
         files = {item.as_posix() for item in module.managed_skill_files(ROOT)}
         self.assertIn("README.md", files)
+        self.assertIn("README.en.md", files)
         self.assertIn("README.zh-CN.md", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/zh-CN/installation.md", files)
@@ -7030,6 +7084,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("performance_monitor.py", optimization_evidence)
         docs_evidence = "\n".join(by_requirement["github_documentation_and_install_tutorial"]["evidence"]).replace("\\", "/")
         self.assertIn("README.md", docs_evidence)
+        self.assertIn("README.en.md", docs_evidence)
         self.assertIn("README.zh-CN.md", docs_evidence)
         self.assertIn("docs/installation.md", docs_evidence)
         self.assertIn("docs/zh-CN/installation.md", docs_evidence)
@@ -9245,6 +9300,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         draft_text = Path(by_platform["xiaohongshu"]["contentDraft"]).read_text(encoding="utf-8")
         self.assertIn("## Tracking Plan", draft_text)
         self.assertIn("utm_content", draft_text)
+        self.assertIn("## Media Assets", draft_text)
+        self.assertIn("## First Batch", draft_text)
+        self.assertTrue(by_platform["xiaohongshu"]["assets"])
+        self.assertTrue(Path(by_platform["xiaohongshu"]["cover"]["path"]).exists())
+        self.assertTrue(by_platform["xiaohongshu"]["detailImages"])
         self.assertTrue(Path(by_platform["github"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["youtube"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["xiaohongshu"]["contentDraft"]).exists())
@@ -9429,6 +9489,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         clipboard = Path(by_platform["xiaohongshu"]["payloadFiles"]["clipboard"]).read_text(encoding="utf-8")
         self.assertIn("Tracked URL:", clipboard)
+        self.assertIn("First batch:", clipboard)
+        self.assertIn("Media assets:", clipboard)
         self.assertTrue(Path(by_platform["douyin"]["payloadFiles"]["formFillScript"]).exists())
         self.assertIn("browser_publish_form_fill.py", by_platform["douyin"]["browserFormFill"]["command"])
         self.assertTrue(Path(by_platform["douyin"]["browserFormFill"]["payloadJson"]).exists())

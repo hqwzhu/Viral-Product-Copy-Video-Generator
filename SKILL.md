@@ -397,6 +397,19 @@ python scripts/render_video.py \
   --out "./promotion-output/videos/ai-prompt-kit-youtube.mp4"
 ```
 
+To generate the complete media asset pack and write it back into the publish pack:
+
+```bash
+python scripts/media_asset_pack.py \
+  --content-json "./promotion-output/reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json" \
+  --publish-pack "./promotion-output/reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json" \
+  --video-file "youtube=./promotion-output/videos/ai-prompt-kit-youtube.mp4" \
+  --video-file "douyin=./promotion-output/videos/ai-prompt-kit-douyin.mp4" \
+  --out-dir "./promotion-output"
+```
+
+The full workflow runs the media asset pack automatically after video rendering. If `--skip-video` is supplied, the media pack still generates cover/detail PNGs and marks required videos as missing instead of pretending they exist.
+
 To import competitor evidence from a public page, saved HTML, JSON export, or copied transcript:
 
 ```bash
@@ -972,6 +985,7 @@ The command writes:
 - `reports/promotion-manager/competitors/follow-up-captures/<task>/browser-visible-snapshot.json` when browser-assisted follow-up capture opens a public platform URL and imports browser-visible page evidence.
 - `reports/promotion-manager/competitors/video-sampling/browser-video-sampler.{json,md}` and `video-sampling/frames/*.png` when `scripts/browser_video_sampler.py` captures browser-visible video metadata and frame screenshots. When run from follow-up captures, the same files are written under `follow-up-captures/<task>/reports/promotion-manager/competitors/video-sampling/`, and safe `videoSampleEvidence` is copied into `deep-competitor-library.json` for downstream script/storyboard deconstruction.
 - `reports/promotion-manager/generated-content/<product>-competitor-informed-content.{json,md}` and `<product>-competitor-informed-strategy.json` when `scripts/competitor_content_enhancer.py` rewrites generated content from observed viral patterns. The workflow writes this back to `<product>-platform-content.json` before video rendering unless `--skip-competitor-informed-content` is supplied.
+- `reports/promotion-manager/media-assets/media-asset-pack.{json,md}` and `media-assets/<platform>/*.png` when `scripts/media_asset_pack.py` generates cover/detail PNG assets and writes video, cover, detail image, first-batch, and `assets` references back into the publish pack.
 - `reports/promotion-manager/cheat-review/<product>-cheat-review-pack.{json,md}` and `cheat-review/drafts/*.md` when `scripts/promotion_manager.py review|all` prepares platform drafts for Codex `cheat-score` without writing prediction logs.
 - `reports/promotion-manager/publish-queue/publish-queue.{json,md}` and per-platform drafts when `scripts/publish_queue.py` prepares official dry-runs and manual/browser-assisted tasks.
 - `reports/promotion-manager/publish-readiness/publish-readiness.{json,md}` when `scripts/publish_readiness_runner.py` audits queue status, credential presence by environment variable name, target readiness, approval status, and next actions.
@@ -1002,7 +1016,8 @@ The command writes:
 - `reports/promotion-manager/billing-simulator/billing-simulator.{json,md}` and `billing-simulator-state.json` when `scripts/billing_contract_simulator.py` validates the extension billing contract, hashed license storage, usage reservation, hosted run acceptance, usage commit, and simulated webhook flow.
 - `promotion-output/automation/scheduler/automation-run.{json,md}` and `promotion-automation-state.json` when `scripts/automation_scheduler.py` runs scheduled jobs.
 - `videos/*.mp4` only when `scripts/render_video.py` is run and `ffmpeg` is available.
-- `README.md`, `docs/*.md`, `browser-extension/*`, and `scripts/package_browser_extension.py` as the public GitHub docs and store-ready browser extension package when syncing the installed Skill.
+- `media-assets/<platform>/*.png` when `scripts/media_asset_pack.py` runs and Pillow is available.
+- `README.md`, `README.en.md`, `docs/*.md`, `browser-extension/*`, and `scripts/package_browser_extension.py` as the public GitHub docs and store-ready browser extension package when syncing the installed Skill.
 
 ## Workflows
 
@@ -1059,10 +1074,12 @@ Generate platform-native material:
 - Xiaohongshu: note titles, post bodies, cover text, tags, comment prompts.
 - Douyin: 30-second hooks, voiceover scripts, storyboard, captions, hashtags.
 - GitHub: README promotion copy, Release/Issue/Discussion drafts.
+- Every publish package item must expose the direct publication payload fields: viral title, copy, tags, first-batch comments/replies, video status/path, cover image, detail images, and the consolidated `assets` list.
 
 When competitor search evidence exists, generated drafts should include `competitorInformed` metadata and should preserve source titles/hooks/deconstruction summaries as evidence metadata only. Reuse structure and beat functions; do not copy competitor wording or transfer competitor metrics into product claims.
 
 When the user asks for a video file, run `scripts/render_video.py` to create an MP4 from the generated content JSON. Use `--voiceover-audio` for a real recorded/AI voiceover file, or `--generate-voiceover` on Windows for review-quality system TTS. Without either option the renderer creates a silent captioned artifact.
+After video rendering, run `scripts/media_asset_pack.py` or the full workflow so the publish pack also receives PNG cover images, PNG detail images, video path/status, and a machine-readable media asset manifest.
 
 ### 4. Review And Score
 
@@ -1083,6 +1100,14 @@ The built-in promotion review writes `reports/promotion-manager/cheat-review/<pr
 
 Every publish pack must include:
 
+- viral title / explosive title candidate
+- final copy/body for the platform
+- platform tags/hashtags
+- first-batch comments, pinned comment, reply prompts, and launch actions
+- video object with required/status/path
+- cover image object with status/path/cover text
+- detail image list
+- consolidated `assets` list for browser/manual publishing
 - `publishMode`: `official_api_publish`, `browser_assisted_publish`, `manual_publish_required`, or `unsupported`
 - `approvalRequired: true`
 - manual steps
@@ -1160,7 +1185,8 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 
 ## Bundled Resources
 
-- `README.md`: GitHub-facing project introduction, quick start, install, usage, safety, and extension overview.
+- `README.md`: Chinese GitHub-facing project introduction, quick start, install, usage, safety, and extension overview.
+- `README.en.md`: English GitHub-facing project introduction with a language switch back to `README.md`.
 - `docs/installation.md`: setup and Codex Skill sync tutorial.
 - `docs/usage.md`: operator commands for intake, research, publishing, metrics, and next-round optimization.
 - `docs/browser-extension.md`: Chrome extension load, store package command, subscription flow, and security notes.
@@ -1229,6 +1255,7 @@ Scheduled jobs can set `competitorInformedContent.enabled: false` to disable rew
 - `scripts/billing_contract_simulator.py`: local reference backend simulator for browser-extension subscription plans, hashed licenses, quota authorization, hosted run acceptance, usage commits, and payment webhook state changes.
 - `scripts/package_browser_extension.py`: validates and builds the Chrome/Edge store submission zip plus `browser-extension-package-report`.
 - `scripts/render_video.py`: ffmpeg-based MP4 renderer with caption, voiceover-audio, and Windows TTS support.
+- `scripts/media_asset_pack.py`: Pillow-based PNG cover/detail image generator and publish-pack media asset manifest writer.
 - `scripts/test_promotion_manager.py`: regression tests for report paths, safety modes, content counts, and retrospective guardrails.
 - `references/workflow.md`: full operating workflow.
 - `references/platform-publishing.md`: platform publishing modes and safety rules.
