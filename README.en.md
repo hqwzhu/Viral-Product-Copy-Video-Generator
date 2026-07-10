@@ -69,7 +69,7 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can initialize a fillable evidence inbox, run a post-publish performance monitor, import evidence files, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
-| Browser extension | Store package and backend reference included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads including launch unlock, periodic automation setup/run commands, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3, icons, permissions, and remote-code guardrails before building a Chrome/Edge submission zip. `scripts/billing_contract_simulator.py` proves the contract locally, and `backend/license-service/` provides a Stripe Checkout, webhook, License, usage reservation, usage commit, and hosted-run reference service. Store review and production deployment remain external gates. |
+| Browser extension | Store package and deployable backend included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3 and remote-code guardrails. `backend/license-service/` now provides Stripe Checkout, signed webhooks, license validation, PostgreSQL-backed quota state, usage reservation/commit, hosted-run queue/status endpoints, and an isolated hosted worker. `deploy/promotion-manager/`, `docs/store/`, and `docs/legal/` prepare deployment, review copy, privacy, terms, refund, and support materials. External account setup, live Stripe configuration, server deployment, and store approval remain operator gates. |
 
 ## Install
 
@@ -272,7 +272,7 @@ copy .env.example .env
 npm run start
 ```
 
-Before public launch, deploy it behind HTTPS, configure Stripe live prices and signed webhooks, replace the JSON state file with a database, connect hosted workers, publish privacy/support/refund pages, and pass Chrome/Edge store review.
+Before public launch, deploy it behind HTTPS, configure Stripe live prices and signed webhooks, set `DATABASE_URL`, run `npm run migrate`, start the API and worker services from `deploy/promotion-manager/`, publish privacy/terms/refund/support pages, and pass Chrome/Edge store review.
 
 Validate the hosted-run handoff used by the extension after reserving credits:
 

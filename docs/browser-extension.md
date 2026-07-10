@@ -14,6 +14,7 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 - Can validate the license against a configurable ENHE license endpoint when a backend is deployed.
 - Can reserve hosted usage credits against the ENHE usage authorization endpoint before a hosted run.
 - Can copy or submit a hosted run payload with the product URL, platforms, workflow type, estimated credits, local command, selected options, and safety constraints.
+- Shows the hosted run ID and status URL returned by the backend after queue submission.
 - Opens the ENHE checkout URL with the selected plan and estimated monthly credits.
 - Opens the ENHE customer billing portal.
 - Links to ENHE website and project documentation for traffic.
@@ -21,6 +22,7 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 ## What It Does Not Do
 
 - It does not execute Codex from the browser.
+- It does not send arbitrary local commands for server execution. The hosted worker rebuilds commands from whitelisted structured payload fields.
 - It does not bypass platform login, captcha, review, or risk controls.
 - It does not click final publish.
 - It does not securely enforce payment by itself. A real paid launch needs a server-side license API and payment provider.
@@ -89,8 +91,9 @@ Recommended flow:
 5. Extension calls the license API to check status and remaining credits.
 6. Extension can call the usage authorization API to reserve credits for the selected workflow.
 7. Extension copies or posts a hosted run payload to the ENHE hosted run API.
-8. Hosted API refuses runs without an active license and matching usage reservation, then commits actual usage after completion.
-9. Local Codex command generation remains free or trial-limited.
+8. Hosted API refuses runs without an active license and matching usage reservation, then queues accepted runs.
+9. The isolated hosted worker consumes queued runs, writes artifacts under a server-owned hosted-run directory, updates run status, and commits actual usage after completion.
+10. Local Codex command generation remains free or trial-limited.
 
 Customer self-service billing uses the Billing portal button. The extension opens:
 
@@ -116,6 +119,12 @@ Default hosted run endpoint:
 
 ```text
 https://www.enhe-tech.com.cn/api/promotion-manager/run
+```
+
+Default hosted run status endpoint:
+
+```text
+https://www.enhe-tech.com.cn/api/promotion-manager/run/{runId}
 ```
 
 Expected response:
@@ -168,6 +177,10 @@ The simulator writes:
 The state file stores a license hash, subscription status, remaining credits, usage reservations, hosted run records, usage commits, and handled webhook event IDs. It does not store plaintext license keys or payment provider secrets.
 
 The extension's Reserve credits button sends the selected workflow type, estimated credits, and an idempotency key to the usage authorization endpoint. The Copy hosted payload and Start hosted run buttons then package the active product URL, selected platforms, command type, workflow depth, local Codex command, options, usage ID, and explicit safety flags for the hosted run endpoint. Production hosted runs should commit actual usage server-side after completion; local Codex command generation does not need a hosted usage reservation.
+
+## Production Deployment
+
+Deploy `backend/license-service/` behind the same HTTPS host as the ENHE website, isolated under `/api/promotion-manager/` and `/promotion-manager/runs/`. Use `deploy/promotion-manager/` for Nginx, systemd, PostgreSQL, and worker configuration. Start with API-only deployment if the server is small; enable the hosted worker only after Stripe test mode, license validation, usage reservation, and run status checks pass.
 
 ## Security Notes
 

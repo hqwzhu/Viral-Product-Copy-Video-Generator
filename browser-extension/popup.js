@@ -657,9 +657,12 @@ async function startHostedRun() {
     await chrome.storage.local.set({
       hostedRunEndpoint: endpoint,
       lastHostedRunId: result.runId || "",
-      lastHostedRunStatus: result.status || ""
+      lastHostedRunStatus: result.status || "",
+      lastHostedRunStatusUrl: result.statusUrl || "",
+      lastHostedRunDashboardUrl: result.dashboardUrl || ""
     });
-    els.hostedRunMessage.textContent = `Hosted run ${result.status || "accepted"}${result.runId ? `: ${result.runId}` : ""}.`;
+    const statusLink = result.statusUrl || result.dashboardUrl || "";
+    els.hostedRunMessage.textContent = `Hosted run ${result.status || "accepted"}${result.runId ? `: ${result.runId}` : ""}${statusLink ? `. Status: ${statusLink}` : ""}.`;
   } catch (error) {
     els.hostedRunMessage.textContent = `Hosted run API not reachable. Copy the payload or run locally. ${error.message}`;
   }

@@ -35,15 +35,18 @@ Upload the zip file to the store. Keep the report as release evidence.
 - The extension links to the ENHE website, product page, and GitHub repository for traffic.
 - A public privacy policy URL is ready, recommended: `https://www.enhe-tech.com.cn/privacy`.
 - A support URL is ready, recommended: `https://www.enhe-tech.com.cn/`.
+- Publication-ready policy pages are drafted in `docs/legal/`.
+- Store listing and reviewer copy are drafted in `docs/store/`.
 
 ## Commercial Launch Gate
 
 Before submitting a paid extension listing:
 
 - Deploy `backend/license-service/` or an equivalent production License service behind HTTPS.
+- Set `DATABASE_URL`, run `npm run migrate`, and deploy the API and hosted worker as isolated services. See `deploy/promotion-manager/`.
 - Configure real Stripe Checkout prices, Customer Portal, and signed webhooks.
 - Verify `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_succeeded`, and `invoice.payment_failed` in Stripe test mode.
-- Confirm the extension can validate a real test license and reserve hosted usage credits through the deployed API.
+- Confirm the extension can validate a real test license, reserve hosted usage credits, start a hosted run, and view the run status URL through the deployed API.
 - Publish privacy policy, support, refund/contact, and product pages.
 - Prepare screenshots that show local command generation, license validation, credit reservation, and hosted-run payload review.
 - Keep all extension logic packaged locally; remote endpoints must return data only.
@@ -61,7 +64,8 @@ Before submitting a paid extension listing:
    - Category: productivity or marketing, depending on the store options available at submission time.
    - Website: `https://www.enhe-tech.com.cn/`
    - Support URL: `https://www.enhe-tech.com.cn/`
-   - Privacy policy: `https://www.enhe-tech.com.cn/privacy`
+   - Privacy policy: `https://www.enhe-tech.com.cn/promotion-manager/privacy`
+   - Support URL: `https://www.enhe-tech.com.cn/promotion-manager/support`
 6. Fill privacy practices. The extension uses `activeTab`, `storage`, `clipboardWrite`, and ENHE-hosted data endpoints. It does not collect platform passwords, cookies, payment secrets, or API tokens.
 7. Explain paid features: hosted runs require ENHE subscription credits; local command generation can remain free or trial-limited.
 8. Submit for review.
@@ -78,7 +82,7 @@ Before submitting a paid extension listing:
 ## Reviewer Notes Template
 
 ```text
-ENHE Promotion Manager is a Manifest V3 operator extension. It captures the active product URL after user action and generates guarded Codex commands or hosted ENHE run payloads for product promotion workflows. The extension does not auto-publish to third-party platforms, does not bypass login/captcha/risk controls, and does not package remote executable code. ENHE backend endpoints are used only for license validation, subscription credit reservation, checkout, billing portal, and hosted run data exchange.
+ENHE Promotion Manager is a Manifest V3 operator extension. It captures the active product URL after user action and generates guarded Codex commands or hosted ENHE run payloads for product promotion workflows. The extension does not auto-publish to third-party platforms, does not bypass login/captcha/risk controls, and does not package remote executable code. ENHE backend endpoints are used only for license validation, subscription credit reservation, checkout, billing portal, hosted-run queue submission, and hosted-run status retrieval.
 ```
 
 ## Paid Subscription Notes

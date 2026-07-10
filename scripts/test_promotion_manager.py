@@ -6441,12 +6441,29 @@ Prompt templates for product copy, SEO content, and video scripts.
             "zh-CN/installation.md",
             "zh-CN/usage.md",
             "browser-extension.md",
+            "extension-store-submission.md",
             "subscription-pricing.md",
             "billing-backend-contract.md",
             "final-capability-map.md",
+            "legal/privacy-policy.md",
+            "legal/terms-of-service.md",
+            "legal/refund-policy.md",
+            "legal/support.md",
+            "store/chrome-listing.md",
+            "store/edge-listing.md",
+            "store/reviewer-notes.md",
+            "store/screenshot-plan.md",
         ]
         for filename in required_docs:
             self.assertTrue((DOCS / filename).exists(), filename)
+        for path in [
+            ROOT / "deploy/promotion-manager/README.md",
+            ROOT / "deploy/promotion-manager/.env.production.example",
+            ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf",
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service",
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service",
+        ]:
+            self.assertTrue(path.exists(), path)
         chinese_readme = ROOT / "README.zh-CN.md"
         self.assertTrue(chinese_readme.exists())
         chinese_readme_text = chinese_readme.read_text(encoding="utf-8")
@@ -6526,6 +6543,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("skill_entry.py", script)
         self.assertIn("browser_publish_session.py", script)
         self.assertIn("launch_unlock_pack.py", script)
+        self.assertIn("viral_evidence_inbox_setup.py", script)
+        self.assertIn("viral_evidence_inbox.py", script)
         self.assertIn("real_evidence_inbox_setup.py", script)
         self.assertIn("real_evidence_inbox.py", script)
         self.assertIn("performance_monitor.py", script)
@@ -6533,6 +6552,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
         self.assertIn("launch_unlock_pack", script)
+        self.assertIn("viral_evidence_inbox_setup", script)
+        self.assertIn("viral_evidence_inbox", script)
         self.assertIn("real_evidence_inbox_setup", script)
         self.assertIn("real_evidence_inbox", script)
         self.assertIn("performance_monitor", script)
@@ -6548,9 +6569,17 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("usageAuthorizeEndpoint", contract)
         self.assertIn("usageCommitEndpoint", contract)
         self.assertIn("hostedRunEndpoint", contract)
+        self.assertIn("hostedRunStatusEndpointTemplate", contract)
+        self.assertIn("legalUrls", contract)
+        self.assertIn("privacyPolicy", contract["legalUrls"])
+        self.assertIn("termsOfService", contract["legalUrls"])
+        self.assertIn("refundPolicy", contract["legalUrls"])
+        self.assertIn("support", contract["legalUrls"])
         self.assertEqual(contract["creditCosts"]["standard_run"], 4)
         self.assertIn("browser_publish_session", contract["creditCosts"])
         self.assertIn("launch_unlock_pack", contract["creditCosts"])
+        self.assertEqual(contract["creditCosts"]["viral_evidence_inbox_setup"], 1)
+        self.assertIn("viral_evidence_inbox", contract["creditCosts"])
         self.assertEqual(contract["creditCosts"]["real_evidence_inbox_setup"], 1)
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
         self.assertIn("performance_monitor", contract["creditCosts"])
@@ -6566,6 +6595,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("usageId", contract["hostedRunRequest"]["body"])
         self.assertIn("localCommand", contract["hostedRunRequest"]["body"])
         self.assertIn("hostedRunResponse", contract)
+        self.assertIn("statusUrl", contract["hostedRunResponse"])
         self.assertIn("checkout.session.completed", contract["requiredWebhookEvents"])
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
         self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
@@ -6605,26 +6635,49 @@ Prompt templates for product copy, SEO content, and video scripts.
     def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
         package_json_path = LICENSE_SERVICE / "package.json"
         server_path = LICENSE_SERVICE / "src" / "server.js"
+        state_store_path = LICENSE_SERVICE / "src" / "state-store.js"
+        hosted_worker_path = LICENSE_SERVICE / "src" / "hosted-worker.js"
+        migrate_path = LICENSE_SERVICE / "src" / "migrate.js"
+        worker_path = LICENSE_SERVICE / "src" / "worker.js"
+        migration_path = LICENSE_SERVICE / "migrations" / "001_state_store.sql"
         env_example_path = LICENSE_SERVICE / ".env.example"
         readme_path = LICENSE_SERVICE / "README.md"
 
-        for path in [package_json_path, server_path, env_example_path, readme_path]:
+        for path in [
+            package_json_path,
+            server_path,
+            state_store_path,
+            hosted_worker_path,
+            migrate_path,
+            worker_path,
+            migration_path,
+            env_example_path,
+            readme_path,
+        ]:
             self.assertTrue(path.exists(), path)
 
         package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
         dependencies = package_json.get("dependencies", {})
+        scripts = package_json.get("scripts", {})
         self.assertIn("express", dependencies)
         self.assertIn("stripe", dependencies)
+        self.assertIn("pg", dependencies)
+        self.assertEqual(scripts["migrate"], "node src/migrate.js")
+        self.assertEqual(scripts["worker"], "node src/worker.js")
+        self.assertEqual(scripts["test"], "node --test")
 
         server = server_path.read_text(encoding="utf-8")
         for endpoint in [
             "/health",
             "/promotion-manager/checkout",
             "/promotion-manager/billing",
+            "/promotion-manager/:page(privacy|terms|refund|support)",
+            "/promotion-manager/runs/:runId",
             "/api/promotion-manager/license",
             "/api/promotion-manager/usage/authorize",
             "/api/promotion-manager/usage/commit",
             "/api/promotion-manager/run",
+            "/api/promotion-manager/run/:runId",
             "/api/promotion-manager/webhooks/stripe",
         ]:
             self.assertIn(endpoint, server)
@@ -6638,11 +6691,35 @@ Prompt templates for product copy, SEO content, and video scripts.
             "LICENSE_PEPPER",
             "licenseKeyHash",
             "idempotencyKey",
+            "createStateStore",
+            "startHostedWorker",
+            "statusUrl",
+            "renderLegalPage",
         ]:
             self.assertIn(marker, server)
 
+        state_store = state_store_path.read_text(encoding="utf-8")
+        for marker in ["PostgresStateStore", "DATABASE_URL", "pg_advisory_xact_lock", "promotion_manager_state"]:
+            self.assertIn(marker, state_store)
+        hosted_worker = hosted_worker_path.read_text(encoding="utf-8")
+        for marker in [
+            "buildHostedCommand",
+            "unsupported_hosted_command_type",
+            "safeWorkerEnv",
+            "I_APPROVE_PUBLISH",
+            "PUBLISH_DRY_RUN",
+            "REQUIRE_MANUAL_APPROVAL",
+            "private_product_url_blocked",
+        ]:
+            self.assertIn(marker, hosted_worker)
+        self.assertNotIn("childProcess.exec(", hosted_worker)
+        self.assertIn("DATABASE_URL is not set", migrate_path.read_text(encoding="utf-8"))
+        self.assertIn("startHostedWorker", worker_path.read_text(encoding="utf-8"))
+        self.assertIn("CREATE TABLE IF NOT EXISTS promotion_manager_state", migration_path.read_text(encoding="utf-8"))
+
         env_example = env_example_path.read_text(encoding="utf-8")
         for marker in [
+            "DATABASE_URL=",
             "STRIPE_SECRET_KEY=",
             "STRIPE_WEBHOOK_SECRET=",
             "STRIPE_PRICE_STARTER=",
@@ -6650,6 +6727,10 @@ Prompt templates for product copy, SEO content, and video scripts.
             "ENHE_PUBLIC_BASE_URL=",
             "LICENSE_PEPPER=",
             "LICENSE_SERVICE_STATE_FILE=",
+            "HOSTED_RUN_OUTPUT_ROOT=",
+            "HOSTED_WORKER_ENABLED=",
+            "HOSTED_WORKER_MODE=",
+            "PYTHON_BIN=",
         ]:
             self.assertIn(marker, env_example)
         for forbidden in ["sk_live_", "whsec_", "github_pat_", "GITHUB_TOKEN=" + "github_"]:
@@ -6658,9 +6739,24 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         readme = readme_path.read_text(encoding="utf-8")
         self.assertIn("npm install", readme)
+        self.assertIn("npm run migrate", readme)
+        self.assertIn("npm run worker", readme)
         self.assertIn("npm run start", readme)
+        self.assertIn("PostgreSQL", readme)
+        self.assertIn("hosted worker", readme)
+        self.assertIn("/promotion-manager/privacy", readme)
         self.assertIn("Stripe CLI", readme)
         self.assertIn("store approval remains external", readme)
+
+        deploy_readme = (ROOT / "deploy/promotion-manager/README.md").read_text(encoding="utf-8")
+        deploy_env = (ROOT / "deploy/promotion-manager/.env.production.example").read_text(encoding="utf-8")
+        nginx = (ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf").read_text(encoding="utf-8")
+        for marker in ["same HTTPS host", "Server Requirement", "systemd", "npm run migrate"]:
+            self.assertIn(marker, deploy_readme)
+        for marker in ["DATABASE_URL=", "HOSTED_RUN_OUTPUT_ROOT=", "HOSTED_WORKER_MODE=execute"]:
+            self.assertIn(marker, deploy_env)
+        for marker in ["/api/promotion-manager/", "/promotion-manager/privacy", "/promotion-manager/runs/"]:
+            self.assertIn(marker, nginx)
 
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
@@ -6678,6 +6774,31 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("remote code", text.lower())
         self.assertIn("收费订阅", zh_extension)
         self.assertIn("上架", chinese)
+
+    def test_legal_store_and_deployment_launch_materials_are_ready(self) -> None:
+        required_markers = {
+            DOCS / "legal/privacy-policy.md": ["Privacy Policy", "Data We Do Not Collect"],
+            DOCS / "legal/terms-of-service.md": ["Terms Of Service", "Publishing Boundary"],
+            DOCS / "legal/refund-policy.md": ["Refund Policy", "Credit Usage"],
+            DOCS / "legal/support.md": ["Support", "Hosted run ID"],
+            DOCS / "store/chrome-listing.md": ["Chrome Web Store Listing Draft", "Permission Justification"],
+            DOCS / "store/edge-listing.md": ["Microsoft Edge Add-ons Listing Draft", "Certification Notes"],
+            DOCS / "store/reviewer-notes.md": ["Store Reviewer Notes", "Manifest V3"],
+            DOCS / "store/screenshot-plan.md": ["Store Screenshot Plan", "Hosted run"],
+            ROOT / "deploy/promotion-manager/README.md": ["same HTTPS host", "Server Requirement", "systemd"],
+            ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf": [
+                "/api/promotion-manager/",
+                "/promotion-manager/privacy",
+                "/promotion-manager/runs/",
+            ],
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service": ["ExecStart", "api.env"],
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service": ["ExecStart", "api.env"],
+        }
+        for path, markers in required_markers.items():
+            self.assertTrue(path.exists(), path)
+            text = path.read_text(encoding="utf-8")
+            for marker in markers:
+                self.assertIn(marker, text, f"{path} missing {marker}")
 
     def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:
         files = [
@@ -6913,6 +7034,19 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("docs/zh-CN/usage.md", files)
         self.assertIn("docs/subscription-pricing.md", files)
         self.assertIn("docs/billing-backend-contract.md", files)
+        self.assertIn("docs/legal/privacy-policy.md", files)
+        self.assertIn("docs/legal/terms-of-service.md", files)
+        self.assertIn("docs/legal/refund-policy.md", files)
+        self.assertIn("docs/legal/support.md", files)
+        self.assertIn("docs/store/chrome-listing.md", files)
+        self.assertIn("docs/store/edge-listing.md", files)
+        self.assertIn("docs/store/reviewer-notes.md", files)
+        self.assertIn("docs/store/screenshot-plan.md", files)
+        self.assertIn("deploy/promotion-manager/README.md", files)
+        self.assertIn("deploy/promotion-manager/.env.production.example", files)
+        self.assertIn("deploy/promotion-manager/nginx-promotion-manager.conf", files)
+        self.assertIn("deploy/promotion-manager/enhe-promotion-manager-api.service", files)
+        self.assertIn("deploy/promotion-manager/enhe-promotion-manager-worker.service", files)
         self.assertIn("browser-extension/manifest.json", files)
         self.assertIn("browser-extension/billing-contract.json", files)
         self.assertIn("browser-extension/popup.html", files)
@@ -6923,6 +7057,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("backend/license-service/package-lock.json", files)
         self.assertIn("backend/license-service/.env.example", files)
         self.assertIn("backend/license-service/src/server.js", files)
+        self.assertIn("backend/license-service/src/state-store.js", files)
+        self.assertIn("backend/license-service/src/hosted-worker.js", files)
+        self.assertIn("backend/license-service/src/migrate.js", files)
+        self.assertIn("backend/license-service/src/worker.js", files)
+        self.assertIn("backend/license-service/migrations/001_state_store.sql", files)
         self.assertIn("backend/license-service/README.md", files)
         self.assertFalse(any("/node_modules/" in item for item in files))
         self.assertFalse(any("/var/" in item for item in files))

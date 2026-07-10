@@ -309,8 +309,9 @@ def managed_skill_files(root: Path) -> list[Path]:
         "references": ["*.md"],
         "scripts": ["*.py"],
         "docs": ["*.md"],
+        "deploy": ["*.md", "*.conf", "*.service", "*.example"],
         "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt", "*.png"],
-        "backend/license-service": ["*.json", "*.js", "*.md", "*.example", ".gitignore"],
+        "backend/license-service": ["*.json", "*.js", "*.md", "*.sql", "*.example", ".gitignore"],
     }
     for folder, patterns in directory_patterns.items():
         directory = root / folder

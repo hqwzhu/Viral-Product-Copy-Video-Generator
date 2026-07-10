@@ -5,12 +5,20 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const Stripe = require("stripe");
+const {
+  createStateStore,
+  emptyState,
+  loadJsonState,
+  saveJsonState
+} = require("./state-store");
+const { commitUsage, startHostedWorker } = require("./hosted-worker");
 require("dotenv").config();
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const publicBaseUrl = trimTrailingSlash(process.env.ENHE_PUBLIC_BASE_URL || "http://localhost:3000");
 const stateFile = process.env.LICENSE_SERVICE_STATE_FILE || path.join(__dirname, "..", "var", "license-service-state.json");
+const store = createStateStore({ stateFile, databaseUrl: process.env.DATABASE_URL });
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 const PLAN_CREDITS = {
@@ -28,6 +36,8 @@ const WORKFLOW_CREDIT_COSTS = {
   hosted_mp4_render: 3,
   browser_publish_session: 2,
   launch_unlock_pack: 2,
+  viral_evidence_inbox_setup: 1,
+  viral_evidence_inbox: 2,
   real_evidence_inbox_setup: 1,
   real_evidence_inbox: 2,
   performance_monitor: 2,
@@ -43,10 +53,17 @@ const STRIPE_PRICE_ENV_BY_PLAN = {
   scale: "STRIPE_PRICE_SCALE"
 };
 
+const LEGAL_PAGES = {
+  privacy: "privacy-policy.md",
+  terms: "terms-of-service.md",
+  refund: "refund-policy.md",
+  support: "support.md"
+};
+
 app.post(
   "/api/promotion-manager/webhooks/stripe",
   express.raw({ type: "application/json" }),
-  (req, res) => {
+  asyncHandler(async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!stripe || !webhookSecret) {
       return res.status(500).json({ error: "missing_stripe_webhook_config" });
@@ -59,26 +76,30 @@ app.post(
       return res.status(400).send(`Webhook Error: ${error.message}`);
     }
 
-    const state = loadState();
-    const result = handleStripeEvent(state, event);
-    audit(state, "stripe_webhook", { eventId: event.id, eventType: event.type, result });
-    saveState(state);
+    const result = await store.update((state) => {
+      const eventResult = handleStripeEvent(state, event);
+      audit(state, "stripe_webhook", { eventId: event.id, eventType: event.type, result: eventResult });
+      return eventResult;
+    });
     return res.json({ received: true, event: event.type, result });
-  }
+  })
 );
 
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/health", (_req, res) => {
+app.get("/health", asyncHandler(async (_req, res) => {
+  await store.init();
   res.json({
     ok: true,
     service: "enhe-promotion-manager-license-service",
     stripeConfigured: Boolean(stripe),
-    stateFile
+    stateBackend: process.env.DATABASE_URL ? "postgres" : "json",
+    workerEnabled: process.env.HOSTED_WORKER_ENABLED === "true",
+    stateFile: process.env.DATABASE_URL ? "" : stateFile
   });
-});
+}));
 
-app.get("/promotion-manager/checkout", async (req, res) => {
+app.get("/promotion-manager/checkout", asyncHandler(async (req, res) => {
   const error = requireStripeConfig(["STRIPE_SECRET_KEY"]);
   if (error) return res.status(500).json(error);
 
@@ -107,13 +128,13 @@ app.get("/promotion-manager/checkout", async (req, res) => {
   } catch (error) {
     return res.status(502).json({ error: "stripe_checkout_failed", message: error.message });
   }
-});
+}));
 
-app.get("/promotion-manager/billing", async (req, res) => {
+app.get("/promotion-manager/billing", asyncHandler(async (req, res) => {
   const error = requireStripeConfig(["STRIPE_SECRET_KEY"]);
   if (error) return res.status(500).json(error);
 
-  const state = loadState();
+  const state = await store.load();
   const customerId = String(req.query.customerId || "").trim() || customerIdFromLicense(state, req.query.licenseKey);
   if (!customerId) {
     return res.status(400).json({ error: "missing_customer", message: "Provide customerId or a valid licenseKey." });
@@ -128,133 +149,174 @@ app.get("/promotion-manager/billing", async (req, res) => {
   } catch (error) {
     return res.status(502).json({ error: "stripe_portal_failed", message: error.message });
   }
-});
+}));
 
-app.post("/api/promotion-manager/license", (req, res) => {
-  const state = loadState();
+app.get("/promotion-manager/:page(privacy|terms|refund|support)", asyncHandler(async (req, res) => {
+  return res.type("html").send(renderLegalPage(req.params.page));
+}));
+
+app.get("/promotion-manager/runs/:runId", asyncHandler(async (req, res) => {
+  const state = await store.load();
+  const run = state.hostedRuns[String(req.params.runId || "")];
+  if (!run) {
+    return res.status(404).send("<!doctype html><title>Run not found</title><h1>Run not found</h1>");
+  }
+  return res.type("html").send(renderRunPage(run));
+}));
+
+app.post("/api/promotion-manager/license", asyncHandler(async (req, res) => {
+  const state = await store.load();
   const license = findLicenseByKey(state, req.body.licenseKey);
   if (!license) {
     return res.json(licenseResponse(null, false, "license_not_found"));
   }
   const active = isLicenseActive(license);
   return res.json(licenseResponse(license, active, active ? "ok" : "inactive_license"));
-});
+}));
 
-app.post("/api/promotion-manager/usage/authorize", (req, res) => {
-  const state = loadState();
-  const license = findLicenseByKey(state, req.body.licenseKey);
-  if (!license || !isLicenseActive(license)) {
-    return res.status(403).json({ allowed: false, reason: "inactive_license" });
-  }
-
-  const workflowType = normalizeWorkflow(req.body.workflowType);
-  const idempotencyKey = String(req.body.idempotencyKey || "").trim();
-  if (!idempotencyKey) {
-    return res.status(400).json({ allowed: false, reason: "missing_idempotency_key" });
-  }
-
-  const existing = Object.values(state.usageLedger).find(
-    (item) => item.licenseId === license.id && item.idempotencyKey === idempotencyKey
-  );
-  if (existing) {
-    return res.json(usageAuthorizationResponse(existing, license, true, "ok"));
-  }
-
-  const estimatedCredits = Number(req.body.estimatedCredits || 0);
-  const creditsReserved = Math.max(estimatedCredits, WORKFLOW_CREDIT_COSTS[workflowType] || 0);
-  if (creditsReserved > license.creditsRemaining) {
-    return res.status(402).json({
-      allowed: false,
-      reason: "quota_exceeded",
-      creditsReserved,
-      creditsRemaining: license.creditsRemaining
-    });
-  }
-
-  const usage = {
-    id: `usage_${crypto.randomUUID()}`,
-    licenseId: license.id,
-    licenseKeyHash: license.licenseKeyHash,
-    workflowType,
-    commandType: String(req.body.commandType || ""),
-    idempotencyKey,
-    creditsReserved,
-    creditsUsed: 0,
-    status: "reserved",
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-  license.creditsRemaining -= creditsReserved;
-  state.usageLedger[usage.id] = usage;
-  audit(state, "usage_authorized", { usageId: usage.id, workflowType, creditsReserved });
-  saveState(state);
-  return res.json(usageAuthorizationResponse(usage, license, true, "ok"));
-});
-
-app.post("/api/promotion-manager/run", (req, res) => {
-  const state = loadState();
-  const license = findLicenseByKey(state, req.body.licenseKey);
-  if (!license || !isLicenseActive(license)) {
-    return res.status(403).json(hostedRunResponse(false, "", "blocked", "inactive_license"));
-  }
-
-  const workflowType = normalizeWorkflow(req.body.workflowType);
-  const expectedCredits = WORKFLOW_CREDIT_COSTS[workflowType] || 0;
-  const safetyError = validateHostedRunSafety(req.body.safety);
-  if (safetyError) {
-    return res.status(400).json(hostedRunResponse(false, "", "blocked", safetyError));
-  }
-
-  const usage = state.usageLedger[String(req.body.usageId || "")];
-  if (expectedCredits > 0) {
-    const usageError = validateUsageForHostedRun(usage, license, workflowType, expectedCredits);
-    if (usageError) {
-      return res.status(402).json(hostedRunResponse(false, "", "blocked", usageError));
+app.post("/api/promotion-manager/usage/authorize", asyncHandler(async (req, res) => {
+  const response = await store.update((state) => {
+    const license = findLicenseByKey(state, req.body.licenseKey);
+    if (!license || !isLicenseActive(license)) {
+      return { status: 403, body: { allowed: false, reason: "inactive_license" } };
     }
-  }
 
-  const runId = `run_${crypto.randomUUID()}`;
-  const run = {
-    id: runId,
-    usageId: usage ? usage.id : "",
-    licenseId: license.id,
-    workflowType,
-    productUrl: String(req.body.productUrl || ""),
-    platforms: Array.isArray(req.body.platforms) ? req.body.platforms : [],
-    localCommand: String(req.body.localCommand || ""),
-    idempotencyKey: String(req.body.idempotencyKey || ""),
-    status: "queued",
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-  state.hostedRuns[runId] = run;
-  audit(state, "hosted_run_queued", { runId, usageId: run.usageId, workflowType });
-  saveState(state);
-  return res.json(hostedRunResponse(true, runId, "queued", "ok"));
-});
+    const workflowType = normalizeWorkflow(req.body.workflowType);
+    const idempotencyKey = String(req.body.idempotencyKey || "").trim();
+    if (!idempotencyKey) {
+      return { status: 400, body: { allowed: false, reason: "missing_idempotency_key" } };
+    }
 
-app.post("/api/promotion-manager/usage/commit", (req, res) => {
-  const state = loadState();
-  const usage = state.usageLedger[String(req.body.usageId || "")];
-  if (!usage) {
-    return res.status(404).json({ status: "failed", reason: "usage_not_found" });
+    const existing = Object.values(state.usageLedger).find(
+      (item) => item.licenseId === license.id && item.idempotencyKey === idempotencyKey
+    );
+    if (existing) {
+      return { status: 200, body: usageAuthorizationResponse(existing, license, true, "ok") };
+    }
+
+    const estimatedCredits = Number(req.body.estimatedCredits || 0);
+    const creditsReserved = Math.max(estimatedCredits, WORKFLOW_CREDIT_COSTS[workflowType] || 0);
+    if (creditsReserved > license.creditsRemaining) {
+      return {
+        status: 402,
+        body: {
+          allowed: false,
+          reason: "quota_exceeded",
+          creditsReserved,
+          creditsRemaining: license.creditsRemaining
+        }
+      };
+    }
+
+    const usage = {
+      id: `usage_${crypto.randomUUID()}`,
+      licenseId: license.id,
+      licenseKeyHash: license.licenseKeyHash,
+      workflowType,
+      commandType: String(req.body.commandType || ""),
+      idempotencyKey,
+      creditsReserved,
+      creditsUsed: 0,
+      status: "reserved",
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    license.creditsRemaining -= creditsReserved;
+    license.updatedAt = nowIso();
+    state.usageLedger[usage.id] = usage;
+    audit(state, "usage_authorized", { usageId: usage.id, workflowType, creditsReserved });
+    return { status: 200, body: usageAuthorizationResponse(usage, license, true, "ok") };
+  });
+  return res.status(response.status).json(response.body);
+}));
+
+app.get("/api/promotion-manager/run/:runId", asyncHandler(async (req, res) => {
+  const state = await store.load();
+  const run = state.hostedRuns[String(req.params.runId || "")];
+  if (!run) {
+    return res.status(404).json({ error: "run_not_found" });
   }
-  const license = state.licenses[usage.licenseId];
-  const creditsUsed = Math.max(0, Number(req.body.creditsUsed || 0));
-  const refundable = Math.max(0, usage.creditsReserved - creditsUsed);
-  usage.inputTokens = Number(req.body.inputTokens || 0);
-  usage.outputTokens = Number(req.body.outputTokens || 0);
-  usage.videoSecondsRendered = Number(req.body.videoSecondsRendered || 0);
-  usage.creditsUsed = creditsUsed;
-  usage.status = String(req.body.status || "succeeded");
-  usage.updatedAt = nowIso();
-  if (license && refundable > 0) {
-    license.creditsRemaining += refundable;
-  }
-  audit(state, "usage_committed", { usageId: usage.id, creditsUsed, refunded: refundable, status: usage.status });
-  saveState(state);
-  return res.json({ status: usage.status, usageId: usage.id, creditsUsed, creditsRefunded: refundable });
-});
+  return res.json(runStatusResponse(run));
+}));
+
+app.post("/api/promotion-manager/run", asyncHandler(async (req, res) => {
+  const response = await store.update((state) => {
+    const license = findLicenseByKey(state, req.body.licenseKey);
+    if (!license || !isLicenseActive(license)) {
+      return { status: 403, body: hostedRunResponse(false, "", "blocked", "inactive_license") };
+    }
+
+    const workflowType = normalizeWorkflow(req.body.workflowType);
+    const expectedCredits = WORKFLOW_CREDIT_COSTS[workflowType] || 0;
+    const safetyError = validateHostedRunSafety(req.body.safety);
+    if (safetyError) {
+      return { status: 400, body: hostedRunResponse(false, "", "blocked", safetyError) };
+    }
+
+    const usage = state.usageLedger[String(req.body.usageId || "")];
+    if (expectedCredits > 0) {
+      const usageError = validateUsageForHostedRun(usage, license, workflowType, expectedCredits);
+      if (usageError) {
+        return { status: 402, body: hostedRunResponse(false, "", "blocked", usageError) };
+      }
+    }
+
+    const idempotencyKey = String(req.body.idempotencyKey || "").trim();
+    const duplicate = Object.values(state.hostedRuns).find(
+      (item) => item.licenseId === license.id && idempotencyKey && item.idempotencyKey === idempotencyKey
+    );
+    if (duplicate) {
+      return { status: 200, body: hostedRunResponse(true, duplicate.id, duplicate.status, "ok") };
+    }
+
+    const runId = `run_${crypto.randomUUID()}`;
+    const run = {
+      id: runId,
+      usageId: usage ? usage.id : "",
+      licenseId: license.id,
+      workflowType,
+      commandType: String(req.body.commandType || "skill_entry"),
+      estimatedCredits: expectedCredits,
+      productUrl: String(req.body.productUrl || ""),
+      platforms: Array.isArray(req.body.platforms) ? req.body.platforms.map(String) : [],
+      workflowDepth: String(req.body.workflowDepth || "full"),
+      localCommand: String(req.body.localCommand || ""),
+      options: req.body.options && typeof req.body.options === "object" ? req.body.options : {},
+      idempotencyKey,
+      requestSource: String(req.body.requestSource || ""),
+      status: "queued",
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    state.hostedRuns[runId] = run;
+    audit(state, "hosted_run_queued", { runId, usageId: run.usageId, workflowType, commandType: run.commandType });
+    return { status: 200, body: hostedRunResponse(true, runId, "queued", "ok") };
+  });
+  return res.status(response.status).json(response.body);
+}));
+
+app.post("/api/promotion-manager/usage/commit", asyncHandler(async (req, res) => {
+  const response = await store.update((state) => {
+    const usage = state.usageLedger[String(req.body.usageId || "")];
+    if (!usage) {
+      return { status: 404, body: { status: "failed", reason: "usage_not_found" } };
+    }
+    const result = commitUsage(state, usage.id, {
+      inputTokens: Number(req.body.inputTokens || 0),
+      outputTokens: Number(req.body.outputTokens || 0),
+      videoSecondsRendered: Number(req.body.videoSecondsRendered || 0),
+      creditsUsed: Math.max(0, Number(req.body.creditsUsed || 0)),
+      status: String(req.body.status || "succeeded")
+    });
+    audit(state, "usage_committed", result);
+    return { status: 200, body: result };
+  });
+  return res.status(response.status).json(response.body);
+}));
+
+function asyncHandler(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
 
 function requireStripeConfig(keys) {
   const missing = keys.filter((key) => !process.env[key]);
@@ -264,33 +326,12 @@ function requireStripeConfig(keys) {
   return null;
 }
 
-function loadState() {
-  if (!fs.existsSync(stateFile)) {
-    return emptyState();
-  }
-  try {
-    const parsed = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-    return { ...emptyState(), ...parsed };
-  } catch (_error) {
-    return emptyState();
-  }
+function loadState(file = stateFile) {
+  return loadJsonState(file);
 }
 
-function saveState(state) {
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-  fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
-}
-
-function emptyState() {
-  return {
-    accounts: {},
-    licenses: {},
-    subscriptions: {},
-    usageLedger: {},
-    hostedRuns: {},
-    stripeCustomers: {},
-    auditLog: []
-  };
+function saveState(state, file = stateFile) {
+  saveJsonState(file, state);
 }
 
 function handleStripeEvent(state, event) {
@@ -385,7 +426,9 @@ function handleInvoicePaymentSucceeded(state, invoice) {
     if (license.stripeSubscriptionId === subscriptionId) {
       license.status = "active";
       license.creditsRemaining = PLAN_CREDITS[license.plan] || license.creditsRemaining;
-      license.renewsAt = dateFromUnix(invoice.lines && invoice.lines.data && invoice.lines.data[0] && invoice.lines.data[0].period && invoice.lines.data[0].period.end) || license.renewsAt;
+      license.renewsAt = dateFromUnix(
+        invoice.lines && invoice.lines.data && invoice.lines.data[0] && invoice.lines.data[0].period && invoice.lines.data[0].period.end
+      ) || license.renewsAt;
       license.updatedAt = nowIso();
       renewed += 1;
     }
@@ -472,9 +515,138 @@ function hostedRunResponse(accepted, runId, status, reason) {
     runId,
     status,
     dashboardUrl: runId ? `${publicBaseUrl}/promotion-manager/runs/${runId}` : "",
+    statusUrl: runId ? `${publicBaseUrl}/api/promotion-manager/run/${runId}` : "",
     reportUrl: "",
     reason
   };
+}
+
+function runStatusResponse(run) {
+  return {
+    runId: run.id,
+    workflowType: run.workflowType,
+    commandType: run.commandType,
+    status: run.status,
+    reason: run.reason || "",
+    productUrl: run.productUrl || "",
+    platforms: run.platforms || [],
+    createdAt: run.createdAt || "",
+    startedAt: run.startedAt || "",
+    finishedAt: run.finishedAt || "",
+    dashboardUrl: `${publicBaseUrl}/promotion-manager/runs/${run.id}`,
+    reportUrl: run.reportUrl || "",
+    artifactDirectory: run.artifactDirectory || ""
+  };
+}
+
+function renderRunPage(run) {
+  const status = escapeHtml(run.status || "unknown");
+  const runId = escapeHtml(run.id || "");
+  const productUrl = escapeHtml(run.productUrl || "");
+  const reason = escapeHtml(run.reason || "");
+  const artifacts = escapeHtml(run.artifactDirectory || "");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ENHE Promotion Manager Run ${runId}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+    code { background: #f4f4f5; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Hosted Run ${runId}</h1>
+  <p>Status: <strong>${status}</strong></p>
+  <p>Product URL: <code>${productUrl}</code></p>
+  <p>Reason: ${reason || "ok"}</p>
+  <p>Artifacts: <code>${artifacts}</code></p>
+  <p>JSON status: <a href="/api/promotion-manager/run/${runId}">/api/promotion-manager/run/${runId}</a></p>
+</body>
+</html>`;
+}
+
+function renderLegalPage(page) {
+  const filename = LEGAL_PAGES[page];
+  const pagePath = path.join(__dirname, "..", "..", "..", "docs", "legal", filename);
+  if (!filename || !fs.existsSync(pagePath)) {
+    return "<!doctype html><title>Page not found</title><h1>Page not found</h1>";
+  }
+  const markdown = fs.readFileSync(pagePath, "utf8");
+  const title = firstHeading(markdown) || "ENHE Promotion Manager";
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #18181b; }
+    h1, h2 { line-height: 1.2; }
+    a { color: #0f766e; }
+    code { background: #f4f4f5; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+${markdownToHtml(markdown)}
+</body>
+</html>`;
+}
+
+function firstHeading(markdown) {
+  const line = String(markdown).split(/\r?\n/).find((item) => item.startsWith("# "));
+  return line ? line.replace(/^#\s+/, "").trim() : "";
+}
+
+function markdownToHtml(markdown) {
+  const html = [];
+  let inList = false;
+  for (const rawLine of String(markdown).split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      html.push(`<h2>${escapeHtml(line.slice(3))}</h2>`);
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      html.push(`<h1>${escapeHtml(line.slice(2))}</h1>`);
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${linkify(escapeHtml(line.slice(2)))}</li>`);
+      continue;
+    }
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+    html.push(`<p>${linkify(escapeHtml(line))}</p>`);
+  }
+  if (inList) html.push("</ul>");
+  return html.join("\n");
+}
+
+function linkify(value) {
+  return value.replace(/https:\/\/[^\s<]+/g, (url) => `<a href="${url}">${url}</a>`);
 }
 
 function validateUsageForHostedRun(usage, license, workflowType, expectedCredits) {
@@ -568,10 +740,41 @@ function audit(state, action, details) {
   state.auditLog.push({ at: nowIso(), action, details });
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+app.use((error, _req, res, _next) => {
+  console.error(error.stack || error.message);
+  res.status(500).json({ error: "internal_server_error", message: error.message });
+});
+
 if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`ENHE Promotion Manager license service listening on ${port}`);
+  store.init().then(() => {
+    app.listen(port, () => {
+      console.log(`ENHE Promotion Manager license service listening on ${port}`);
+    });
+    if (process.env.HOSTED_WORKER_ENABLED === "true") {
+      startHostedWorker(store).then(() => {
+        console.log("ENHE Promotion Manager hosted worker enabled in API process");
+      });
+    }
+  }).catch((error) => {
+    console.error(error.stack || error.message);
+    process.exitCode = 1;
   });
 }
 
-module.exports = { app, loadState, saveState, hashLicenseKey };
+module.exports = {
+  WORKFLOW_CREDIT_COSTS,
+  app,
+  emptyState,
+  hashLicenseKey,
+  loadState,
+  saveState,
+  store
+};

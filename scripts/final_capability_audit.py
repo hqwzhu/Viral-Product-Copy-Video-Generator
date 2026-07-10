@@ -136,6 +136,19 @@ GITHUB_DOC_FILES = [
     "docs/subscription-pricing.md",
     "docs/billing-backend-contract.md",
     "docs/final-capability-map.md",
+    "docs/legal/privacy-policy.md",
+    "docs/legal/terms-of-service.md",
+    "docs/legal/refund-policy.md",
+    "docs/legal/support.md",
+    "docs/store/chrome-listing.md",
+    "docs/store/edge-listing.md",
+    "docs/store/reviewer-notes.md",
+    "docs/store/screenshot-plan.md",
+    "deploy/promotion-manager/README.md",
+    "deploy/promotion-manager/.env.production.example",
+    "deploy/promotion-manager/nginx-promotion-manager.conf",
+    "deploy/promotion-manager/enhe-promotion-manager-api.service",
+    "deploy/promotion-manager/enhe-promotion-manager-worker.service",
 ]
 
 
@@ -148,6 +161,24 @@ BROWSER_EXTENSION_FILES = [
     "browser-extension/icons/icon16.png",
     "browser-extension/icons/icon48.png",
     "browser-extension/icons/icon128.png",
+]
+
+
+BACKEND_DEPLOY_FILES = [
+    "backend/license-service/package.json",
+    "backend/license-service/.env.example",
+    "backend/license-service/README.md",
+    "backend/license-service/src/server.js",
+    "backend/license-service/src/state-store.js",
+    "backend/license-service/src/hosted-worker.js",
+    "backend/license-service/src/migrate.js",
+    "backend/license-service/src/worker.js",
+    "backend/license-service/migrations/001_state_store.sql",
+    "deploy/promotion-manager/README.md",
+    "deploy/promotion-manager/.env.production.example",
+    "deploy/promotion-manager/nginx-promotion-manager.conf",
+    "deploy/promotion-manager/enhe-promotion-manager-api.service",
+    "deploy/promotion-manager/enhe-promotion-manager-worker.service",
 ]
 
 
@@ -595,13 +626,14 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, store submission package, listing tutorial, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription hooks, hosted-run submission, deployable license backend, store materials, legal pages, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, reserve hosted usage credits, and build a Chrome/Edge submission zip; the local simulator proves the contract shape for license, usage, hosted run, and webhook flows.",
-                "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
+                "The extension can generate Skill, browser publish session, viral/real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, reserve hosted usage credits, start hosted runs, and build a Chrome/Edge submission zip.",
+                "The repository includes a Stripe-backed license service, PostgreSQL JSONB state backend, isolated hosted worker, same-host HTTPS deployment files, legal pages, listing drafts, screenshot plan, and reviewer notes.",
+                "External account setup, live Stripe prices/webhooks, deployed HTTPS server configuration, hosted-worker capacity, and Chrome/Edge store approval remain operator-controlled launch gates.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
         },
@@ -687,6 +719,19 @@ def github_docs_status() -> dict[str, Any]:
             "Reference Simulator",
         ],
         "docs/final-capability-map.md": ["Final Capability Map", "Acceptance Command"],
+        "docs/legal/privacy-policy.md": ["Privacy Policy", "Data We Do Not Collect"],
+        "docs/legal/terms-of-service.md": ["Terms Of Service", "Publishing Boundary"],
+        "docs/legal/refund-policy.md": ["Refund Policy", "Credit Usage"],
+        "docs/legal/support.md": ["Support", "Hosted run ID"],
+        "docs/store/chrome-listing.md": ["Chrome Web Store Listing Draft", "Permission Justification"],
+        "docs/store/edge-listing.md": ["Microsoft Edge Add-ons Listing Draft", "Certification Notes"],
+        "docs/store/reviewer-notes.md": ["Store Reviewer Notes", "Manifest V3"],
+        "docs/store/screenshot-plan.md": ["Store Screenshot Plan", "Hosted run"],
+        "deploy/promotion-manager/README.md": ["same HTTPS host", "Server Requirement", "systemd"],
+        "deploy/promotion-manager/.env.production.example": ["DATABASE_URL=", "HOSTED_RUN_OUTPUT_ROOT="],
+        "deploy/promotion-manager/nginx-promotion-manager.conf": ["/api/promotion-manager/", "/promotion-manager/privacy"],
+        "deploy/promotion-manager/enhe-promotion-manager-api.service": ["ExecStart", "api.env"],
+        "deploy/promotion-manager/enhe-promotion-manager-worker.service": ["ExecStart", "api.env"],
     }
     for path, markers in required_markers.items():
         if not (ROOT / path).exists():
@@ -705,6 +750,12 @@ def github_docs_status() -> dict[str, Any]:
 def browser_extension_status() -> dict[str, Any]:
     missing = [path for path in BROWSER_EXTENSION_FILES if not (ROOT / path).exists()]
     evidence = [str(ROOT / path) for path in BROWSER_EXTENSION_FILES if (ROOT / path).exists()]
+    for path in BACKEND_DEPLOY_FILES:
+        full_path = ROOT / path
+        if full_path.exists():
+            evidence.append(str(full_path))
+        else:
+            missing.append(path)
     simulator_path = ROOT / "scripts/billing_contract_simulator.py"
     if simulator_path.exists():
         evidence.append(str(simulator_path))
@@ -758,12 +809,20 @@ def browser_extension_status() -> dict[str, Any]:
             "usageAuthorizeEndpoint",
             "usageCommitEndpoint",
             "hostedRunEndpoint",
+            "hostedRunStatusEndpointTemplate",
+            "legalUrls",
         ]:
             if not contract.get(key):
                 missing.append(f"browser-extension/billing-contract.json missing key: {key}")
+        legal_urls = contract.get("legalUrls") if isinstance(contract.get("legalUrls"), dict) else {}
+        for key in ["privacyPolicy", "termsOfService", "refundPolicy", "support"]:
+            if not legal_urls.get(key):
+                missing.append(f"browser-extension/billing-contract.json missing legal URL: {key}")
         credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
         for workflow in [
             "browser_publish_session",
+            "viral_evidence_inbox_setup",
+            "viral_evidence_inbox",
             "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
@@ -792,6 +851,10 @@ def browser_extension_status() -> dict[str, Any]:
             for key in ["licenseKey", "usageId", "workflowType", "estimatedCredits", "commandType", "productUrl", "platforms", "localCommand", "safety"]:
                 if key not in hosted_run_body:
                     missing.append(f"browser-extension/billing-contract.json hostedRunRequest missing key: {key}")
+        hosted_run_response = (contract.get("hostedRunResponse") or {}) if isinstance(contract.get("hostedRunResponse"), dict) else {}
+        for key in ["accepted", "runId", "status", "dashboardUrl", "statusUrl"]:
+            if key not in hosted_run_response:
+                missing.append(f"browser-extension/billing-contract.json hostedRunResponse missing key: {key}")
         events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
         for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
             if event not in events:
@@ -847,6 +910,8 @@ def browser_extension_status() -> dict[str, Any]:
             "COST_PER_CREDIT",
             "skill_entry.py",
             "browser_publish_session.py",
+            "viral_evidence_inbox_setup.py",
+            "viral_evidence_inbox.py",
             "real_evidence_inbox_setup.py",
             "real_evidence_inbox.py",
             "performance_monitor.py",
@@ -854,6 +919,8 @@ def browser_extension_status() -> dict[str, Any]:
             "final_capability_readiness.py",
             "automation_scheduler.py",
             "browser_publish_session",
+            "viral_evidence_inbox_setup",
+            "viral_evidence_inbox",
             "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
@@ -869,6 +936,30 @@ def browser_extension_status() -> dict[str, Any]:
         style_text = safe_read(style_path)
         if "--accent" not in style_text or "grid-template-columns" not in style_text:
             missing.append("browser-extension/popup.css missing operator UI tokens or stable layout rules")
+    backend_package = read_json_file(ROOT / "backend/license-service/package.json")
+    if backend_package:
+        dependencies = backend_package.get("dependencies") if isinstance(backend_package.get("dependencies"), dict) else {}
+        scripts = backend_package.get("scripts") if isinstance(backend_package.get("scripts"), dict) else {}
+        for dependency in ["express", "stripe", "pg"]:
+            if dependency not in dependencies:
+                missing.append(f"backend/license-service/package.json missing dependency: {dependency}")
+        for script in ["start", "migrate", "worker", "test"]:
+            if script not in scripts:
+                missing.append(f"backend/license-service/package.json missing script: {script}")
+    server_text = safe_read(ROOT / "backend/license-service/src/server.js")
+    for marker in [
+        "/promotion-manager/:page(privacy|terms|refund|support)",
+        "/api/promotion-manager/run/:runId",
+        "createStateStore",
+        "startHostedWorker",
+        "renderLegalPage",
+    ]:
+        if marker not in server_text:
+            missing.append(f"backend/license-service/src/server.js missing marker: {marker}")
+    worker_text = safe_read(ROOT / "backend/license-service/src/hosted-worker.js")
+    for marker in ["buildHostedCommand", "safeWorkerEnv", "I_APPROVE_PUBLISH", "PUBLISH_DRY_RUN", "unsupported_hosted_command_type"]:
+        if marker not in worker_text:
+            missing.append(f"backend/license-service/src/hosted-worker.js missing marker: {marker}")
     return {
         "ready": not missing,
         "evidence": evidence,
@@ -1049,7 +1140,7 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         },
         {
             "purpose": "review_github_docs",
-            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/subscription-pricing.md docs/final-capability-map.md",
+            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/legal docs/store deploy/promotion-manager docs/subscription-pricing.md docs/final-capability-map.md",
         },
         {
             "purpose": "package_browser_extension",

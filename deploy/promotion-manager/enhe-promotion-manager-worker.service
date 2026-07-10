@@ -1,0 +1,21 @@
+[Unit]
+Description=ENHE Promotion Manager Hosted Worker
+After=network.target postgresql.service enhe-promotion-manager-api.service
+
+[Service]
+Type=simple
+User=enhe-promotion-worker
+Group=enhe-promotion-worker
+WorkingDirectory=/opt/enhe/promotion-manager/current/backend/license-service
+EnvironmentFile=/etc/enhe-promotion-manager/api.env
+ExecStart=/usr/bin/node src/worker.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/enhe-promotion-manager
+
+[Install]
+WantedBy=multi-user.target
