@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import argparse
 import json
 import http.server
 import os
@@ -315,6 +316,33 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertIn("Prompt templates", profile["valueProposition"])
         self.assertTrue((out_dir / "intake" / "product-profile.md").exists())
 
+    def test_product_intake_decodes_gb18030_html_without_mojibake(self) -> None:
+        module = load_script_module(PRODUCT_INTAKE)
+        out_dir = Path(tempfile.mkdtemp(prefix="product-intake-gb18030-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_path = out_dir / "product-gb18030.html"
+        html = """<!doctype html>
+<html>
+<head>
+  <meta charset="gb18030">
+  <title>LumiOS AI - 恩禾</title>
+  <meta name="description" content="Windows AI 桌面助手，支持语音、记忆和 MCP 工具。">
+</head>
+<body><h1>LumiOS AI</h1></body>
+</html>"""
+        html_path.write_bytes(html.encode("gb18030"))
+
+        subprocess.run(
+            [sys.executable, str(PRODUCT_INTAKE), "--html-file", str(html_path), "--out-dir", str(out_dir / "intake")],
+            check=True,
+            cwd=ROOT,
+        )
+
+        profile = json.loads((out_dir / "intake" / "product-profile.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["productName"], "LumiOS AI - 恩禾")
+        self.assertIn("桌面助手", profile["valueProposition"])
+        self.assertFalse(module.text_looks_mojibake(json.dumps(profile, ensure_ascii=False)))
+
     def test_product_intake_accepts_structured_page_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-structured-intake-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -444,6 +472,34 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(profile["sourceType"], "browser_rendered_snapshot")
         self.assertEqual(profile["productName"], "AI Prompt Kit")
         self.assertEqual(profile["pricing"], "19")
+
+    def test_browser_snapshot_retries_domcontentloaded_after_networkidle_timeout(self) -> None:
+        module = load_script_module(BROWSER_SNAPSHOT)
+
+        class FakeTimeout(Exception):
+            pass
+
+        class FakeResponse:
+            status = 200
+
+        class FakePage:
+            def __init__(self) -> None:
+                self.wait_until_calls: list[str] = []
+
+            def goto(self, _url: str, wait_until: str, timeout: int) -> FakeResponse:
+                self.wait_until_calls.append(wait_until)
+                if wait_until == "networkidle":
+                    raise FakeTimeout("networkidle timeout")
+                return FakeResponse()
+
+        page = FakePage()
+        args = argparse.Namespace(url="https://example.com/product", wait_until="networkidle", timeout_ms=30000)
+        response, navigation = module.navigate_with_fallback(page, args, FakeTimeout)
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(page.wait_until_calls, ["networkidle", "domcontentloaded"])
+        self.assertTrue(navigation["fallbackUsed"])
+        self.assertEqual(navigation["usedWaitUntil"], "domcontentloaded")
 
     def test_browser_video_sampler_captures_visible_video_frames(self) -> None:
         if not playwright_chromium_available():
@@ -681,6 +737,36 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertIn("--text-file", command)
         self.assertIn("cached-product-profile.md", command)
+
+    def test_product_url_reader_rejects_mojibake_cached_profile_after_intake_failure(self) -> None:
+        module = load_script_module(PRODUCT_URL_READER)
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-mojibake-cache-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        intake_dir = out_dir / "intake"
+        intake_dir.mkdir(parents=True)
+        (intake_dir / "product-profile.json").write_text(
+            json.dumps(
+                {
+                    "productName": "Lumi-OS锝淎I鎯呮劅闄即鏅鸿兘",
+                    "canonicalUrl": "https://www.enhe-tech.com.cn/software/windows-ai",
+                    "sourceType": "text",
+                    "valueProposition": "鍦ㄥ伐浣滀腑锛孡umiOS 鍙互浣滀负浣犵殑妗岄潰鍔╂墜",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        status = module.run_intake_command(
+            [],
+            intake_dir,
+            [sys.executable, "-c", "import sys; sys.exit(1)"],
+            "https://www.enhe-tech.com.cn/software/windows-ai",
+        )
+
+        self.assertEqual(status["status"], "error")
+        self.assertIn("mojibake", status["reason"])
+        self.assertFalse(module.usable_profile_status(status))
 
     def test_product_batch_runner_routes_web_text_fallback_to_text_file_cycle(self) -> None:
         module = load_script_module(PRODUCT_BATCH_RUNNER)

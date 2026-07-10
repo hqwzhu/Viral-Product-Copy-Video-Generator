@@ -149,7 +149,7 @@ def snapshot_from_browser(args: argparse.Namespace) -> dict[str, Any]:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=not args.headed)
             page = browser.new_page(user_agent=USER_AGENT, viewport={"width": 1440, "height": 1200})
-            response = page.goto(args.url, wait_until=args.wait_until, timeout=args.timeout_ms)
+            response, navigation = navigate_with_fallback(page, args, PlaywrightTimeoutError)
             try:
                 page.wait_for_load_state("networkidle", timeout=min(args.timeout_ms, 10000))
             except PlaywrightTimeoutError:
@@ -159,6 +159,7 @@ def snapshot_from_browser(args: argparse.Namespace) -> dict[str, Any]:
             snapshot["httpStatus"] = response.status if response else None
             snapshot["snapshotType"] = "browser_rendered"
             snapshot["captureMode"] = "playwright_chromium"
+            snapshot["navigation"] = navigation
             if args.screenshot:
                 screenshot_path = Path(args.out_dir) / "browser-snapshot/product-page.png"
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -174,6 +175,29 @@ def snapshot_from_browser(args: argparse.Namespace) -> dict[str, Any]:
         if "Executable doesn't exist" in message:
             raise SystemExit("Playwright Chromium is missing. Run: python -m playwright install chromium") from exc
         raise SystemExit(f"Browser snapshot failed: {message}") from exc
+
+
+def navigate_with_fallback(page: Any, args: argparse.Namespace, timeout_error: type[Exception]) -> tuple[Any, dict[str, Any]]:
+    navigation = {
+        "requestedWaitUntil": args.wait_until,
+        "usedWaitUntil": args.wait_until,
+        "fallbackUsed": False,
+        "timeoutMessage": "",
+    }
+    try:
+        return page.goto(args.url, wait_until=args.wait_until, timeout=args.timeout_ms), navigation
+    except timeout_error as exc:
+        if args.wait_until != "networkidle":
+            raise
+        navigation["fallbackUsed"] = True
+        navigation["timeoutMessage"] = str(exc)
+        navigation["usedWaitUntil"] = "domcontentloaded"
+        try:
+            return page.goto(args.url, wait_until="domcontentloaded", timeout=args.timeout_ms), navigation
+        except timeout_error as retry_exc:
+            navigation["usedWaitUntil"] = "current_dom_after_timeout"
+            navigation["fallbackError"] = str(retry_exc)
+            return None, navigation
 
 
 def without_install_retry(args: argparse.Namespace) -> argparse.Namespace:

@@ -17,6 +17,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from product_intake import decode_html_bytes, text_looks_mojibake
+
 BROWSER_SNAPSHOT = SCRIPTS / "browser_snapshot.py"
 PRODUCT_INTAKE = SCRIPTS / "product_intake.py"
 TODAY = date.today().isoformat()
@@ -193,12 +198,16 @@ def run_intake_command(
     profile_path = intake_dir / "product-profile.json"
     profile = read_json(profile_path)
     cached_profile_matches = bool(profile) and profile_matches_url(profile, requested_url)
+    cached_profile_is_clean = cached_profile_matches and not profile_looks_mojibake(profile)
     if intake_step["exitCode"] == 0 and profile_path.exists():
         status = "ready"
         reason = ""
-    elif profile_path.exists() and cached_profile_matches:
+    elif profile_path.exists() and cached_profile_is_clean:
         status = "partial_ready"
         reason = "Intake command failed, but a matching cached product profile is available."
+    elif profile_path.exists() and cached_profile_matches:
+        status = "error"
+        reason = "Intake command failed and the matching cached product profile appears to contain mojibake."
     else:
         status = "error"
         reason = ""
@@ -261,8 +270,8 @@ def fetch_web_text_fallback(args: argparse.Namespace, item_dir: Path, url: str) 
                 },
             )
             with urllib.request.urlopen(request, timeout=30) as response:
-                charset = response.headers.get_content_charset() or "utf-8"
-                text = response.read(2_000_000).decode(charset, errors="replace")
+                charset = response.headers.get_content_charset() or ""
+                text = decode_html_bytes(response.read(2_000_000), charset)
         except Exception as exc:  # noqa: BLE001 - fallback errors are reported, not raised.
             step["exitCode"] = 1
             step["stderrTail"] = str(exc)
@@ -439,6 +448,19 @@ def usable_profile_status(profile_status: dict[str, Any]) -> bool:
 def profile_matches_url(profile: dict[str, Any], requested_url: str) -> bool:
     canonical = str(profile.get("canonicalUrl") or "").strip()
     return bool(canonical) and normalize_url(canonical) == normalize_url(requested_url)
+
+
+def profile_looks_mojibake(profile: dict[str, Any]) -> bool:
+    values: list[str] = []
+    for key in ["productName", "title", "description", "valueProposition", "pricing"]:
+        values.append(str(profile.get(key) or ""))
+    for key in ["targetAudienceAssumptions", "painPointAssumptions", "keywords"]:
+        value = profile.get(key)
+        if isinstance(value, list):
+            values.extend(str(item) for item in value)
+        elif value:
+            values.append(str(value))
+    return text_looks_mojibake(" ".join(values))
 
 
 def normalize_url(url: str) -> str:

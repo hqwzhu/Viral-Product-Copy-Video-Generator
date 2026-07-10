@@ -94,17 +94,93 @@ def load_profile(args: argparse.Namespace) -> dict[str, Any]:
 def load_html(args: argparse.Namespace) -> tuple[str, str]:
     if args.html_file:
         path = Path(args.html_file)
-        return path.read_text(encoding="utf-8"), str(path)
+        return decode_html_bytes(path.read_bytes(), "utf-8"), str(path)
     request = urllib.request.Request(
         args.url,
         headers={
             "User-Agent": "Mozilla/5.0 (compatible; ViralProductPromotionSkill/1.0; +https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator)",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         },
     )
     with urllib.request.urlopen(request, timeout=20) as response:
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="replace"), args.url
+        charset = response.headers.get_content_charset() or ""
+        return decode_html_bytes(response.read(), charset), args.url
+
+
+def decode_html_bytes(raw: bytes, declared_charset: str = "") -> str:
+    candidates: list[str] = []
+
+    def add(candidate: str) -> None:
+        normalized = normalize_charset(candidate)
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+
+    if raw.startswith(b"\xef\xbb\xbf"):
+        add("utf-8-sig")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        add("utf-16")
+    add(declared_charset)
+    add(meta_declared_charset(raw))
+    add("utf-8")
+    add("utf-8-sig")
+    add("gb18030")
+    add("gbk")
+
+    utf8_valid = can_decode(raw, "utf-8")
+    best: tuple[int, int, int, str] | None = None
+    for index, charset in enumerate(candidates):
+        try:
+            text = raw.decode(charset, errors="replace")
+        except LookupError:
+            continue
+        priority = 0 if utf8_valid and charset in {"utf-8", "utf-8-sig"} else 1
+        score = (decode_penalty(text), priority, index, text)
+        if best is None or score[:3] < best[:3]:
+            best = score
+    return best[3] if best else raw.decode("utf-8", errors="replace")
+
+
+def normalize_charset(value: str) -> str:
+    return value.strip().strip("\"'").lower().replace("_", "-")
+
+
+def meta_declared_charset(raw: bytes) -> str:
+    head = raw[:4096]
+    patterns = [
+        rb"<meta[^>]+charset\s*=\s*['\"]?\s*([a-zA-Z0-9._-]+)",
+        rb"<meta[^>]+content\s*=\s*['\"][^'\"]*charset\s*=\s*([a-zA-Z0-9._-]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, head, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).decode("ascii", errors="ignore")
+    return ""
+
+
+def can_decode(raw: bytes, charset: str) -> bool:
+    try:
+        raw.decode(charset)
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def decode_penalty(text: str) -> int:
+    penalty = text.count("\ufffd") * 20
+    penalty += text.count("锟") * 8
+    penalty += sum(text.count(item) * 4 for item in ["Ã", "Â", "â€", "å", "ä"])
+    penalty += sum(
+        text.count(item) * 3
+        for item in ["锝", "鎯", "闄", "浼", "璐", "鐨", "鍦", "浣", "涓€", "銆", "绋", "鏃"]
+    )
+    return penalty
+
+
+def text_looks_mojibake(text: str) -> bool:
+    if not text:
+        return False
+    return decode_penalty(text) >= max(12, len(text) // 120)
 
 
 def extract_profile_from_html(html: str, source: str) -> dict[str, Any]:
@@ -378,10 +454,10 @@ def explicit_text_list(fields: dict[str, str], keys: list[str]) -> list[str]:
 
 
 def extract_price(text: str) -> str:
-    match = re.search(r"([$¥￥]\s?\d+(?:[.,]\d+)?)", text)
+    match = re.search(r"([$€£¥￥]\s?\d+(?:[.,]\d+)?)", text)
     if match:
         return normalize_space(match.group(1))
-    match = re.search(r"(?i)(?:price|pricing|价格|售价)[:：]?\s*([\w$¥￥.,/\-\s]+)", text)
+    match = re.search(r"(?i)(?:price|pricing|价格|售价)[:：]?\s*([\w$€£¥￥.,/\-\s\u4e00-\u9fff]+)", text)
     if match:
         return normalize_space(match.group(1))[:80]
     return ""
@@ -389,7 +465,7 @@ def extract_price(text: str) -> str:
 
 def infer_keywords(*values: str) -> list[str]:
     text = " ".join(values).lower()
-    raw = re.split(r"[,，;；|/\s]+", text)
+    raw = re.split(r"[,，、;；:：|/\s]+", text)
     keywords = []
     for item in raw:
         cleaned = re.sub(r"[^a-z0-9\u4e00-\u9fff-]", "", item).strip("-")
