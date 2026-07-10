@@ -16,6 +16,11 @@ from typing import Any
 
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github", "tiktok"]
+AUTOMATION_CRITICAL_ACCESS = {
+    "implemented_official_api",
+    "implemented_public_api",
+    "official_candidate_not_integrated",
+}
 
 
 PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
@@ -540,14 +545,19 @@ def official_doc_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "unreachableDocs": 0,
         "httpErrorDocs": 0,
         "uncheckedDocs": 0,
+        "criticalFailedDocs": 0,
+        "fallbackFailedDocs": 0,
     }
     checked_at: list[str] = []
     by_status: dict[str, int] = {}
+    failed_doc_capabilities: list[dict[str, str]] = []
     for record in records:
         for area in ["publish", "metrics"]:
             capability = record[area]
             status = str(capability.get("officialDocEvidenceStatus", "unknown"))
             by_status[status] = by_status.get(status, 0) + 1
+            access = str(capability.get("access") or "")
+            critical = access in AUTOMATION_CRITICAL_ACCESS
             docs = capability.get("officialDocs") or []
             if not docs:
                 counts["missingDocCapabilities"] += 1
@@ -566,9 +576,25 @@ def official_doc_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
                     counts["uncheckedDocs"] += 1
                 else:
                     counts["unreachableDocs"] += 1
+                if live_status not in {"reachable", "unchecked"}:
+                    if critical:
+                        counts["criticalFailedDocs"] += 1
+                    else:
+                        counts["fallbackFailedDocs"] += 1
+                    failed_doc_capabilities.append(
+                        {
+                            "platform": str(record.get("platform") or ""),
+                            "area": area,
+                            "access": access,
+                            "title": str(doc.get("title") or ""),
+                            "url": str(doc.get("url") or ""),
+                            "status": live_status,
+                        }
+                    )
     return {
         **counts,
         "capabilityEvidenceStatus": dict(sorted(by_status.items())),
+        "failedDocCapabilities": failed_doc_capabilities,
         "checkedAt": sorted(set(checked_at)),
     }
 
@@ -578,12 +604,15 @@ def learning_freshness(check_live: bool, doc_summary: dict[str, Any]) -> dict[st
     total = int(doc_summary.get("totalDocs") or 0)
     reachable = int(doc_summary.get("reachableDocs") or 0)
     failed = int(doc_summary.get("unreachableDocs") or 0) + int(doc_summary.get("httpErrorDocs") or 0)
+    critical_failed = int(doc_summary.get("criticalFailedDocs") or 0)
     if not check_live:
         status = "stale_not_live_checked"
-    elif failed:
+    elif critical_failed:
         status = "partial_live_check_failed"
     elif missing:
         status = "partial_missing_official_doc_sources"
+    elif failed:
+        status = "fresh_live_checked_with_warnings"
     elif total and reachable == total:
         status = "fresh_live_checked"
     else:
@@ -596,6 +625,14 @@ def learning_freshness(check_live: bool, doc_summary: dict[str, Any]) -> dict[st
         "reachableDocs": reachable,
         "missingDocCapabilities": missing,
         "failedDocs": failed,
+        "criticalFailedDocs": critical_failed,
+        "fallbackFailedDocs": int(doc_summary.get("fallbackFailedDocs") or 0),
+        "warning": (
+            "Some official documentation endpoints for manual/browser-assisted fallback platforms were not reachable "
+            "during this live check; no automated executor is enabled from those sources."
+            if status == "fresh_live_checked_with_warnings"
+            else ""
+        ),
         "refreshCommand": "python scripts/platform_access_audit.py --check-live --out-dir \"./promotion-output\"",
     }
 

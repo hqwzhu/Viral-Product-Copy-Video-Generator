@@ -20,6 +20,7 @@ SKILL_NAME = "viral-product-copy-video-generator"
 TODAY = date.today().isoformat()
 SAFE_INSTALLS = {"playwright_chromium"}
 SKILL_SYNC_APPROVAL = "I_APPROVE_SKILL_SYNC"
+FRESH_PLATFORM_LEARNING_STATUSES = {"fresh_live_checked", "fresh_live_checked_with_warnings"}
 
 
 def main() -> None:
@@ -461,7 +462,7 @@ def review_required_upgrade_requests(
                 agent_can_execute=False,
             )
         )
-    if platform_learning.get("status") != "fresh_live_checked":
+    if platform_learning.get("status") not in FRESH_PLATFORM_LEARNING_STATUSES:
         requests.append(
             upgrade_request(
                 "refresh_platform_access_learning",
@@ -598,6 +599,9 @@ def platform_learning_status(out_dir: Path) -> dict[str, Any]:
             if "failedDocs" in freshness
             else int_value(doc_summary.get("unreachableDocs")) + int_value(doc_summary.get("httpErrorDocs"))
         ),
+        "criticalFailedDocs": int_value(freshness.get("criticalFailedDocs") or doc_summary.get("criticalFailedDocs")),
+        "fallbackFailedDocs": int_value(freshness.get("fallbackFailedDocs") or doc_summary.get("fallbackFailedDocs")),
+        "warning": str(freshness.get("warning") or ""),
         "refreshCommand": freshness.get("refreshCommand") or f"python scripts/platform_access_audit.py --check-live --out-dir \"{out_dir}\"",
     }
 
@@ -627,7 +631,7 @@ def next_actions(
                 "command": installed["syncCommand"],
             }
         )
-    if platform_learning.get("status") != "fresh_live_checked":
+    if platform_learning.get("status") not in FRESH_PLATFORM_LEARNING_STATUSES:
         action = "Refresh official platform access docs before adding or changing direct publishing executors."
         if platform_learning.get("status") == "partial_missing_official_doc_sources":
             action = "Add verified official doc sources for missing platform capabilities, or keep those capabilities manual/browser-assisted."

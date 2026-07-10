@@ -13,6 +13,7 @@ from typing import Any
 TODAY = date.today().isoformat()
 DEFAULT_PRODUCT_URL = "https://example.com/product"
 VIDEO_RESEARCH_PLATFORMS = {"youtube", "douyin", "tiktok", "xiaohongshu"}
+FRESH_PLATFORM_LEARNING_STATUSES = {"fresh_live_checked", "fresh_live_checked_with_warnings"}
 OBJECTIVE_REQUIREMENTS = [
     {
         "id": "product_url_codex_structured_intake",
@@ -509,7 +510,7 @@ def self_evolution_row(
     missing = list(audit_item.get("missing") or [])
     if installed.get("status") == "drift_detected":
         missing.append("installed Codex Skill is drifted from the reviewed repository")
-    if learning["status"] != "fresh_live_checked":
+    if learning["status"] not in FRESH_PLATFORM_LEARNING_STATUSES:
         missing.append(platform_learning_missing_message(learning["status"]))
     if learning["officialDocGapResearchStatus"] == "missing_official_doc_gap_research":
         missing.append("official platform doc gap research artifact is missing")
@@ -534,6 +535,10 @@ def self_evolution_row(
             "platformLearningLiveChecked": learning["checkLive"],
             "platformLearningReachableDocs": learning["reachableDocs"],
             "platformLearningMissingDocCapabilities": learning["missingDocCapabilities"],
+            "platformLearningFailedDocs": learning["failedDocs"],
+            "platformLearningCriticalFailedDocs": learning["criticalFailedDocs"],
+            "platformLearningFallbackFailedDocs": learning["fallbackFailedDocs"],
+            "platformLearningWarning": learning["warning"],
             "platformLearningRefreshCommand": learning["refreshCommand"],
             "officialDocGapResearchStatus": learning["officialDocGapResearchStatus"],
             "officialDocGapResearchRecords": learning["officialDocGapResearchRecords"],
@@ -882,7 +887,7 @@ def build_action_queue(
         )
     installed = self_evolution.get("installedSkill") if isinstance(self_evolution.get("installedSkill"), dict) else {}
     learning = platform_learning_metrics(self_evolution, platform_access)
-    if learning["status"] != "fresh_live_checked":
+    if learning["status"] not in FRESH_PLATFORM_LEARNING_STATUSES:
         action_id = "refresh_platform_access_docs"
         description = "Refresh official platform publishing and metrics documentation before changing direct publishing executors."
         if learning["status"] == "partial_missing_official_doc_sources":
@@ -1346,6 +1351,18 @@ def platform_learning_metrics(self_evolution: dict[str, Any], platform_access: d
             or freshness.get("missingDocCapabilities")
             or doc_summary.get("missingDocCapabilities")
         ),
+        "failedDocs": int_value(learning.get("failedDocs") or freshness.get("failedDocs")),
+        "criticalFailedDocs": int_value(
+            learning.get("criticalFailedDocs")
+            or freshness.get("criticalFailedDocs")
+            or doc_summary.get("criticalFailedDocs")
+        ),
+        "fallbackFailedDocs": int_value(
+            learning.get("fallbackFailedDocs")
+            or freshness.get("fallbackFailedDocs")
+            or doc_summary.get("fallbackFailedDocs")
+        ),
+        "warning": str(learning.get("warning") or freshness.get("warning") or ""),
         "refreshCommand": str(
             learning.get("refreshCommand")
             or freshness.get("refreshCommand")
@@ -1363,6 +1380,8 @@ def platform_learning_missing_message(status: str) -> str:
         return "some platform capabilities have no verified official doc source"
     if status == "partial_live_check_failed":
         return "some official platform documentation live checks failed"
+    if status == "fresh_live_checked_with_warnings":
+        return "official platform access docs are freshly live-checked with non-critical fallback warnings"
     if status in {"stale_not_live_checked", "missing_platform_access_audit", "invalid_platform_access_audit"}:
         return "official platform access docs are not freshly live-checked"
     return "official platform access learning evidence is incomplete"

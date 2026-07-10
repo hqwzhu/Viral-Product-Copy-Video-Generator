@@ -7224,6 +7224,68 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["platformMatrix"]["xiaohongshu"]["publishReadiness"], "manual_publish_required")
         self.assertTrue((out_dir / "reports/promotion-manager/final-readiness/final-capability-readiness.md").exists())
 
+    def test_final_readiness_accepts_non_critical_platform_learning_warnings(self) -> None:
+        module = load_script_module(FINAL_CAPABILITY_READINESS)
+        row = module.self_evolution_row(
+            {
+                "repository": {"clean": True},
+                "installedSkill": {
+                    "status": "synced",
+                    "syncCommand": "python scripts/self_evolution_audit.py --sync-installed-skill --approval I_APPROVE_SKILL_SYNC",
+                },
+                "reviewQueueSummary": {
+                    "total": 0,
+                    "agentExecutableNow": 0,
+                    "requiresApprovalOrManualReview": 0,
+                },
+            },
+            {
+                "requirements": [
+                    {
+                        "id": "fully_autonomous_self_evolution",
+                        "status": "ready_review_gated_autonomy",
+                        "evidence": ["scripts/self_evolution_audit.py"],
+                        "missing": [],
+                        "limits": [],
+                    }
+                ]
+            },
+            {
+                "checkLive": True,
+                "learningFreshness": {
+                    "status": "fresh_live_checked_with_warnings",
+                    "checkLive": True,
+                    "reachableDocs": 14,
+                    "missingDocCapabilities": 0,
+                    "failedDocs": 4,
+                    "criticalFailedDocs": 0,
+                    "fallbackFailedDocs": 4,
+                    "warning": "Some fallback docs were unreachable.",
+                },
+                "officialDocSummary": {
+                    "reachableDocs": 14,
+                    "missingDocCapabilities": 0,
+                    "criticalFailedDocs": 0,
+                    "fallbackFailedDocs": 4,
+                },
+                "officialDocGapResearch": {
+                    "status": "manual_or_evidence_fallbacks_documented",
+                    "summary": {
+                        "records": 4,
+                        "missingOfficialDocCapabilities": 0,
+                        "manualOrBrowserFallbacks": 4,
+                        "officialAppOrExecutorGaps": 0,
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(row["status"], "ready_review_gated_autonomy")
+        self.assertEqual(row["missing"], [])
+        self.assertEqual(row["metrics"]["platformLearningStatus"], "fresh_live_checked_with_warnings")
+        self.assertEqual(row["metrics"]["platformLearningCriticalFailedDocs"], 0)
+        self.assertEqual(row["metrics"]["platformLearningFallbackFailedDocs"], 4)
+
     def test_final_capability_readiness_surfaces_synthetic_validation_without_satisfying_real_data(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-synthetic-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -7700,6 +7762,41 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(zhihu_publish["docEvidenceStatus"], "all_reachable")
         self.assertEqual(zhihu_publish["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertEqual(zhihu_publish["searchedOfficialSources"][0]["liveCheck"]["checkedAt"], "2026-07-08T00:00:00Z")
+
+    def test_platform_access_learning_treats_fallback_doc_failures_as_warnings(self) -> None:
+        module = load_script_module(PLATFORM_ACCESS_AUDIT)
+
+        def mixed_check(url: str) -> dict[str, Any]:
+            if "xiaohongshu" in url:
+                return {"status": "unreachable", "reason": "timeout", "checkedAt": "2026-07-08T00:00:00Z"}
+            return {
+                "status": "reachable",
+                "httpStatus": 200,
+                "finalUrl": url,
+                "contentType": "text/html",
+                "checkedAt": "2026-07-08T00:00:00Z",
+            }
+
+        module.check_url = mixed_check
+        records = [module.platform_record("youtube", True), module.platform_record("xiaohongshu", True)]
+        summary = module.official_doc_summary(records)
+        freshness = module.learning_freshness(True, summary)
+
+        self.assertEqual(summary["criticalFailedDocs"], 0)
+        self.assertEqual(summary["fallbackFailedDocs"], 2)
+        self.assertEqual(freshness["status"], "fresh_live_checked_with_warnings")
+        self.assertEqual(freshness["failedDocs"], 2)
+        self.assertIn("manual/browser-assisted fallback", freshness["warning"])
+
+        module.check_url = lambda url: {
+            "status": "unreachable" if "youtube" in url else "reachable",
+            "reason": "timeout",
+            "checkedAt": "2026-07-08T00:00:00Z",
+        }
+        critical_records = [module.platform_record("youtube", True)]
+        critical_summary = module.official_doc_summary(critical_records)
+        self.assertGreater(critical_summary["criticalFailedDocs"], 0)
+        self.assertEqual(module.learning_freshness(True, critical_summary)["status"], "partial_live_check_failed")
 
     def test_platform_access_live_check_handles_remote_disconnect(self) -> None:
         module = load_script_module(PLATFORM_ACCESS_AUDIT)
