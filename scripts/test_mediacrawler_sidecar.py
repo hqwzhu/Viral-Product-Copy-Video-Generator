@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import mediacrawler_contract as contract
+import mediacrawler_sidecar as sidecar
 
 
 class ContractTests(unittest.TestCase):
@@ -98,6 +101,239 @@ class ContractTests(unittest.TestCase):
     def test_unknown_platform_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported MediaCrawler platform"):
             contract.normalize_content("weibo", {}, "fixture", self.salt)
+
+
+class SidecarCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.install = sidecar.SidecarInstall(self.root / "install")
+        self.raw_dir = self.root / "raw"
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_build_command_enforces_safe_limits_and_never_accepts_cookies(self) -> None:
+        request = sidecar.CollectRequest(
+            platform="xiaohongshu",
+            mode="search",
+            query="AI 工具",
+            max_contents=20,
+            max_comments=30,
+            include_sub_comments=False,
+            timeout_seconds=900,
+        )
+        command = sidecar.build_mediacrawler_command(self.install, request, self.raw_dir)
+        self.assertEqual(command[0], str(self.install.python_executable))
+        self.assertEqual(command[command.index("--platform") + 1], "xhs")
+        self.assertEqual(command[command.index("--type") + 1], "search")
+        self.assertEqual(command[command.index("--save_data_option") + 1], "jsonl")
+        self.assertEqual(command[command.index("--max_concurrency_num") + 1], "1")
+        self.assertEqual(command[command.index("--crawler_max_notes_count") + 1], "20")
+        self.assertEqual(command[command.index("--max_comments_count_singlenotes") + 1], "30")
+        self.assertEqual(command[command.index("--enable_ip_proxy") + 1], "false")
+        self.assertEqual(command[command.index("--headless") + 1], "false")
+        self.assertEqual(command[command.index("--get_sub_comment") + 1], "false")
+        self.assertNotIn("--cookies", command)
+        self.assertNotIn("Cookie", " ".join(command))
+
+    def test_build_command_maps_detail_and_creator_targets(self) -> None:
+        detail = sidecar.build_mediacrawler_command(
+            self.install,
+            sidecar.CollectRequest(platform="douyin", mode="detail", target="https://www.douyin.com/video/dy-aweme-001"),
+            self.raw_dir,
+        )
+        creator = sidecar.build_mediacrawler_command(
+            self.install,
+            sidecar.CollectRequest(platform="zhihu", mode="creator", target="creator-id-001"),
+            self.raw_dir,
+        )
+        self.assertEqual(detail[detail.index("--specified_id") + 1], "https://www.douyin.com/video/dy-aweme-001")
+        self.assertEqual(creator[creator.index("--creator_id") + 1], "creator-id-001")
+
+    def test_collect_request_rejects_invalid_modes_and_hard_cap_overrides(self) -> None:
+        invalid = [
+            {"platform": "weibo", "mode": "search", "query": "AI"},
+            {"platform": "douyin", "mode": "feed", "query": "AI"},
+            {"platform": "douyin", "mode": "search", "query": "AI", "max_contents": 21},
+            {"platform": "douyin", "mode": "search", "query": "AI", "max_comments": 31},
+            {"platform": "douyin", "mode": "search", "query": ""},
+            {"platform": "douyin", "mode": "detail", "target": ""},
+        ]
+        for kwargs in invalid:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                sidecar.CollectRequest(**kwargs)
+
+    def test_setup_check_is_read_only_when_sidecar_is_missing(self) -> None:
+        self.install.root.mkdir(parents=True)
+        before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        report = sidecar.check_setup(self.install, find_executable=lambda _: None)
+        after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        self.assertEqual(before, after)
+        self.assertEqual(report["status"], "provider_unavailable")
+        self.assertFalse(report["writesPerformed"])
+        self.assertEqual(report["expectedCommit"], sidecar.UPSTREAM_COMMIT)
+
+
+class SidecarRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.install = sidecar.SidecarInstall(self.root / "install")
+        self.request = sidecar.CollectRequest(platform="xiaohongshu", mode="search", query="AI 工具")
+        self.run_dir = self.root / "run"
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_runner_times_out_releases_lock_and_removes_raw_by_default(self) -> None:
+        def timeout_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(command, timeout)
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=timeout_executor)
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "timeout")
+        self.assertFalse(sidecar.lock_path(self.install).exists())
+        self.assertFalse((self.run_dir / "raw").exists())
+
+    def test_runner_consumes_output_then_cleans_raw(self) -> None:
+        consumed: list[Path] = []
+
+        def success_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raw_dir = Path(command[command.index("--save_data_path") + 1])
+            output = raw_dir / "xhs" / "jsonl" / "search_contents_2026-07-13.jsonl"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text('{"note_id":"xhs-note-001"}\n', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        def consumer(raw_dir: Path) -> dict[str, int]:
+            consumed.extend(raw_dir.rglob("*.jsonl"))
+            return {"contentCount": 1, "commentCount": 0}
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=success_executor, raw_consumer=consumer)
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.payload["contentCount"], 1)
+        self.assertEqual(len(consumed), 1)
+        self.assertFalse((self.run_dir / "raw").exists())
+
+    def test_runner_keeps_raw_only_when_explicitly_requested(self) -> None:
+        def success_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raw_dir = Path(command[command.index("--save_data_path") + 1])
+            output = raw_dir / "xhs" / "jsonl" / "search_contents_2026-07-13.jsonl"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text('{"note_id":"xhs-note-001"}\n', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=success_executor, keep_raw=True)
+        self.assertTrue((self.run_dir / "raw").exists())
+        self.assertTrue(result.keep_raw)
+        self.assertIn("sensitive", result.warning.lower())
+
+    def test_runner_classifies_user_action_and_platform_states(self) -> None:
+        cases = {
+            "Please login with QR code": "waiting_login",
+            "Captcha slider verification required": "manual_verification_required",
+            "Account risk control blocked this request": "blocked_by_platform",
+        }
+        for index, (stderr, expected) in enumerate(cases.items(), start=1):
+            with self.subTest(stderr=stderr):
+                run_dir = self.root / f"run-{index}"
+
+                def failed_executor(command: list[str], cwd: Path, timeout: int, message: str = stderr) -> subprocess.CompletedProcess[str]:
+                    return subprocess.CompletedProcess(command, 1, stdout="", stderr=message)
+
+                result = sidecar.run_sidecar(self.install, self.request, run_dir, executor=failed_executor)
+                self.assertEqual(result.status, expected)
+                self.assertNotIn("Cookie", result.stderr_tail)
+
+    def test_runner_reports_no_results_for_success_without_jsonl_rows(self) -> None:
+        def empty_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=empty_executor)
+        self.assertEqual(result.status, "no_results")
+
+    def test_runner_retries_one_transient_network_failure(self) -> None:
+        calls = 0
+
+        def flaky_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return subprocess.CompletedProcess(command, 1, stdout="", stderr="temporary network connection reset")
+            raw_dir = Path(command[command.index("--save_data_path") + 1])
+            output = raw_dir / "xhs" / "jsonl" / "search_contents_2026-07-13.jsonl"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text('{"note_id":"xhs-note-001"}\n', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=flaky_executor)
+        self.assertEqual(calls, 2)
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.retry_count, 1)
+
+
+class SidecarInstallTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.install = sidecar.SidecarInstall(self.root / "install")
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_explicit_install_uses_staging_pins_commit_and_writes_local_salt(self) -> None:
+        calls: list[list[str]] = []
+
+        def find_executable(name: str) -> str | None:
+            return {"git": "git", "uv": "uv", "chrome": "chrome"}.get(name)
+
+        def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(command)
+            if command[:2] == ["git", "clone"]:
+                checkout = Path(command[-1])
+                (checkout / ".git").mkdir(parents=True)
+                (checkout / "config").mkdir()
+                (checkout / "main.py").write_text("print('fixture')\n", encoding="utf-8")
+                (checkout / "config" / "base_config.py").write_text(
+                    "ENABLE_CDP_MODE = True\nCDP_CONNECT_EXISTING = True\nENABLE_GET_MEIDAS = False\nCRAWLER_MAX_SLEEP_SEC = 2\n",
+                    encoding="utf-8",
+                )
+            if command and command[0] == "uv":
+                project = Path(command[command.index("--project") + 1])
+                python = project / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+                python.parent.mkdir(parents=True, exist_ok=True)
+                python.write_text("fixture", encoding="utf-8")
+            if command[-2:] == ["rev-parse", "HEAD"]:
+                return subprocess.CompletedProcess(command, 0, stdout=sidecar.UPSTREAM_COMMIT + "\n", stderr="")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        report = sidecar.install_sidecar(
+            self.install,
+            find_executable=find_executable,
+            command_runner=runner,
+            random_bytes=lambda size: b"s" * size,
+        )
+        self.assertEqual(report["status"], "ready")
+        self.assertTrue(self.install.manifest_path.exists())
+        self.assertEqual(self.install.identity_salt_path.read_bytes(), b"s" * 32)
+        manifest = json.loads(self.install.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["upstreamCommit"], sidecar.UPSTREAM_COMMIT)
+        self.assertTrue(any(command[:2] == ["git", "clone"] for command in calls))
+        self.assertTrue(any(command and command[0] == "uv" for command in calls))
+
+    def test_failed_install_removes_staging_without_replacing_checkout(self) -> None:
+        def find_executable(name: str) -> str | None:
+            return {"git": "git", "uv": "uv", "chrome": "chrome"}.get(name)
+
+        def failed_runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="network failed")
+
+        report = sidecar.install_sidecar(self.install, find_executable=find_executable, command_runner=failed_runner)
+        self.assertEqual(report["status"], "provider_unavailable")
+        self.assertFalse(self.install.checkout.exists())
+        self.assertFalse(self.install.manifest_path.exists())
+        self.assertEqual(list(self.install.root.glob("installing-*")), [])
 
 
 if __name__ == "__main__":
