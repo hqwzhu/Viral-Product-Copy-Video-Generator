@@ -19,6 +19,7 @@ if str(SCRIPTS) not in sys.path:
 import mediacrawler_contract as contract
 import mediacrawler_downstream as downstream
 import mediacrawler_sidecar as sidecar
+import platform_data_manager
 
 
 class ContractTests(unittest.TestCase):
@@ -439,6 +440,145 @@ class DownstreamTests(unittest.TestCase):
         content = self.contents[2]
         published = [{"platform": "zhihu", "contentId": content["contentId"], "publishStatus": "queued"}]
         self.assertEqual(downstream.match_owned_metrics([content], published), [])
+
+
+class CliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_collect_parser_applies_safe_defaults_and_rejects_cookie_arguments(self) -> None:
+        args = platform_data_manager.parse_args(
+            ["collect", "--platform", "xiaohongshu", "--mode", "search", "--query", "AI 工具"]
+        )
+        self.assertEqual(args.max_contents, 20)
+        self.assertEqual(args.max_comments, 30)
+        self.assertEqual(args.timeout_seconds, 900)
+        self.assertFalse(args.include_sub_comments)
+        with self.assertRaises(SystemExit):
+            platform_data_manager.parse_args(
+                [
+                    "collect",
+                    "--platform",
+                    "xiaohongshu",
+                    "--mode",
+                    "search",
+                    "--query",
+                    "AI",
+                    "--cookies",
+                    "secret",
+                ]
+            )
+
+    def test_setup_check_is_read_only_through_cli(self) -> None:
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        report = platform_data_manager.main(["setup", "--check", "--sidecar-root", str(sidecar_root)])
+        after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        self.assertEqual(before, after)
+        self.assertEqual(report["status"], "provider_unavailable")
+        self.assertFalse(report["writesPerformed"])
+
+    def test_offline_fixture_collect_writes_manifest_normalized_files_and_downstream_artifacts(self) -> None:
+        out_dir = self.root / "promotion-output"
+        report = platform_data_manager.main(
+            [
+                "collect",
+                "--platform",
+                "xiaohongshu",
+                "--mode",
+                "search",
+                "--query",
+                "AI 工具",
+                "--fixture-dir",
+                str(FIXTURES),
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        run_dir = Path(report["runDir"])
+        manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(manifest["captureMode"], "fixture")
+        self.assertEqual(manifest["counts"]["normalizedContents"], 1)
+        self.assertEqual(manifest["counts"]["normalizedComments"], 2)
+        self.assertTrue((run_dir / "contents.jsonl").exists())
+        self.assertTrue((run_dir / "comments.jsonl").exists())
+        self.assertTrue((run_dir / "creators.jsonl").exists())
+        self.assertFalse((run_dir / "raw").exists())
+        self.assertTrue(Path(manifest["artifacts"]["viralContentLibrary"]).exists())
+        self.assertTrue(Path(manifest["artifacts"]["commentEvidence"]).exists())
+
+    def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
+        out_dir = self.root / "promotion-output"
+        report = platform_data_manager.main(
+            [
+                "collect",
+                "--platform",
+                "douyin",
+                "--mode",
+                "search",
+                "--query",
+                "短视频脚本",
+                "--fixture-dir",
+                str(FIXTURES),
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        run_dir = Path(report["runDir"])
+        combined = "\n".join(
+            path.read_text(encoding="utf-8", errors="replace")
+            for path in run_dir.rglob("*")
+            if path.is_file()
+        ).lower()
+        for marker in ("dy-secret-token", "dy-signature", "bearer secret", "raw-user-001", "a=b"):
+            self.assertNotIn(marker, combined)
+
+    def test_real_collect_degrades_without_installed_sidecar(self) -> None:
+        out_dir = self.root / "promotion-output"
+        report = platform_data_manager.main(
+            [
+                "collect",
+                "--platform",
+                "zhihu",
+                "--mode",
+                "search",
+                "--query",
+                "内容生产",
+                "--sidecar-root",
+                str(self.root / "missing-sidecar"),
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        self.assertEqual(report["status"], "provider_unavailable")
+        self.assertIn("existing Firecrawl", " ".join(report["nextActions"]))
+
+    def test_promotion_manager_delegates_platform_data_before_product_arguments(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "promotion_manager.py"),
+                "platform-data",
+                "setup",
+                "--check",
+                "--sidecar-root",
+                str(self.root / "sidecar"),
+            ],
+            cwd=SCRIPTS.parent,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "provider_unavailable")
+        self.assertFalse(report["writesPerformed"])
 
 
 if __name__ == "__main__":
