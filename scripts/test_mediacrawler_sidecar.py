@@ -17,6 +17,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import mediacrawler_contract as contract
+import mediacrawler_downstream as downstream
 import mediacrawler_sidecar as sidecar
 
 
@@ -334,6 +335,110 @@ class SidecarInstallTests(unittest.TestCase):
         self.assertFalse(self.install.checkout.exists())
         self.assertFalse(self.install.manifest_path.exists())
         self.assertEqual(list(self.install.root.glob("installing-*")), [])
+
+
+class DownstreamTests(unittest.TestCase):
+    salt = b"fixture-only-local-salt"
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.out_dir = self.root / "promotion-output"
+        self.run_dir = self.out_dir / "reports" / "promotion-manager" / "platform-data" / "mediacrawler" / "run-fixture"
+        self.run_dir.mkdir(parents=True)
+        self.contents = []
+        self.comments = []
+        for platform in ("xiaohongshu", "douyin", "zhihu"):
+            content_rows = self.load_fixture(f"{platform}-contents.jsonl")
+            comment_rows = self.load_fixture(f"{platform}-comments.jsonl")
+            self.contents.extend(
+                contract.normalize_content(platform, row, f"contents.jsonl#L{index}", self.salt)
+                for index, row in enumerate(content_rows, start=1)
+            )
+            self.comments.extend(contract.normalize_comments(platform, comment_rows, "comments.jsonl", self.salt))
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def load_fixture(self, name: str) -> list[dict[str, object]]:
+        return [json.loads(line) for line in (FIXTURES / name).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def test_writes_viral_creator_comment_and_creator_jsonl_outputs(self) -> None:
+        artifacts = downstream.write_downstream_artifacts(
+            self.out_dir,
+            self.run_dir,
+            self.contents,
+            self.comments,
+            published_items=[],
+        )
+        for key in ("viralContentLibrary", "creatorLeaderboard", "commentEvidence", "creatorRecords", "ownedMetrics"):
+            self.assertTrue(Path(artifacts[key]).exists(), key)
+
+        viral = json.loads(Path(artifacts["viralContentLibrary"]).read_text(encoding="utf-8"))
+        creators = json.loads(Path(artifacts["creatorLeaderboard"]).read_text(encoding="utf-8"))
+        comments = json.loads(Path(artifacts["commentEvidence"]).read_text(encoding="utf-8"))
+        self.assertEqual(len(viral["materials"]), 3)
+        self.assertEqual(len(creators["creators"]), 3)
+        self.assertEqual(comments["summary"]["commentCount"], 6)
+        child = next(item for item in comments["comments"] if item["commentId"] == "xhs-comment-002")
+        self.assertEqual(child["parentCommentId"], "xhs-comment-001")
+
+    def test_only_exact_registered_content_id_enters_owned_metrics(self) -> None:
+        published = [
+            {
+                "platform": "douyin",
+                "contentId": "dy-aweme-001",
+                "publishedUrl": "https://www.douyin.com/video/dy-aweme-001",
+                "publishStatus": "published",
+                "title": "一分钟完成产品短视频脚本",
+            }
+        ]
+        competitor = {
+            **self.contents[1],
+            "contentId": "competitor-999",
+            "sourceUrl": "https://www.douyin.com/video/competitor-999",
+            "title": self.contents[1]["title"],
+            "authorHash": self.contents[1]["authorHash"],
+            "sourceKeyword": self.contents[1]["sourceKeyword"],
+        }
+        matched = downstream.match_owned_metrics([self.contents[1], competitor], published)
+        self.assertEqual([item["contentId"] for item in matched], ["dy-aweme-001"])
+
+    def test_similar_text_title_author_and_keyword_never_match(self) -> None:
+        content = self.contents[0]
+        published = [
+            {
+                "platform": "xiaohongshu",
+                "contentId": "different-id",
+                "publishedUrl": "https://www.xiaohongshu.com/explore/different-id",
+                "publishStatus": "published",
+                "title": content["title"],
+                "authorHash": content["authorHash"],
+                "sourceKeyword": content["sourceKeyword"],
+            }
+        ]
+        self.assertEqual(downstream.match_owned_metrics([content], published), [])
+
+    def test_url_fallback_requires_registry_item_without_content_id_and_exact_canonical_url(self) -> None:
+        content = {
+            **self.contents[1],
+            "contentId": "capture-id-not-registered",
+            "sourceUrl": "https://www.douyin.com/video/url-only-001?utm_medium=capture",
+        }
+        registered = {
+            "platform": "douyin",
+            "contentId": "",
+            "publishedUrl": "https://www.douyin.com/video/url-only-001?utm_source=registry",
+            "publishStatus": "published",
+        }
+        matched = downstream.match_owned_metrics([content], [registered])
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["publishedUrl"], registered["publishedUrl"])
+
+    def test_unpublished_registry_rows_never_receive_metrics(self) -> None:
+        content = self.contents[2]
+        published = [{"platform": "zhihu", "contentId": content["contentId"], "publishStatus": "queued"}]
+        self.assertEqual(downstream.match_owned_metrics([content], published), [])
 
 
 if __name__ == "__main__":
