@@ -26,6 +26,7 @@ MAX_COMMENTS = 30
 MAX_TIMEOUT_SECONDS = 3600
 DEFAULT_TIMEOUT_SECONDS = 900
 RAW_WARNING = "Raw MediaCrawler output may contain sensitive tokens or identifiers. Keep it only for local debugging and never upload it."
+BOOTSTRAP_PATH = Path(__file__).with_name("mediacrawler_bootstrap.py")
 
 
 @dataclass(frozen=True)
@@ -104,7 +105,10 @@ def default_install() -> SidecarInstall:
 def build_mediacrawler_command(install: SidecarInstall, request: CollectRequest, raw_dir: Path) -> list[str]:
     command = [
         str(install.python_executable),
-        str(install.checkout / "main.py"),
+        str(BOOTSTRAP_PATH),
+        "--checkout",
+        str(install.checkout),
+        "--",
         "--platform",
         PLATFORM_FLAGS[request.platform],
         "--lt",
@@ -149,6 +153,9 @@ def check_setup(
     checkout_present = selected.checkout.is_dir()
     main_present = (selected.checkout / "main.py").is_file()
     python_present = selected.python_executable.is_file()
+    manifest_present = selected.manifest_path.is_file()
+    identity_salt_present = selected.identity_salt_path.is_file() and selected.identity_salt_path.stat().st_size >= 32
+    bootstrap_present = BOOTSTRAP_PATH.is_file()
     git_path = find_executable("git")
     uv_path = find_executable("uv")
     chrome_path = find_chrome(find_executable)
@@ -170,6 +177,9 @@ def check_setup(
             chrome_path,
             main_present,
             python_present,
+            manifest_present,
+            identity_salt_present,
+            bootstrap_present,
             actual_commit == UPSTREAM_COMMIT,
             safeguards.get("cdpMode"),
             safeguards.get("connectExisting"),
@@ -191,6 +201,9 @@ def check_setup(
             "checkout": checkout_present,
             "main": main_present,
             "python": python_present,
+            "manifest": manifest_present,
+            "identitySalt": identity_salt_present,
+            "bootstrap": bootstrap_present,
             "commit": actual_commit == UPSTREAM_COMMIT,
             **safeguards,
         },
@@ -358,6 +371,8 @@ def run_sidecar(
             completed = execute(command, install.checkout, request.timeout_seconds)
         except subprocess.TimeoutExpired:
             return RunResult(status="error", reason="timeout", keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else "")
+        except KeyboardInterrupt:
+            return RunResult(status="cancelled", reason="user_cancelled", keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else "")
 
         if completed.returncode != 0 and is_transient_network_error(completed.stderr or completed.stdout):
             retry_count = 1
@@ -365,6 +380,14 @@ def run_sidecar(
                 completed = execute(command, install.checkout, request.timeout_seconds)
             except subprocess.TimeoutExpired:
                 return RunResult(status="error", reason="timeout", retry_count=retry_count, keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else "")
+            except KeyboardInterrupt:
+                return RunResult(
+                    status="cancelled",
+                    reason="user_cancelled",
+                    retry_count=retry_count,
+                    keep_raw=keep_raw,
+                    warning=RAW_WARNING if keep_raw else "",
+                )
 
         stdout_tail = safe_tail(completed.stdout)
         stderr_tail = safe_tail(completed.stderr)

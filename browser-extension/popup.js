@@ -23,6 +23,7 @@ const COMMAND_LABELS = {
   real_evidence_inbox_setup: "Evidence inbox setup",
   real_evidence_inbox: "Evidence inbox",
   performance_monitor: "Performance monitor",
+  platform_data_collect: "Local platform evidence",
   final_readiness: "Readiness audit",
   automation_init: "Schedule init",
   automation_run: "Scheduled run",
@@ -40,6 +41,10 @@ const els = {
   commandType: document.getElementById("commandType"),
   commandModeLabel: document.getElementById("commandModeLabel"),
   outDir: document.getElementById("outDir"),
+  platformDataPlatform: document.getElementById("platformDataPlatform"),
+  platformDataMode: document.getElementById("platformDataMode"),
+  platformDataTarget: document.getElementById("platformDataTarget"),
+  platformDataSubComments: document.getElementById("platformDataSubComments"),
   publishQueue: document.getElementById("publishQueue"),
   platformPublishUrls: document.getElementById("platformPublishUrls"),
   evidenceInbox: document.getElementById("evidenceInbox"),
@@ -153,6 +158,9 @@ async function useCurrentTab() {
   }
   if (tab.url && /^https?:\/\//.test(tab.url)) {
     els.productUrl.value = tab.url;
+    if (els.commandType.value === "platform_data_collect" && els.platformDataMode.value !== "search") {
+      els.platformDataTarget.value = tab.url;
+    }
   }
   els.tabTitle.textContent = tab.title ? `Current tab: ${tab.title}` : "Current tab captured.";
 }
@@ -172,6 +180,10 @@ function selectAllPlatforms() {
 
 function generateCommand() {
   const commandType = els.commandType.value;
+  if (commandType === "platform_data_collect") {
+    generatePlatformDataCommand();
+    return;
+  }
   if (commandType === "browser_publish_session") {
     generateBrowserPublishSessionCommand();
     return;
@@ -218,6 +230,30 @@ function generateCommand() {
     return;
   }
   generateSkillEntryCommand();
+}
+
+function generatePlatformDataCommand() {
+  const target = els.platformDataTarget.value.trim();
+  if (!target) {
+    els.commandOutput.value = els.platformDataMode.value === "search" ? "Enter a search keyword first." : "Enter a content or creator URL/ID first.";
+    return;
+  }
+  const args = [
+    "python scripts\\promotion_manager.py platform-data collect",
+    `--platform ${els.platformDataPlatform.value}`,
+    `--mode ${els.platformDataMode.value}`,
+    `--out-dir ${quote(outDir())}`
+  ];
+  if (els.platformDataMode.value === "search") {
+    args.push(`--query ${quote(target)}`);
+  } else {
+    args.push(`--target ${quote(target)}`);
+  }
+  if (els.platformDataSubComments.checked) {
+    args.push("--include-sub-comments");
+  }
+  els.commandOutput.value = args.join(" ");
+  updateEstimate();
 }
 
 function generateSkillEntryCommand() {
@@ -893,6 +929,9 @@ function handleCommandTypeChange() {
 }
 
 function commandScope(commandType) {
+  if (commandType === "platform_data_collect") {
+    return "platform-data";
+  }
   if (commandType === "browser_publish_session" || commandType === "launch_unlock_pack") {
     return "publish";
   }

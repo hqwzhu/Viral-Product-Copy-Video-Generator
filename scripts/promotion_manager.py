@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import urllib.parse
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -247,6 +248,11 @@ REFERENCE_PROJECTS: list[dict[str, Any]] = [
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "platform-data":
+        from platform_data_manager import main as platform_data_main
+
+        platform_data_main(sys.argv[2:])
+        return
     args = parse_args()
     product = Product(
         name=args.product_name,

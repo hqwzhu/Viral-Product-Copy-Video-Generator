@@ -59,6 +59,7 @@
             <option value="real_evidence_inbox_setup">Evidence inbox setup</option>
             <option value="real_evidence_inbox">Real evidence inbox</option>
             <option value="performance_monitor">Performance monitor</option>
+            <option value="platform_data_collect">Local platform evidence</option>
             <option value="final_readiness">Final readiness audit</option>
             <option value="automation_init">Schedule init</option>
             <option value="automation_run">Run scheduled jobs</option>
@@ -75,6 +76,26 @@
         <label class="field compact">
           <span>Output directory</span>
           <input id="outDir" type="text" value=".\promotion-output">
+        </label>
+        <label class="field compact" data-command-scope="platform-data">
+          <span>Local evidence platform</span>
+          <select id="platformDataPlatform">
+            <option value="xiaohongshu">Xiaohongshu</option>
+            <option value="douyin">Douyin</option>
+            <option value="zhihu">Zhihu</option>
+          </select>
+        </label>
+        <label class="field compact" data-command-scope="platform-data">
+          <span>Collection mode</span>
+          <select id="platformDataMode">
+            <option value="search">Keyword search</option>
+            <option value="detail">Content detail</option>
+            <option value="creator">Creator works</option>
+          </select>
+        </label>
+        <label class="field compact" data-command-scope="platform-data">
+          <span>Keyword or target URL/ID</span>
+          <input id="platformDataTarget" type="text" placeholder="AI tools or a content/creator URL">
         </label>
         <label class="field compact" data-command-scope="publish">
           <span>Publish queue JSON</span>
@@ -113,6 +134,10 @@
           <input id="windowsTaskTime" type="time" value="09:00">
         </label>
         <div class="option-list">
+          <label class="checkline" data-command-scope="platform-data">
+            <input id="platformDataSubComments" type="checkbox">
+            <span>Include second-level comments</span>
+          </label>
           <label class="checkline" data-command-scope="publish">
             <input id="runFormFill" type="checkbox" checked>
             <span>Fill visible publisher fields</span>

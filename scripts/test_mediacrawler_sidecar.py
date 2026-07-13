@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -17,6 +21,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import mediacrawler_contract as contract
+import mediacrawler_bootstrap as bootstrap
 import mediacrawler_downstream as downstream
 import mediacrawler_sidecar as sidecar
 import platform_data_manager
@@ -127,6 +132,9 @@ class SidecarCommandTests(unittest.TestCase):
         )
         command = sidecar.build_mediacrawler_command(self.install, request, self.raw_dir)
         self.assertEqual(command[0], str(self.install.python_executable))
+        self.assertTrue(command[1].endswith("mediacrawler_bootstrap.py"))
+        self.assertEqual(command[command.index("--checkout") + 1], str(self.install.checkout))
+        self.assertIn("--", command)
         self.assertEqual(command[command.index("--platform") + 1], "xhs")
         self.assertEqual(command[command.index("--type") + 1], "search")
         self.assertEqual(command[command.index("--save_data_option") + 1], "jsonl")
@@ -152,7 +160,6 @@ class SidecarCommandTests(unittest.TestCase):
         )
         self.assertEqual(detail[detail.index("--specified_id") + 1], "https://www.douyin.com/video/dy-aweme-001")
         self.assertEqual(creator[creator.index("--creator_id") + 1], "creator-id-001")
-
     def test_collect_request_rejects_invalid_modes_and_hard_cap_overrides(self) -> None:
         invalid = [
             {"platform": "weibo", "mode": "search", "query": "AI"},
@@ -177,6 +184,46 @@ class SidecarCommandTests(unittest.TestCase):
         self.assertEqual(report["expectedCommit"], sidecar.UPSTREAM_COMMIT)
 
 
+class BootstrapTests(unittest.TestCase):
+    def test_zhihu_creator_target_is_applied_to_upstream_config(self) -> None:
+        config = SimpleNamespace(ZHIHU_CREATOR_URL_LIST=[])
+        parsed = SimpleNamespace(platform="zhihu", type="creator", creator_id="https://www.zhihu.com/people/a,https://www.zhihu.com/people/b")
+        bootstrap.apply_creator_override(config, parsed)
+        self.assertEqual(
+            config.ZHIHU_CREATOR_URL_LIST,
+            ["https://www.zhihu.com/people/a", "https://www.zhihu.com/people/b"],
+        )
+
+    def test_existing_cdp_cleanup_drops_references_without_closing_context(self) -> None:
+        calls: list[str] = []
+
+        class FakeManager:
+            def __init__(self) -> None:
+                self.browser_context = object()
+                self.browser = object()
+
+            async def cleanup(self, force: bool = False) -> None:
+                calls.append(f"original:{force}")
+
+        bootstrap.patch_safe_cdp_cleanup(SimpleNamespace(CDP_CONNECT_EXISTING=True), FakeManager)
+        manager = FakeManager()
+        asyncio.run(manager.cleanup(force=True))
+        self.assertEqual(calls, [])
+        self.assertIsNone(manager.browser_context)
+        self.assertIsNone(manager.browser)
+
+    def test_non_existing_cdp_mode_keeps_upstream_cleanup(self) -> None:
+        calls: list[str] = []
+
+        class FakeManager:
+            async def cleanup(self, force: bool = False) -> None:
+                calls.append(f"original:{force}")
+
+        bootstrap.patch_safe_cdp_cleanup(SimpleNamespace(CDP_CONNECT_EXISTING=False), FakeManager)
+        asyncio.run(FakeManager().cleanup(force=True))
+        self.assertEqual(calls, ["original:True"])
+
+
 class SidecarRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -195,6 +242,16 @@ class SidecarRuntimeTests(unittest.TestCase):
         result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=timeout_executor)
         self.assertEqual(result.status, "error")
         self.assertEqual(result.reason, "timeout")
+        self.assertFalse(sidecar.lock_path(self.install).exists())
+        self.assertFalse((self.run_dir / "raw").exists())
+
+    def test_runner_converts_keyboard_interrupt_to_cancelled_and_releases_resources(self) -> None:
+        def cancelled_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raise KeyboardInterrupt
+
+        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=cancelled_executor)
+        self.assertEqual(result.status, "cancelled")
+        self.assertEqual(result.reason, "user_cancelled")
         self.assertFalse(sidecar.lock_path(self.install).exists())
         self.assertFalse((self.run_dir / "raw").exists())
 
@@ -317,6 +374,9 @@ class SidecarInstallTests(unittest.TestCase):
             random_bytes=lambda size: b"s" * size,
         )
         self.assertEqual(report["status"], "ready")
+        self.assertTrue(report["checks"]["manifest"])
+        self.assertTrue(report["checks"]["identitySalt"])
+        self.assertTrue(report["checks"]["bootstrap"])
         self.assertTrue(self.install.manifest_path.exists())
         self.assertEqual(self.install.identity_salt_path.read_bytes(), b"s" * 32)
         manifest = json.loads(self.install.manifest_path.read_text(encoding="utf-8"))
@@ -450,6 +510,10 @@ class CliTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def run_main(self, argv: list[str]) -> dict[str, object]:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return platform_data_manager.main(argv)
+
     def test_collect_parser_applies_safe_defaults_and_rejects_cookie_arguments(self) -> None:
         args = platform_data_manager.parse_args(
             ["collect", "--platform", "xiaohongshu", "--mode", "search", "--query", "AI 工具"]
@@ -458,7 +522,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.max_comments, 30)
         self.assertEqual(args.timeout_seconds, 900)
         self.assertFalse(args.include_sub_comments)
-        with self.assertRaises(SystemExit):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             platform_data_manager.parse_args(
                 [
                     "collect",
@@ -477,15 +541,14 @@ class CliTests(unittest.TestCase):
         sidecar_root = self.root / "sidecar"
         sidecar_root.mkdir()
         before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
-        report = platform_data_manager.main(["setup", "--check", "--sidecar-root", str(sidecar_root)])
+        report = self.run_main(["setup", "--check", "--sidecar-root", str(sidecar_root)])
         after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
         self.assertEqual(before, after)
         self.assertEqual(report["status"], "provider_unavailable")
         self.assertFalse(report["writesPerformed"])
-
     def test_offline_fixture_collect_writes_manifest_normalized_files_and_downstream_artifacts(self) -> None:
         out_dir = self.root / "promotion-output"
-        report = platform_data_manager.main(
+        report = self.run_main(
             [
                 "collect",
                 "--platform",
@@ -515,7 +578,7 @@ class CliTests(unittest.TestCase):
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"
-        report = platform_data_manager.main(
+        report = self.run_main(
             [
                 "collect",
                 "--platform",
@@ -541,7 +604,7 @@ class CliTests(unittest.TestCase):
 
     def test_real_collect_degrades_without_installed_sidecar(self) -> None:
         out_dir = self.root / "promotion-output"
-        report = platform_data_manager.main(
+        report = self.run_main(
             [
                 "collect",
                 "--platform",
@@ -579,6 +642,85 @@ class CliTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertEqual(report["status"], "provider_unavailable")
         self.assertFalse(report["writesPerformed"])
+
+
+class ExtensionTests(unittest.TestCase):
+    def test_extension_generates_sidecar_command_without_new_high_privilege_permissions(self) -> None:
+        root = SCRIPTS.parent
+        manifest = json.loads((root / "browser-extension" / "manifest.json").read_text(encoding="utf-8"))
+        html = (root / "browser-extension" / "popup.html").read_text(encoding="utf-8")
+        javascript = (root / "browser-extension" / "popup.js").read_text(encoding="utf-8")
+        self.assertIn('value="platform_data_collect"', html)
+        self.assertIn('id="platformDataPlatform"', html)
+        self.assertIn('id="platformDataMode"', html)
+        self.assertIn('id="platformDataTarget"', html)
+        self.assertIn('id="platformDataSubComments"', html)
+        self.assertIn("generatePlatformDataCommand", javascript)
+        self.assertIn(r"scripts\\promotion_manager.py platform-data collect", javascript)
+        self.assertNotIn("nativeMessaging", manifest.get("permissions", []))
+        self.assertNotIn("cookies", [str(value).lower() for value in manifest.get("permissions", [])])
+        self.assertFalse(any("localhost" in value.lower() for value in manifest.get("host_permissions", [])))
+
+
+class AcceptanceTests(unittest.TestCase):
+    def test_three_platform_offline_runs_are_normalized_redacted_and_raw_free(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp) / "promotion-output"
+            total_contents = 0
+            total_comments = 0
+            for platform, query in (
+                ("xiaohongshu", "AI 工具"),
+                ("douyin", "短视频脚本"),
+                ("zhihu", "内容生产"),
+            ):
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    report = platform_data_manager.main(
+                        [
+                            "collect",
+                            "--platform",
+                            platform,
+                            "--mode",
+                            "search",
+                            "--query",
+                            query,
+                            "--fixture-dir",
+                            str(FIXTURES),
+                            "--out-dir",
+                            str(out_dir),
+                        ]
+                    )
+                run_dir = Path(report["runDir"])
+                manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["status"], "ready")
+                total_contents += manifest["counts"]["normalizedContents"]
+                total_comments += manifest["counts"]["normalizedComments"]
+                self.assertFalse((run_dir / "raw").exists())
+                combined = "\n".join(
+                    path.read_text(encoding="utf-8", errors="replace")
+                    for path in run_dir.rglob("*")
+                    if path.is_file()
+                ).lower()
+                for value in ("xhs-secret-token", "dy-secret-token", "dy-signature", "zh-secret-signature"):
+                    self.assertNotIn(value, combined)
+            self.assertEqual(total_contents, 3)
+            self.assertEqual(total_comments, 6)
+
+    def test_operations_guide_and_gitignore_cover_the_local_boundary(self) -> None:
+        root = SCRIPTS.parent
+        guide = (root / "docs" / "mediacrawler-sidecar.md").read_text(encoding="utf-8")
+        ignore = (root / ".gitignore").read_text(encoding="utf-8")
+        for value in (
+            "platform-data setup --check",
+            "platform-data setup --install",
+            sidecar.UPSTREAM_COMMIT,
+            "waiting_login",
+            "manual_verification_required",
+            "blocked_by_platform",
+            "--keep-raw",
+            "Ctrl+C",
+        ):
+            self.assertIn(value, guide)
+        self.assertIn("promotion-output/", ignore)
 
 
 if __name__ == "__main__":
