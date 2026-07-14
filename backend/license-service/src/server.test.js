@@ -37,6 +37,28 @@ test("public health alias matches the canonical health endpoint", async () => {
   }
 });
 
+test("privacy page publishes the approved English and Chinese retention policy", async () => {
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/promotion-manager/privacy`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /中文 \/ EN/);
+    assert.match(html, /automatically deleted 30 days/);
+    assert.match(html, /retained for 180 days/);
+    assert.match(html, /applicable law/);
+    assert.match(html, /30 天后自动删除/);
+    assert.match(html, /保留 180 天/);
+    assert.match(html, /按照适用法律保留/);
+    assert.match(html, /huqingwei5942@gmail\.com/);
+    assert.match(html, /enhe_pm_language/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("license service queues and completes a hosted worker run", async () => {
   const licenseKey = "pm_test_hosted_worker_license";
   const state = emptyState();
@@ -326,7 +348,12 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
       headers: { cookie: `enhe_pm_claim=${encodeURIComponent(licenseKey)}` }
     });
     assert.equal(success.status, 200);
-    assert.match(await success.text(), new RegExp(licenseKey));
+    const successHtml = await success.text();
+    assert.match(successHtml, new RegExp(licenseKey));
+    assert.match(successHtml, /中文 \/ EN/);
+    assert.match(successHtml, /Payment confirmed/);
+    assert.match(successHtml, /支付已确认/);
+    assert.match(successHtml, /enhe_pm_language/);
 
     const stateBeforeQrPayment = await store.load();
     const qrPayment = Object.values(stateBeforeQrPayment.payments)

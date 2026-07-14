@@ -320,27 +320,21 @@ app.get("/promotion-manager/checkout/success", asyncHandler(async (req, res) => 
   const state = await store.load();
   const orderNo = String(req.query.orderNo || "");
   const payment = Object.values(state.payments).find((item) => item.orderNo === orderNo);
-  if (!payment) return res.status(404).type("html").send(renderCheckoutResult("Payment not found", ""));
+  if (!payment) return res.status(404).type("html").send(renderCheckoutResult("paymentNotFound"));
   if (payment.status !== "paid") {
-    return res.type("html").send(renderCheckoutResult("Payment is being confirmed", "Refresh this page in a moment."));
+    return res.type("html").send(renderCheckoutResult("paymentPending"));
   }
   const license = state.licenses[payment.licenseId];
   const claim = cookieValue(req.headers.cookie, "enhe_pm_claim");
   if (!license || !claim || hashLicenseKey(claim) !== license.licenseKeyHash) {
-    return res.status(403).type("html").send(renderCheckoutResult(
-      "Payment confirmed",
-      "The license claim is not available in this browser. Contact support with your order number."
-    ));
+    return res.status(403).type("html").send(renderCheckoutResult("claimUnavailable"));
   }
-  return res.type("html").send(renderCheckoutResult("Payment confirmed", `License key: ${claim}`));
+  return res.type("html").send(renderCheckoutResult("paymentConfirmed", { licenseKey: claim }));
 }));
 
 app.get("/promotion-manager/billing", asyncHandler(async (req, res) => {
   if (isZpayConfigured()) {
-    return res.type("html").send(renderCheckoutResult(
-      "ENHE Promotion Manager billing",
-      "Domestic plans use one-time payments. Renew or change plans through /promotion-manager/checkout."
-    ));
+    return res.type("html").send(renderCheckoutResult("billing"));
   }
   const error = requireStripeConfig(["STRIPE_SECRET_KEY"]);
   if (error) return res.status(500).json(error);
@@ -1029,19 +1023,69 @@ function renderZpayCheckoutPage(selectedPlan) {
 </html>`;
 }
 
-function renderCheckoutResult(title, message) {
+function renderCheckoutResult(resultKey, options = {}) {
+  const messages = {
+    paymentNotFound: {
+      en: { title: "Payment not found", message: "Check the order link or return to checkout." },
+      zh: { title: "未找到支付订单", message: "请检查订单链接或返回结算页。" }
+    },
+    paymentPending: {
+      en: { title: "Payment is being confirmed", message: "Refresh this page in a moment." },
+      zh: { title: "正在确认支付", message: "请稍后刷新此页面。" }
+    },
+    paymentConfirmed: {
+      en: { title: "Payment confirmed", message: "" },
+      zh: { title: "支付已确认", message: "" }
+    },
+    claimUnavailable: {
+      en: {
+        title: "Payment confirmed",
+        message: "The license claim is unavailable in this browser. Contact support with your order number."
+      },
+      zh: { title: "支付已确认", message: "当前浏览器无法领取许可证，请携带订单号联系支持。" }
+    },
+    billing: {
+      en: {
+        title: "ENHE Promotion Manager billing",
+        message: "Domestic plans use one-time 30-day payments. Renew or change plans from checkout."
+      },
+      zh: {
+        title: "ENHE Promotion Manager 账单",
+        message: "国内套餐采用一次性购买 30 天许可证，请在结算页续购或更换套餐。"
+      }
+    }
+  };
+  const content = messages[resultKey] || messages.paymentNotFound;
+  const licenseKey = String(options.licenseKey || "");
+  const resultPanel = (language, title, message, backLabel, licenseLabel, hidden) => `
+    <section data-language-panel="${language}"${hidden ? " hidden" : ""}>
+      <h1>${escapeHtml(title)}</h1>
+      ${licenseKey
+        ? `<p>${escapeHtml(licenseLabel)}</p><p><code>${escapeHtml(licenseKey)}</code></p>`
+        : `<p>${escapeHtml(message)}</p>`}
+      <p><a href="/promotion-manager/checkout">${escapeHtml(backLabel)}</a></p>
+    </section>`;
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)}</title>
-  <style>body { font-family: system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 20px; line-height: 1.6; } code { word-break: break-all; }</style>
+  <title>${escapeHtml(content.en.title)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #18181b; }
+    .toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 24px; color: #52525b; font-size: 14px; }
+    button { padding: 5px 10px; border: 1px solid #d4d4d8; border-radius: 999px; background: white; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: #111827; background: #111827; color: white; }
+    code { word-break: break-all; }
+    a { color: #0f766e; }
+    [hidden] { display: none !important; }
+  </style>
 </head>
 <body>
-  <h1>${escapeHtml(title)}</h1>
-  <p><code>${escapeHtml(message)}</code></p>
-  <p><a href="/promotion-manager/checkout">返回套餐页面</a></p>
+  <div class="toolbar"><span>中文 / EN</span><button type="button" data-language="zh-CN">中文</button><button type="button" data-language="en">EN</button></div>
+  ${resultPanel("en", content.en.title, content.en.message, "Return to checkout", "License key", false)}
+  ${resultPanel("zh-CN", content.zh.title, content.zh.message, "返回结算页", "许可证密钥", true)}
+  ${renderLanguageToggleScript()}
 </body>
 </html>`;
 }
@@ -1054,6 +1098,34 @@ function renderLegalPage(page) {
   }
   const markdown = fs.readFileSync(pagePath, "utf8");
   const title = firstHeading(markdown) || "ENHE Promotion Manager";
+  if (page === "privacy") {
+    const chinesePath = path.join(__dirname, "..", "..", "..", "docs", "legal", "privacy-policy.zh-CN.md");
+    const chineseMarkdown = fs.readFileSync(chinesePath, "utf8");
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #18181b; }
+    .toolbar { position: sticky; top: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 0; background: rgba(255, 255, 255, 0.95); color: #52525b; font-size: 14px; }
+    button { padding: 5px 10px; border: 1px solid #d4d4d8; border-radius: 999px; background: white; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: #111827; background: #111827; color: white; }
+    h1, h2 { line-height: 1.2; }
+    a { color: #0f766e; }
+    code { background: #f4f4f5; padding: 2px 4px; border-radius: 4px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><span>中文 / EN</span><button type="button" data-language="zh-CN">中文</button><button type="button" data-language="en">EN</button></div>
+  <article data-language-panel="en">${markdownToHtml(markdown)}</article>
+  <article data-language-panel="zh-CN" hidden>${markdownToHtml(chineseMarkdown)}</article>
+  ${renderLanguageToggleScript()}
+</body>
+</html>`;
+  }
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1071,6 +1143,31 @@ function renderLegalPage(page) {
 ${markdownToHtml(markdown)}
 </body>
 </html>`;
+}
+
+function renderLanguageToggleScript() {
+  return `<script>
+    (() => {
+      const languageKey = "enhe_pm_language";
+      const storedLanguage = localStorage.getItem(languageKey);
+      let language = storedLanguage || (navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en");
+      function applyLanguage(nextLanguage) {
+        language = nextLanguage === "zh-CN" ? "zh-CN" : "en";
+        localStorage.setItem(languageKey, language);
+        document.documentElement.lang = language;
+        document.querySelectorAll("[data-language-panel]").forEach((panel) => {
+          panel.hidden = panel.dataset.languagePanel !== language;
+        });
+        document.querySelectorAll("[data-language]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.language === language));
+        });
+      }
+      document.querySelectorAll("[data-language]").forEach((button) => {
+        button.addEventListener("click", () => applyLanguage(button.dataset.language));
+      });
+      applyLanguage(language);
+    })();
+  </script>`;
 }
 
 function firstHeading(markdown) {
