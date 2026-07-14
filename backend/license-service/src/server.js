@@ -797,10 +797,49 @@ function renderZpayCheckoutPage(selectedPlan) {
   const planOptions = ["starter", "growth", "scale"]
     .map((plan) => {
       const price = zpayPriceForPlan(plan);
-      const label = `${labelPlan(plan)}${price ? ` - ¥${price}` : " - price unavailable"}`;
+      const displayPrice = String(price || "").replace(/\.00$/, "");
+      const label = `${labelPlan(plan)}${price ? ` - ¥${displayPrice}` : " - unavailable"}`;
       return `<option value="${plan}"${plan === selectedPlan ? " selected" : ""}${price ? "" : " disabled"}>${escapeHtml(label)}</option>`;
     })
     .join("");
+  const messages = {
+    "zh-CN": {
+      title: "ENHE Promotion Manager 国内支付",
+      intro: "使用微信支付或支付宝购买 30 天许可证。",
+      plan: "套餐",
+      email: "接收与找回许可证的邮箱",
+      paymentMethod: "支付方式",
+      wechat: "微信支付",
+      alipay: "支付宝",
+      submitPayment: "前往支付",
+      creatingOrder: "正在创建订单…",
+      scanToPay: "请使用手机扫码支付",
+      waitingForPayment: "等待支付确认…",
+      paymentConfirmed: "支付成功，正在领取许可证…",
+      paymentFailed: "支付未完成，请重试或直接打开支付页面。",
+      openPaymentPage: "直接打开支付页面",
+      orderNumber: "订单号",
+      privacyHint: "支付由 ENHE AI 的 ZPAY 商户通道处理。许可证密钥不会以明文存储在服务器。"
+    },
+    en: {
+      title: "ENHE Promotion Manager Checkout",
+      intro: "Buy a 30-day license with WeChat Pay or Alipay.",
+      plan: "Plan",
+      email: "Email for license delivery and recovery",
+      paymentMethod: "Payment method",
+      wechat: "WeChat Pay",
+      alipay: "Alipay",
+      submitPayment: "Continue to payment",
+      creatingOrder: "Creating order…",
+      scanToPay: "Scan with your phone to pay",
+      waitingForPayment: "Waiting for payment confirmation…",
+      paymentConfirmed: "Payment confirmed. Opening your license…",
+      paymentFailed: "Payment was not completed. Retry or open the payment page directly.",
+      openPaymentPage: "Open payment page",
+      orderNumber: "Order number",
+      privacyHint: "Payment is processed through ENHE AI's ZPAY merchant channel. License Keys are not stored in plaintext."
+    }
+  };
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -808,29 +847,184 @@ function renderZpayCheckoutPage(selectedPlan) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ENHE Promotion Manager 国内支付</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 620px; margin: 48px auto; padding: 0 20px; line-height: 1.6; color: #18181b; }
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #18181b; background: #f6f7fb; }
+    * { box-sizing: border-box; }
+    body { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.6; }
+    main { display: grid; gap: 22px; }
+    .toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; color: #52525b; font-size: 14px; }
+    .language-button { padding: 5px 10px; border: 1px solid #d4d4d8; border-radius: 999px; background: white; color: #27272a; }
+    .language-button[aria-pressed="true"] { border-color: #111827; background: #111827; color: white; }
+    .card { padding: 28px; border: 1px solid #e4e4e7; border-radius: 18px; background: white; box-shadow: 0 16px 50px rgba(15, 23, 42, 0.08); }
+    h1, h2, p { margin-top: 0; }
     form { display: grid; gap: 16px; }
     label { display: grid; gap: 6px; font-weight: 600; }
-    input, select, button { font: inherit; padding: 10px 12px; }
-    button { cursor: pointer; background: #111827; color: white; border: 0; border-radius: 6px; }
+    input, select, button, a { font: inherit; }
+    input, select { width: 100%; padding: 11px 12px; border: 1px solid #d4d4d8; border-radius: 9px; background: white; }
+    button { cursor: pointer; border: 0; }
+    .primary { padding: 12px 16px; border-radius: 9px; background: #111827; color: white; font-weight: 700; }
+    .primary:disabled { cursor: wait; opacity: 0.65; }
+    .payment-panel { text-align: center; }
+    .payment-panel img { display: block; width: 280px; height: 280px; max-width: 100%; margin: 18px auto; border: 1px solid #e4e4e7; border-radius: 12px; }
+    .payment-summary { font-weight: 700; }
+    .direct-link { display: inline-flex; margin-top: 12px; color: #0f766e; font-weight: 700; }
     .hint { color: #52525b; font-size: 14px; }
+    code { word-break: break-all; }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) { body { padding: 20px 14px 48px; } .card { padding: 20px; } }
   </style>
 </head>
 <body>
-  <h1>ENHE Promotion Manager</h1>
-  <p>使用微信支付或支付宝购买 30 天许可证。支付成功后请返回本页面领取许可证。</p>
-  <form method="post" action="/api/promotion-manager/payments/zpay/checkout">
-    <label>套餐<select name="plan" required>${planOptions}</select></label>
-    <label>接收与找回许可证的邮箱<input type="email" name="email" autocomplete="email" required></label>
-    <label>支付方式
-      <select name="type" required>
-        <option value="wxpay">微信支付</option>
-        <option value="alipay">支付宝</option>
-      </select>
-    </label>
-    <button type="submit">前往支付</button>
-  </form>
-  <p class="hint">支付由 ENHE AI 网站当前 ZPAY 商户通道处理。许可证密钥不会以明文存储在服务器。</p>
+  <main>
+    <div class="toolbar" aria-label="Language">
+      <span>中文 / EN</span>
+      <button class="language-button" type="button" data-language="zh-CN">中文</button>
+      <button class="language-button" type="button" data-language="en">EN</button>
+    </div>
+    <section class="card">
+      <h1 data-i18n="title">ENHE Promotion Manager 国内支付</h1>
+      <p data-i18n="intro">使用微信支付或支付宝购买 30 天许可证。</p>
+      <form id="checkoutForm" method="post" action="/api/promotion-manager/payments/zpay/checkout">
+        <label><span data-i18n="plan">套餐</span><select name="plan" required>${planOptions}</select></label>
+        <label><span data-i18n="email">接收与找回许可证的邮箱</span><input type="email" name="email" autocomplete="email" required></label>
+        <label><span data-i18n="paymentMethod">支付方式</span>
+          <select name="type" required>
+            <option value="wxpay" data-i18n="wechat">微信支付</option>
+            <option value="alipay" data-i18n="alipay">支付宝</option>
+          </select>
+        </label>
+        <button id="submitButton" class="primary" type="submit" data-i18n="submitPayment">前往支付</button>
+      </form>
+      <p class="hint" data-i18n="privacyHint">支付由 ENHE AI 的 ZPAY 商户通道处理。许可证密钥不会以明文存储在服务器。</p>
+    </section>
+    <section id="paymentPanel" class="card payment-panel" hidden aria-live="polite">
+      <h2 data-i18n="scanToPay">请使用手机扫码支付</h2>
+      <p id="paymentSummary" class="payment-summary"></p>
+      <img id="paymentQr" alt="Payment QR code" width="280" height="280">
+      <p id="paymentStatus" data-i18n="waitingForPayment">等待支付确认…</p>
+      <p><span data-i18n="orderNumber">订单号</span>：<code id="orderNumber"></code></p>
+      <a id="openPaymentPage" class="direct-link" target="_blank" rel="noopener noreferrer" data-i18n="openPaymentPage">直接打开支付页面</a>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const messages = ${JSON.stringify(messages).replace(/</g, "\\u003c")};
+      const languageKey = "enhe_pm_language";
+      const form = document.getElementById("checkoutForm");
+      const submitButton = document.getElementById("submitButton");
+      const paymentPanel = document.getElementById("paymentPanel");
+      const paymentQr = document.getElementById("paymentQr");
+      const paymentSummary = document.getElementById("paymentSummary");
+      const paymentStatus = document.getElementById("paymentStatus");
+      const orderNumber = document.getElementById("orderNumber");
+      const openPaymentPage = document.getElementById("openPaymentPage");
+      const storedLanguage = localStorage.getItem("enhe_pm_language");
+      let language = storedLanguage || (navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en");
+      let statusKey = "waitingForPayment";
+      let pollTimer = 0;
+      let pollDeadline = 0;
+      const mobile = navigator.userAgentData && typeof navigator.userAgentData.mobile === "boolean"
+        ? navigator.userAgentData.mobile
+        : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+      function applyLanguage(nextLanguage) {
+        language = nextLanguage === "zh-CN" ? "zh-CN" : "en";
+        localStorage.setItem(languageKey, language);
+        document.documentElement.lang = language;
+        document.querySelectorAll("[data-i18n]").forEach((element) => {
+          const key = element.dataset.i18n;
+          if (messages[language][key]) element.textContent = messages[language][key];
+        });
+        document.querySelectorAll("[data-language]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.language === language));
+        });
+        paymentStatus.textContent = messages[language][statusKey];
+      }
+
+      function setStatus(key) {
+        statusKey = key;
+        paymentStatus.textContent = messages[language][key];
+      }
+
+      function stopPolling() {
+        if (pollTimer) window.clearInterval(pollTimer);
+        pollTimer = 0;
+      }
+
+      async function checkPayment(orderNoValue) {
+        if (document.hidden) return;
+        if (Date.now() >= pollDeadline) {
+          stopPolling();
+          setStatus("paymentFailed");
+          return;
+        }
+        const response = await fetch(
+          "/api/promotion-manager/payments/zpay/status?orderNo=" + encodeURIComponent(orderNoValue),
+          { credentials: "same-origin" }
+        );
+        if (!response.ok) return;
+        const body = await response.json();
+        if (body.status === "paid" && body.claimUrl) {
+          stopPolling();
+          setStatus("paymentConfirmed");
+          location.assign(body.claimUrl);
+        } else if (body.status === "failed") {
+          stopPolling();
+          setStatus("paymentFailed");
+        }
+      }
+
+      document.querySelectorAll("[data-language]").forEach((button) => {
+        button.addEventListener("click", () => applyLanguage(button.dataset.language));
+      });
+      window.addEventListener("beforeunload", stopPolling);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && orderNumber.textContent && pollTimer) checkPayment(orderNumber.textContent);
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        stopPolling();
+        submitButton.disabled = true;
+        submitButton.textContent = messages[language].creatingOrder;
+        try {
+          const response = await fetch(form.action, {
+            method: "POST",
+            headers: { accept: "application/json" },
+            body: new URLSearchParams(new FormData(form)),
+            credentials: "same-origin"
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.message || body.error || "checkout_failed");
+          if (mobile) {
+            location.assign(body.paymentUrl);
+            return;
+          }
+          paymentQr.src = body.qrCodeDataUrl;
+          paymentSummary.textContent = labelPlan(body.plan) + " · ¥" + String(body.amount).replace(/\\.00$/, "") + " · 30 days";
+          orderNumber.textContent = body.orderNo;
+          openPaymentPage.href = body.paymentUrl;
+          paymentPanel.hidden = false;
+          setStatus("waitingForPayment");
+          pollDeadline = Date.now() + 10 * 60 * 1_000;
+          await checkPayment(body.orderNo);
+          pollTimer = window.setInterval(() => checkPayment(body.orderNo), 3_000);
+        } catch (_error) {
+          paymentPanel.hidden = false;
+          setStatus("paymentFailed");
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = messages[language].submitPayment;
+        }
+      });
+
+      function labelPlan(plan) {
+        const value = String(plan || "");
+        return value.charAt(0).toUpperCase() + value.slice(1);
+      }
+
+      applyLanguage(language);
+    })();
+  </script>
 </body>
 </html>`;
 }

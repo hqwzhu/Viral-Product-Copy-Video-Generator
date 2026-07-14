@@ -193,6 +193,24 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
+    const checkoutPage = await fetch(`${baseUrl}/promotion-manager/checkout?plan=growth`);
+    assert.equal(checkoutPage.status, 200);
+    const checkoutHtml = await checkoutPage.text();
+    assert.match(checkoutHtml, /中文 \/ EN/);
+    assert.match(checkoutHtml, /Starter[^<]*¥19/);
+    assert.match(checkoutHtml, /Growth[^<]*¥59/);
+    assert.match(checkoutHtml, /Scale[^<]*¥199/);
+    assert.doesNotMatch(checkoutHtml, /¥(?:19|59|199)\.00/);
+    assert.match(checkoutHtml, /data-i18n="submitPayment"/);
+    assert.match(checkoutHtml, /id="paymentQr"/);
+    assert.match(checkoutHtml, /id="openPaymentPage"/);
+    assert.match(checkoutHtml, /application\/json/);
+    assert.match(checkoutHtml, /navigator\.userAgentData/);
+    assert.match(checkoutHtml, /\/api\/promotion-manager\/payments\/zpay\/status/);
+    assert.match(checkoutHtml, /3_000/);
+    assert.match(checkoutHtml, /10 \* 60 \* 1_000/);
+    assert.match(checkoutHtml, /localStorage\.getItem\("enhe_pm_language"\)/);
+
     const checkout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
