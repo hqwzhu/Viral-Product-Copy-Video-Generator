@@ -22,6 +22,10 @@ Repository: [hqwzhu/Viral-Product-Copy-Video-Generator](https://github.com/hqwzh
 
 Chinese version: [README.md](README.md)
 
+Open-source integration notes: [Firecrawl + AiToEarn Integration](docs/open-source-integration.md)
+
+100% completion roadmap: [Module-by-module roadmap](docs/100-percent-completion-roadmap.md) / [Chinese beginner guide](docs/zh-CN/100-percent-completion-guide.md)
+
 ## What This Project Does
 
 Give the Skill a product link or website link. It can then:
@@ -64,9 +68,11 @@ The repository implements the local Codex Skill workflow and safety gates. It do
 | Area | Status | Notes |
 | --- | --- | --- |
 | Product URL reading | Ready | Browser snapshots, structured JSON intake, static fallback, public web-text fallback, URL discovery, and batch runner are included. |
-| Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, or user exports. |
+| Viral research | Ready with access limits | YouTube and GitHub can use public or official paths. Zhihu, Xiaohongshu, Douyin, and TikTok use browser-visible evidence, official access, user exports, or the optional Firecrawl-style web data backend. |
+| Optional web data backend | Ready | `scripts/web_data_provider.py` supports Firecrawl-style Search, Scrape, Map, Crawl, and Batch Scrape through environment variables, and is integrated into product URL reading, site URL discovery, and platform search capture. |
+| Platform capability registry | Ready | `scripts/platform_capabilities.py` documents platform Create/Publish/Engage/Monetize/Search capability boundaries inspired by AiToEarn while rejecting cookie/simulated-login automation. |
 | Copy and media generation | Ready | Platform-native copy, first-batch engagement prompts, ffmpeg MP4 rendering, PNG cover images, and detail images are included. Voiceover can use an audio file or Windows review-quality TTS. |
-| Publishing | Partial | GitHub, YouTube, Douyin, and TikTok require credentials, platform authorization, app scopes, and explicit approval. Zhihu and Xiaohongshu default to manual or browser-assisted flows. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
+| Publishing | Partial | GitHub and YouTube keep official API dry-run-first publish ports. Douyin, Zhihu, Xiaohongshu, and TikTok default to manual or browser-assisted flows unless verified official creator publishing access is available. `launch_unlock_pack.py` builds one setup pack for platform gates, credentials, browser-assisted publish payloads, and real-evidence templates. `browser_publish_session.py` combines payload preparation, visible-field fill, screenshots, final manual publish checklist, and post-publish URL recovery commands. |
 | Metrics and revenue | Waiting for real evidence | The Skill can initialize a fillable evidence inbox, run a post-publish performance monitor, import evidence files, recover real data, and optimize the next round, but it cannot invent published URLs, platform metrics, orders, or revenue. |
 | Self-evolution | Controlled | The Skill can audit tools, docs, repo state, and installed Skill drift. It only syncs or installs allowlisted runtimes with explicit commands. |
 | Browser extension | Store package and deployable backend included | `browser-extension/` captures the current tab, builds Codex commands or hosted run payloads, estimates subscription cost, and links to ENHE. `scripts/package_browser_extension.py` validates MV3 and remote-code guardrails. `backend/license-service/` now provides Stripe Checkout, signed webhooks, license validation, PostgreSQL-backed quota state, usage reservation/commit, hosted-run queue/status endpoints, and an isolated hosted worker. `deploy/promotion-manager/`, `docs/store/`, and `docs/legal/` prepare deployment, review copy, privacy, terms, refund, and support materials. External account setup, live Stripe configuration, server deployment, and store approval remain operator gates. |
@@ -104,6 +110,22 @@ Optional PNG cover/detail image runtime:
 ```powershell
 python -m pip install pillow
 ```
+
+Optional official YouTube Data API publishing client:
+
+```powershell
+python -m pip install -r requirements-youtube.txt
+```
+
+This installs `google-api-python-client` plus the Google OAuth/auth helper packages used by `scripts\publish_executor.py --platform youtube` and `scripts\youtube_oauth_publish.py`.
+
+Check whether YouTube credentials are visible to the project without uploading or printing secret values:
+
+```powershell
+python scripts\youtube_credential_check.py --env-file "C:\path\to\.env" --out-dir ".\promotion-output"
+```
+
+The YouTube OAuth helpers accept `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` and the template aliases `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`.
 
 Run tests:
 
@@ -150,6 +172,8 @@ python scripts\final_capability_runner.py `
 Review readiness:
 
 ```powershell
+python scripts\completion_roadmap.py --out-dir ".\promotion-output"
+python scripts\operator_action_checklist.py --out-dir ".\promotion-output"
 python scripts\final_capability_audit.py --out-dir ".\promotion-output"
 python scripts\self_evolution_audit.py --out-dir ".\promotion-output"
 python scripts\final_capability_readiness.py --out-dir ".\promotion-output"
@@ -502,6 +526,8 @@ python scripts\real_evidence_inbox.py `
 - [Subscription pricing](docs/subscription-pricing.md)
 - [Billing backend contract](docs/billing-backend-contract.md)
 - [Final capability map](docs/final-capability-map.md)
+- [100% completion roadmap](docs/100-percent-completion-roadmap.md)
+- [Chinese 100% completion guide](docs/zh-CN/100-percent-completion-guide.md)
 
 ## License
 

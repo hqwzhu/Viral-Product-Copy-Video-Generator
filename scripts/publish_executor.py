@@ -16,15 +16,24 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from env_loader import (
+    YOUTUBE_ACCESS_TOKEN_ENVS,
+    first_env,
+    load_project_env,
+    preparse_env_file,
+)
+
 
 TODAY = date.today().isoformat()
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 GITHUB_API_VERSION = "2022-11-28"
+YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
-    execution = build_execution(args)
+    execution = build_execution(args, env_load)
     if args.platform == "github":
         result = execute_github(args, execution)
     elif args.platform == "youtube":
@@ -43,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", required=True, choices=["github", "youtube", "douyin"])
     parser.add_argument("--execute", action="store_true", help="Perform the write action. Default is dry run.")
     parser.add_argument("--approval", default="", help=f"Must equal {APPROVAL_PHRASE} when --execute is used.")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before reading credentials. Values are never written to reports.")
     parser.add_argument("--out-dir", default="./promotion-output")
 
     github = parser.add_argument_group("GitHub")
@@ -80,11 +90,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_execution(args: argparse.Namespace) -> dict[str, Any]:
+def build_execution(args: argparse.Namespace, env_load: dict[str, object]) -> dict[str, Any]:
     return {
         "generatedAt": TODAY,
         "generatedAtUtc": utc_now(),
         "platform": args.platform,
+        "envLoad": env_load,
         "mode": "execute_requested" if args.execute else "dry_run",
         "approvalRequired": True,
         "approvalPhrase": APPROVAL_PHRASE,
@@ -302,7 +313,8 @@ def execute_youtube(args: argparse.Namespace, execution: dict[str, Any]) -> dict
         "credentialStatus": token_status,
         "request": {
             "method": "POST",
-            "endpoint": "/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
+            "endpoint": "youtube.videos.insert(part=snippet,status)",
+            "clientLibrary": "google-api-python-client",
             "videoFile": args.video_file or "",
             "privacyStatus": args.privacy_status,
             "title": args.title,
@@ -321,6 +333,9 @@ def execute_youtube(args: argparse.Namespace, execution: dict[str, Any]) -> dict
 
 
 def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
+    client_error = google_api_client_dependency_error()
+    if client_error:
+        return client_error
     video_path = Path(args.video_file)
     if not video_path.exists():
         return {"status": "blocked", "reason": f"Video file not found: {video_path}"}
@@ -334,26 +349,19 @@ def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "status": {"privacyStatus": args.privacy_status},
     }
-    boundary = "===============%s==" % uuid.uuid4().hex
-    media_type = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
-    body = build_multipart_body(boundary, metadata, video_path, media_type)
-    request = urllib.request.Request(
-        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": "Bearer " + youtube_token(),
-            "Content-Type": f"multipart/related; boundary={boundary}",
-            "Content-Length": str(len(body)),
-            "User-Agent": "ViralProductPromotionSkill/1.0",
-        },
-    )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        message = exc.read().decode("utf-8", errors="replace")
-        return {"status": "error", "httpStatus": exc.code, "reason": message[:500]}
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
+
+        credentials = Credentials(token=youtube_token(), scopes=[YOUTUBE_UPLOAD_SCOPE])
+        youtube = build("youtube", "v3", credentials=credentials)
+        media = MediaFileUpload(str(video_path), mimetype=mimetypes.guess_type(str(video_path))[0] or "video/mp4", resumable=True)
+        data = youtube.videos().insert(part="snippet,status", body=metadata, media_body=media).execute()
+    except HttpError as exc:
+        content = exc.content.decode("utf-8", errors="replace") if getattr(exc, "content", None) else str(exc)
+        return {"status": "error", "httpStatus": getattr(getattr(exc, "resp", None), "status", 0), "reason": content[:500]}
     except Exception as exc:  # noqa: BLE001 - CLI reports connector errors compactly.
         return {"status": "error", "reason": str(exc)}
     video_id = data.get("id", "")
@@ -362,6 +370,7 @@ def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
         "publishedUrl": f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
         "contentId": video_id,
         "evidence": [f"https://www.youtube.com/watch?v={video_id}" if video_id else ""],
+        "clientLibrary": "google-api-python-client",
     }
 
 
@@ -523,20 +532,6 @@ def nested_value(value: Any, key: str) -> Any:
     return ""
 
 
-def build_multipart_body(boundary: str, metadata: dict[str, Any], video_path: Path, media_type: str) -> bytes:
-    metadata_part = (
-        f"--{boundary}\r\n"
-        "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-        f"{json.dumps(metadata, ensure_ascii=False)}\r\n"
-    ).encode("utf-8")
-    media_header = (
-        f"--{boundary}\r\n"
-        f"Content-Type: {media_type}\r\n\r\n"
-    ).encode("utf-8")
-    closing = f"\r\n--{boundary}--\r\n".encode("utf-8")
-    return metadata_part + media_header + video_path.read_bytes() + closing
-
-
 def build_form_multipart_body(boundary: str, field_name: str, file_path: Path, media_type: str) -> bytes:
     header = (
         f"--{boundary}\r\n"
@@ -683,7 +678,24 @@ def github_token() -> str:
 
 
 def youtube_token() -> str:
-    return os.environ.get("YOUTUBE_ACCESS_TOKEN") or os.environ.get("YOUTUBE_OAUTH_ACCESS_TOKEN") or ""
+    return first_env(YOUTUBE_ACCESS_TOKEN_ENVS)
+
+
+def google_api_client_dependency_error() -> dict[str, Any] | None:
+    try:
+        import google.oauth2.credentials  # noqa: F401
+        import googleapiclient.discovery  # noqa: F401
+        import googleapiclient.http  # noqa: F401
+    except ImportError as exc:
+        return {
+            "status": "blocked",
+            "reason": (
+                "YouTube upload requires google-api-python-client and Google auth helpers. "
+                "Install with: python -m pip install -r requirements-youtube.txt"
+            ),
+            "missingDependency": str(exc),
+        }
+    return None
 
 
 def douyin_token() -> str:

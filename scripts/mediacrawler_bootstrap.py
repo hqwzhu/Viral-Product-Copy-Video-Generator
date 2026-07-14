@@ -5,9 +5,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
+
+
+def apply_cdp_port_override(config: Any, raw_port: str | None) -> None:
+    if not raw_port or not raw_port.strip():
+        return
+    port = int(raw_port)
+    if not 1 <= port <= 65535:
+        raise ValueError("ENHE_MEDIACRAWLER_CDP_PORT must be between 1 and 65535")
+    config.CDP_DEBUG_PORT = port
 
 
 def apply_creator_override(config: Any, parsed: Any) -> None:
@@ -53,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     import config  # type: ignore[import-not-found]
     from tools.cdp_browser import CDPBrowserManager  # type: ignore[import-not-found]
 
+    apply_cdp_port_override(config, os.environ.get("ENHE_MEDIACRAWLER_CDP_PORT"))
     patch_safe_cdp_cleanup(config, CDPBrowserManager)
     original_parse_cmd = cmd_arg.parse_cmd
 

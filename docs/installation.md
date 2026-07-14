@@ -64,6 +64,24 @@ Use this when you want `media_asset_pack.py` to generate PNG covers and detail i
 python -m pip install pillow
 ```
 
+## Optional YouTube Official API Client
+
+Use this when you want to run the dry-run-first YouTube official publishing port or the same-process YouTube OAuth upload helper:
+
+```powershell
+python -m pip install -r requirements-youtube.txt
+```
+
+This installs `google-api-python-client`, `google-auth-httplib2`, and `google-auth-oauthlib`. Real YouTube upload still requires Google OAuth credentials, the `https://www.googleapis.com/auth/youtube.upload` scope, a valid video file, `I_APPROVE_PUBLISH=true`, and `PUBLISH_DRY_RUN=false`.
+
+Verify YouTube credential readiness without uploading or printing secret values:
+
+```powershell
+python scripts\youtube_credential_check.py --env-file "C:\path\to\.env" --out-dir ".\promotion-output"
+```
+
+Accepted OAuth client variable names: `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` or `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`.
+
 ## Install As A Codex Skill
 
 Copy or sync the reviewed files into the installed Skill directory only after verification:

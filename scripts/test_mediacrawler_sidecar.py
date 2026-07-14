@@ -160,6 +160,17 @@ class SidecarCommandTests(unittest.TestCase):
         )
         self.assertEqual(detail[detail.index("--specified_id") + 1], "https://www.douyin.com/video/dy-aweme-001")
         self.assertEqual(creator[creator.index("--creator_id") + 1], "creator-id-001")
+
+    def test_build_command_resolves_relative_output_path_for_upstream_working_directory(self) -> None:
+        command = sidecar.build_mediacrawler_command(
+            self.install,
+            sidecar.CollectRequest(platform="xiaohongshu", mode="search", query="AI"),
+            Path("promotion-output") / "raw",
+        )
+
+        output_path = Path(command[command.index("--save_data_path") + 1])
+        self.assertTrue(output_path.is_absolute())
+
     def test_collect_request_rejects_invalid_modes_and_hard_cap_overrides(self) -> None:
         invalid = [
             {"platform": "weibo", "mode": "search", "query": "AI"},
@@ -185,6 +196,11 @@ class SidecarCommandTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_cdp_port_can_follow_current_authenticated_chrome(self) -> None:
+        config = SimpleNamespace(CDP_DEBUG_PORT=9222)
+        bootstrap.apply_cdp_port_override(config, "7486")
+        self.assertEqual(config.CDP_DEBUG_PORT, 7486)
+
     def test_zhihu_creator_target_is_applied_to_upstream_config(self) -> None:
         config = SimpleNamespace(ZHIHU_CREATOR_URL_LIST=[])
         parsed = SimpleNamespace(platform="zhihu", type="creator", creator_id="https://www.zhihu.com/people/a,https://www.zhihu.com/people/b")
@@ -305,6 +321,18 @@ class SidecarRuntimeTests(unittest.TestCase):
                 self.assertEqual(result.status, expected)
                 self.assertNotIn("Cookie", result.stderr_tail)
 
+    def test_safe_tail_redacts_quoted_fields_and_signed_url_parameters(self) -> None:
+        value = (
+            "{'xsec_token': 'xhs-secret', \"msToken\": \"ms-secret\", "
+            "'url': 'https://example.test/video.mp4?sign=url-secret&t=123'}"
+        )
+
+        sanitized = sidecar.safe_tail(value)
+
+        for secret in ("xhs-secret", "ms-secret", "url-secret"):
+            self.assertNotIn(secret, sanitized)
+        self.assertIn("REDACTED", sanitized)
+
     def test_runner_reports_no_results_for_success_without_jsonl_rows(self) -> None:
         def empty_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
@@ -396,6 +424,64 @@ class SidecarInstallTests(unittest.TestCase):
         self.assertFalse(self.install.checkout.exists())
         self.assertFalse(self.install.manifest_path.exists())
         self.assertEqual(list(self.install.root.glob("installing-*")), [])
+
+
+class NormalizationLimitTests(unittest.TestCase):
+    salt = b"fixture-only-local-salt"
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.run_dir = Path(self.temp.name)
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def load_fixture(self, name: str) -> list[dict[str, object]]:
+        return [json.loads(line) for line in (FIXTURES / name).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def test_enforces_requested_content_limit_before_persistence(self) -> None:
+        template = self.load_fixture("xiaohongshu-contents.jsonl")[0]
+        rows = [{**template, "note_id": f"xhs-note-{index:03d}"} for index in range(20)]
+
+        payload = platform_data_manager.normalize_rows(
+            "xiaohongshu",
+            rows,
+            [],
+            self.run_dir,
+            self.salt,
+            content_limit=1,
+            comments_per_content_limit=0,
+        )
+
+        self.assertEqual(len(payload["contents"]), 1)
+        self.assertEqual(payload["counts"]["sourceContents"], 20)
+        self.assertEqual(payload["counts"]["normalizedContents"], 1)
+        self.assertEqual(payload["counts"]["limitedContents"], 19)
+        self.assertEqual(len((self.run_dir / "contents.jsonl").read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_enforces_requested_comment_limit_per_kept_content(self) -> None:
+        content = self.load_fixture("xiaohongshu-contents.jsonl")[0]
+        comment = self.load_fixture("xiaohongshu-comments.jsonl")[0]
+        comments = [
+            {**comment, "comment_id": f"xhs-comment-{index:03d}", "note_id": content["note_id"]}
+            for index in range(3)
+        ]
+
+        payload = platform_data_manager.normalize_rows(
+            "xiaohongshu",
+            [content],
+            comments,
+            self.run_dir,
+            self.salt,
+            content_limit=1,
+            comments_per_content_limit=1,
+        )
+
+        self.assertEqual(len(payload["comments"]), 1)
+        self.assertEqual(payload["counts"]["sourceComments"], 3)
+        self.assertEqual(payload["counts"]["normalizedComments"], 1)
+        self.assertEqual(payload["counts"]["limitedComments"], 2)
+        self.assertEqual(len((self.run_dir / "comments.jsonl").read_text(encoding="utf-8").splitlines()), 1)
 
 
 class DownstreamTests(unittest.TestCase):

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -13,6 +14,9 @@ from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+
+from env_loader import load_project_env, preparse_env_file
+from web_data_provider import DEFAULT_FIRECRAWL_BASE_URL, WebDataProviderError, search_web
 
 
 TODAY = date.today().isoformat()
@@ -87,6 +91,7 @@ class SearchSnapshotHTMLParser(HTMLParser):
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     platforms = split_csv(args.platforms) or DEFAULT_PLATFORMS
     snapshot_dir = Path(args.snapshot_dir) if args.snapshot_dir else Path(args.out_dir) / "search-snapshots"
@@ -98,6 +103,7 @@ def main() -> None:
     report = {
         "generatedAt": TODAY,
         "query": args.query,
+        "envLoad": env_load,
         "snapshotDir": str(snapshot_dir),
         "records": records,
         "guardrails": [
@@ -116,12 +122,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platforms", default=",".join(DEFAULT_PLATFORMS), help="Comma-separated platforms.")
     parser.add_argument("--top-n", type=int, default=10)
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before reading provider credentials. Values are never written to reports.")
     parser.add_argument("--snapshot-dir", default="", help="Directory to write <platform>.json snapshots.")
     parser.add_argument("--html-snapshot-dir", default="", help="Optional fixture/export directory with <platform>.html files.")
     parser.add_argument("--timeout-ms", type=int, default=30000)
     parser.add_argument("--wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true")
+    parser.add_argument("--web-data-provider", default=os.environ.get("WEB_DATA_PROVIDER", "auto"), choices=["auto", "local", "firecrawl"], help="Optional provider for public web search before browser capture.")
+    parser.add_argument("--firecrawl-base-url", default=os.environ.get("FIRECRAWL_BASE_URL", DEFAULT_FIRECRAWL_BASE_URL), help="Firecrawl API base URL. API key is read only from FIRECRAWL_API_KEY.")
+    parser.add_argument("--web-data-fixture-json", default="", help="Local web data fixture for tests/offline review.")
     return parser.parse_args()
 
 
@@ -132,6 +142,8 @@ def capture_platform(args: argparse.Namespace, platform: str, snapshot_dir: Path
         snapshot = snapshot_from_html(html_file.read_text(encoding="utf-8-sig"), platform, args.query, search_url, args.top_n, str(html_file))
         status = "ready"
     else:
+        snapshot, status = snapshot_from_web_data(args, platform, search_url)
+    if status not in {"ready"} and not html_file:
         snapshot, status = snapshot_from_browser(args, platform, search_url)
     snapshot_path = snapshot_dir / f"{platform}.json"
     snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -143,6 +155,75 @@ def capture_platform(args: argparse.Namespace, platform: str, snapshot_dir: Path
         "recordCount": len(snapshot.get("items", [])),
         "reason": snapshot.get("reason", ""),
     }
+
+
+def snapshot_from_web_data(args: argparse.Namespace, platform: str, search_url: str) -> tuple[dict[str, Any], str]:
+    provider_query = web_data_query(platform, args.query)
+    try:
+        result = search_web(
+            provider_query,
+            limit=max(args.top_n, 5),
+            provider=args.web_data_provider,
+            base_url=args.firecrawl_base_url,
+            fixture_json=args.web_data_fixture_json,
+        )
+    except WebDataProviderError as exc:
+        return blocked_snapshot(platform, args.query, search_url, f"Web data provider failed: {exc}"), "blocked"
+
+    status = str(result.get("status") or "skipped")
+    if status != "ready":
+        return {
+            "platform": platform,
+            "query": args.query,
+            "source": search_url,
+            "searchUrl": search_url,
+            "snapshotType": "platform_search_browser",
+            "captureMode": "web_data_provider",
+            "status": status,
+            "reason": result.get("reason", ""),
+            "webDataProvider": result.get("provider", ""),
+            "webDataQuery": provider_query,
+            "apiKeyPresent": bool(result.get("apiKeyPresent")),
+            "items": [],
+            "guardrails": snapshot_guardrails(),
+        }, status
+
+    items = []
+    seen: set[str] = set()
+    for row in result.get("results", []):
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "")
+        title = normalize_space(row.get("title") or first_sentence(row.get("markdown", "")) or url)
+        if not title or not relevant_url(platform, url):
+            continue
+        key = f"{url}::{title.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        content = normalize_space(row.get("markdown") or row.get("description") or title)
+        items.append({"title": title, "url": url, "content": content})
+        if len(items) >= args.top_n:
+            break
+
+    snapshot = {
+        "platform": platform,
+        "query": args.query,
+        "source": result.get("baseUrl", ""),
+        "searchUrl": search_url,
+        "snapshotType": "platform_search_browser",
+        "captureMode": "firecrawl_search",
+        "title": f"{platform} search results for {args.query}",
+        "webDataProvider": result.get("provider", ""),
+        "webDataQuery": provider_query,
+        "apiKeyPresent": bool(result.get("apiKeyPresent")),
+        "items": items,
+        "guardrails": snapshot_guardrails(),
+    }
+    if not items:
+        snapshot["reason"] = "Web data provider returned no platform-relevant results."
+        return snapshot, "partial_ready"
+    return snapshot, "ready"
 
 
 def snapshot_from_browser(args: argparse.Namespace, platform: str, search_url: str) -> tuple[dict[str, Any], str]:
@@ -319,6 +400,18 @@ def search_url_for(platform: str, query: str) -> str:
     path_encoded = urllib.parse.quote(query, safe="")
     template = PLATFORM_SEARCH.get(platform, PLATFORM_SEARCH["youtube"])
     return template.format(query=encoded, path_query=path_encoded)
+
+
+def web_data_query(platform: str, query: str) -> str:
+    domain = {
+        "youtube": "youtube.com",
+        "zhihu": "zhihu.com",
+        "xiaohongshu": "xiaohongshu.com",
+        "douyin": "douyin.com",
+        "github": "github.com",
+        "tiktok": "tiktok.com",
+    }.get(platform)
+    return f"site:{domain} {query}" if domain else query
 
 
 def html_snapshot_file(directory: str, platform: str) -> Path | None:

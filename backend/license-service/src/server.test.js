@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -94,6 +95,126 @@ test("license service queues and completes a hosted worker run", async () => {
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("ZPAY checkout activates a hashed license after a verified domestic payment", async () => {
+  const providerRequests = [];
+  const provider = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    providerRequests.push(Object.fromEntries(new URLSearchParams(body)));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      code: 1,
+      trade_no: "zpay_trade_test",
+      payurl: "https://pay.example.test/order/zpay_trade_test"
+    }));
+  });
+  await new Promise((resolve) => provider.listen(0, "127.0.0.1", resolve));
+
+  const providerBaseUrl = `http://127.0.0.1:${provider.address().port}`;
+  Object.assign(process.env, {
+    ZPAY_API_BASE: providerBaseUrl,
+    ZPAY_PID: "merchant-test",
+    ZPAY_KEY: "zpay-test-secret",
+    ZPAY_DEFAULT_TYPE: "wxpay",
+    ZPAY_CHANNEL_ID: "channel-test",
+    ZPAY_PRICE_STARTER_CNY: "19",
+    ZPAY_PRICE_GROWTH_CNY: "59",
+    ZPAY_PRICE_SCALE_CNY: "199",
+    ZPAY_LICENSE_DAYS: "30"
+  });
+  saveState(emptyState());
+
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const checkout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        plan: "starter",
+        email: "buyer@example.com",
+        type: "wxpay"
+      }),
+      redirect: "manual"
+    });
+    assert.equal(checkout.status, 303);
+    assert.equal(checkout.headers.get("location"), "https://pay.example.test/order/zpay_trade_test");
+    const setCookie = checkout.headers.get("set-cookie") || "";
+    assert.match(setCookie, /enhe_pm_claim=/);
+    const licenseKey = decodeURIComponent(setCookie.match(/enhe_pm_claim=([^;]+)/)[1]);
+    assert.match(licenseKey, /^pm_live_/);
+
+    assert.equal(providerRequests.length, 1);
+    const providerRequest = providerRequests[0];
+    assert.equal(providerRequest.type, "wxpay");
+    assert.equal(providerRequest.money, "19.00");
+    assert.equal(providerRequest.name, "ENHE Promotion Manager Starter");
+    assert.equal(providerRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
+    assert.match(providerRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
+    assert.equal(providerRequest.sign, signZpay(providerRequest, process.env.ZPAY_KEY));
+
+    const pendingState = await store.load();
+    const payment = Object.values(pendingState.payments)[0];
+    const pendingLicense = pendingState.licenses[payment.licenseId];
+    assert.equal(payment.status, "pending");
+    assert.equal(pendingLicense.status, "pending_payment");
+    assert.equal(pendingLicense.licenseKeyHash, hashLicenseKey(licenseKey));
+    assert.equal(JSON.stringify(pendingState).includes(licenseKey), false);
+
+    const notify = {
+      pid: process.env.ZPAY_PID,
+      out_trade_no: payment.orderNo,
+      trade_no: "zpay_trade_test",
+      trade_status: "TRADE_SUCCESS",
+      type: "wxpay",
+      money: "19.00"
+    };
+    notify.sign_type = "MD5";
+    notify.sign = signZpay(notify, process.env.ZPAY_KEY);
+    const notified = await fetch(`${baseUrl}/api/promotion-manager/webhooks/zpay?${new URLSearchParams(notify)}`);
+    assert.equal(notified.status, 200);
+    assert.equal(await notified.text(), "success");
+
+    const paidState = await store.load();
+    const paidLicense = paidState.licenses[payment.licenseId];
+    assert.equal(paidState.payments[payment.id].status, "paid");
+    assert.equal(paidLicense.status, "active");
+    assert.equal(paidLicense.plan, "starter");
+    assert.equal(paidLicense.creditsRemaining, 60);
+    assert.match(paidLicense.renewsAt, /^\d{4}-\d{2}-\d{2}$/);
+
+    const success = await fetch(`${baseUrl}/promotion-manager/checkout/success?orderNo=${payment.orderNo}`, {
+      headers: { cookie: `enhe_pm_claim=${encodeURIComponent(licenseKey)}` }
+    });
+    assert.equal(success.status, 200);
+    assert.match(await success.text(), new RegExp(licenseKey));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => provider.close(resolve));
+    for (const key of [
+      "ZPAY_API_BASE",
+      "ZPAY_PID",
+      "ZPAY_KEY",
+      "ZPAY_DEFAULT_TYPE",
+      "ZPAY_CHANNEL_ID",
+      "ZPAY_PRICE_STARTER_CNY",
+      "ZPAY_PRICE_GROWTH_CNY",
+      "ZPAY_PRICE_SCALE_CNY",
+      "ZPAY_LICENSE_DAYS"
+    ]) delete process.env[key];
+  }
+});
+
+function signZpay(params, merchantKey) {
+  const source = Object.keys(params)
+    .filter((key) => key !== "sign" && key !== "sign_type" && String(params[key] ?? "") !== "")
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+  return crypto.createHash("md5").update(`${source}${merchantKey}`, "utf8").digest("hex");
+}
 
 async function postJson(url, body) {
   const response = await fetch(url, {

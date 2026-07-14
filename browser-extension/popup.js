@@ -6,10 +6,10 @@ const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
 
 const PLANS = {
-  free: { label: "Free", credits: 5, price: 0 },
-  starter: { label: "Starter", credits: 60, price: 29 },
-  growth: { label: "Growth", credits: 220, price: 99 },
-  scale: { label: "Scale", credits: 800, price: 299 }
+  free: { label: "Free", credits: 5, priceCny: 0 },
+  starter: { label: "Starter", credits: 60, priceCny: 19 },
+  growth: { label: "Growth", credits: 220, priceCny: 59 },
+  scale: { label: "Scale", credits: 800, priceCny: 199 }
 };
 
 const COST_PER_CREDIT = 0.35;
@@ -840,8 +840,8 @@ function updateEstimate() {
   const plan = PLANS[els.plan.value] || PLANS.free;
   const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.creditMeter.textContent = `${estimate.credits} credits`;
-  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at USD ${plan.price}/month. ${estimate.label}: ${estimate.creditsPerRun} credits/run, ${estimate.credits} credits planned, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
-  if (estimate.credits > plan.credits && plan.price > 0) {
+  els.costSummary.textContent = `${plan.label} includes ${plan.credits} credits at CNY ${plan.priceCny}/30 days. ${estimate.label}: ${estimate.creditsPerRun} credits/run, ${estimate.credits} credits planned, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`;
+  if (estimate.credits > plan.credits && plan.priceCny > 0) {
     els.costSummary.textContent += " Add prepaid credits or reduce automation depth.";
   }
 }

@@ -201,7 +201,8 @@ def init_config(args: argparse.Namespace) -> None:
         "jobs": [job],
         "guardrails": [
             "Runs local workflow generation on schedule.",
-            "Official publishing still requires explicit credentials and approval.",
+            "Official publishing is limited to verified API platforms and still requires explicit credentials and approval.",
+            "Douyin publishing is browser-assisted/manual in the current setup; publish.douyin.videoFile only attaches an MP4 asset.",
             "No cookies, passwords, hidden browser tokens, or fabricated metrics are stored.",
         ],
     }

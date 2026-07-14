@@ -120,7 +120,7 @@ def build_mediacrawler_command(install: SidecarInstall, request: CollectRequest,
         "--save_data_option",
         "jsonl",
         "--save_data_path",
-        str(raw_dir),
+        str(raw_dir.resolve()),
         "--get_comment",
         "true" if request.max_comments else "false",
         "--get_sub_comment",
@@ -501,8 +501,17 @@ def jsonl_row_count(raw_dir: Path) -> int:
 def safe_tail(value: str | None, limit: int = 1200) -> str:
     text = str(value or "")
     text = re.sub(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer REDACTED", text)
+    sensitive_key = r"authorization|cookie|xsec_token|mstoken|verifyfp|signature|access_token|sign"
     text = re.sub(
-        r"(?i)(authorization|cookie|xsec_token|mstoken|verifyfp|signature|access_token)\s*[:=]\s*[^\s,;&]+",
+        rf"(?i)(?P<key_quote>[\"']?)(?P<key>{sensitive_key})(?P=key_quote)(?P<separator>\s*[:=]\s*)(?P<value_quote>[\"'])(?P<value>.*?)(?P=value_quote)",
+        lambda match: (
+            f"{match.group('key_quote')}{match.group('key')}{match.group('key_quote')}"
+            f"{match.group('separator')}{match.group('value_quote')}REDACTED{match.group('value_quote')}"
+        ),
+        text,
+    )
+    text = re.sub(
+        rf"(?i)({sensitive_key})\s*[:=]\s*[^\s,;&}}\]]+",
         r"\1=REDACTED",
         text,
     )

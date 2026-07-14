@@ -114,7 +114,14 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             salt = install.identity_salt_path.read_bytes()
 
             def consume(raw_dir: Path) -> dict[str, Any]:
-                return normalize_raw_dir(raw_dir, request.platform, run_dir, salt)
+                return normalize_raw_dir(
+                    raw_dir,
+                    request.platform,
+                    run_dir,
+                    salt,
+                    content_limit=request.max_contents,
+                    comments_per_content_limit=request.max_comments,
+                )
 
             try:
                 result = mediacrawler_sidecar.run_sidecar(
@@ -188,7 +195,15 @@ def normalize_fixture_dir(fixture_dir: Path, platform: str, run_dir: Path) -> di
     return normalize_rows(platform, content_rows, comment_rows, run_dir, fixture_salt)
 
 
-def normalize_raw_dir(raw_dir: Path, platform: str, run_dir: Path, salt: bytes) -> dict[str, Any]:
+def normalize_raw_dir(
+    raw_dir: Path,
+    platform: str,
+    run_dir: Path,
+    salt: bytes,
+    *,
+    content_limit: int | None = None,
+    comments_per_content_limit: int | None = None,
+) -> dict[str, Any]:
     content_paths = sorted(path for path in raw_dir.rglob("*.jsonl") if "contents" in path.name.lower())
     comment_paths = sorted(path for path in raw_dir.rglob("*.jsonl") if "comments" in path.name.lower())
     return normalize_rows(
@@ -197,6 +212,8 @@ def normalize_raw_dir(raw_dir: Path, platform: str, run_dir: Path, salt: bytes) 
         read_jsonl_files(comment_paths),
         run_dir,
         salt,
+        content_limit=content_limit,
+        comments_per_content_limit=comments_per_content_limit,
     )
 
 
@@ -206,6 +223,9 @@ def normalize_rows(
     comment_rows: list[dict[str, Any]],
     run_dir: Path,
     salt: bytes,
+    *,
+    content_limit: int | None = None,
+    comments_per_content_limit: int | None = None,
 ) -> dict[str, Any]:
     normalized_contents = []
     dropped_contents = 0
@@ -219,6 +239,11 @@ def normalize_rows(
         normalized_contents,
         lambda item: (item.get("platform"), item.get("contentId")),
     )
+    content_limit = max(0, content_limit) if content_limit is not None else None
+    limited_contents = 0
+    if content_limit is not None:
+        limited_contents = max(0, len(normalized_contents) - content_limit)
+        normalized_contents = normalized_contents[:content_limit]
     for index, record in enumerate(normalized_contents, start=1):
         record["evidencePath"] = f"contents.jsonl#L{index}"
 
@@ -230,6 +255,26 @@ def normalize_rows(
             dropped_comments += 1
             continue
         normalized_comments.append(record)
+    comments_per_content_limit = (
+        max(0, comments_per_content_limit) if comments_per_content_limit is not None else None
+    )
+    limited_comments = 0
+    if content_limit is not None:
+        kept_content_ids = {record["contentId"] for record in normalized_contents}
+        kept_comments = [record for record in normalized_comments if record["contentId"] in kept_content_ids]
+        limited_comments += len(normalized_comments) - len(kept_comments)
+        normalized_comments = kept_comments
+    if comments_per_content_limit is not None:
+        comment_counts: dict[str, int] = {}
+        kept_comments = []
+        for record in normalized_comments:
+            content_id = record["contentId"]
+            if comment_counts.get(content_id, 0) >= comments_per_content_limit:
+                limited_comments += 1
+                continue
+            comment_counts[content_id] = comment_counts.get(content_id, 0) + 1
+            kept_comments.append(record)
+        normalized_comments = kept_comments
     for index, record in enumerate(normalized_comments, start=1):
         record["evidencePath"] = f"comments.jsonl#L{index}"
 
@@ -254,6 +299,8 @@ def normalize_rows(
             "droppedComments": dropped_comments,
             "duplicateContents": duplicate_contents,
             "duplicateComments": max(0, len(comment_rows) - len(mapped_comments)),
+            "limitedContents": limited_contents,
+            "limitedComments": limited_comments,
         },
     }
 
@@ -379,6 +426,8 @@ def empty_counts() -> dict[str, int]:
         "droppedComments": 0,
         "duplicateContents": 0,
         "duplicateComments": 0,
+        "limitedContents": 0,
+        "limitedComments": 0,
     }
 
 

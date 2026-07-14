@@ -148,14 +148,14 @@ CAPABILITIES: list[dict[str, Any]] = [
     {
         "platform": "douyin",
         "supportsOfficialApi": True,
-        "supportsDirectPublish": True,
+        "supportsDirectPublish": False,
         "supportsScheduledPublish": False,
         "recommendedMode": "browser_assisted_publish",
         "approvalRequired": True,
-        "requiredCredentials": ["Douyin Open Platform app", "video.create scope", "permission approval", "user authorization"],
+        "requiredCredentials": [],
         "riskLevel": "high",
         "notes": [
-            "Official API exists, but first-version Skill defaults to browser-assisted/manual publishing until app permissions are verified.",
+            "Official API code is reserved for future verified authorization; the current Skill defaults to browser-assisted/manual publishing.",
             "Do not bypass review, captcha, risk controls, or user-visible authorization.",
         ],
         "officialDocs": [
@@ -500,7 +500,7 @@ def build_self_learning_notes() -> dict[str, Any]:
         "generatedAt": TODAY,
         "currentConclusion": [
             "First version should remain a Codex-local Skill pipeline, not a SaaS UI or browser plugin.",
-            "YouTube, GitHub, TikTok, and Douyin have official API paths, but all require app/user authorization and human approval.",
+            "YouTube and GitHub have active official publishing ports. Douyin stays browser-assisted/manual because authorization is unavailable; its official path is reserved for future verified access.",
             "Zhihu and Xiaohongshu should default to manual publish packs unless official creator publishing access is verified.",
             "Reference projects are useful for patterns; none should be integrated without a separate security and compliance review.",
         ],

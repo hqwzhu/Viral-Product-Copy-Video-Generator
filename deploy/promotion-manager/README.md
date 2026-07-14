@@ -49,7 +49,16 @@ npm ci --omit=dev
 cp /opt/enhe/promotion-manager/current/deploy/promotion-manager/.env.production.example /etc/enhe-promotion-manager/api.env
 ```
 
-Edit `/etc/enhe-promotion-manager/api.env` and fill Stripe, PostgreSQL, and `LICENSE_PEPPER` values.
+Edit `/etc/enhe-promotion-manager/api.env` and fill PostgreSQL and `LICENSE_PEPPER` values. For domestic checkout, copy the existing ENHE website ZPAY merchant values into the server-only `ZPAY_*` variables and set the three CNY plan prices. Stripe remains optional for international subscriptions.
+
+The domestic flow is isolated from the website order database:
+
+```text
+Promotion Manager checkout -> shared ZPAY merchant -> signed ZPAY callback
+-> Promotion Manager payment record -> hashed license activation
+```
+
+`ZPAY_KEY` stays on the server. The extension never receives merchant credentials. Domestic payments are one-time 30-day licenses by default; change `ZPAY_LICENSE_DAYS` if the commercial term changes.
 
 ## Database
 

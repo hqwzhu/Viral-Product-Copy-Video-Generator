@@ -1052,7 +1052,7 @@ def external_gates() -> list[dict[str, str]]:
         {"area": "official_publish", "gate": "I_APPROVE_PUBLISH plus platform credentials are required for writes."},
         {"area": "youtube", "gate": "OAuth client credentials or a temporary OAuth access token are required for upload."},
         {"area": "github", "gate": "GITHUB_TOKEN or GH_TOKEN is required for repository writes."},
-        {"area": "douyin", "gate": "Approved open-platform app credentials, user authorization, and review are required."},
+        {"area": "douyin", "gate": "Current Douyin publishing is browser-assisted/manual; the official API port is reserved until verified authorization is available."},
         {"area": "zhihu_xiaohongshu", "gate": "Manual/browser-assisted publishing remains required unless official creator publishing access is verified."},
         {"area": "metrics_revenue", "gate": "Private analytics, orders, and revenue require official APIs, screenshots, or business exports."},
         {"area": "self_evolution", "gate": "Installed Skill sync and dependency changes require explicit reviewed approval."},

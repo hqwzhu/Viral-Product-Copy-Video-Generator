@@ -68,7 +68,11 @@ def parse_args() -> argparse.Namespace:
     youtube.add_argument("--youtube-category-id", default="22")
 
     douyin = parser.add_argument_group("Douyin")
-    douyin.add_argument("--douyin-video-file", default="", help="MP4 to upload through the Douyin Open Platform API.")
+    douyin.add_argument(
+        "--douyin-video-file",
+        default="",
+        help="MP4 asset for Douyin browser-assisted publishing. This does not enable official API publishing.",
+    )
     return parser.parse_args()
 
 
@@ -116,30 +120,31 @@ def build_queue(
         if not platform or (selected_platforms and platform not in selected_platforms):
             continue
         platform_content = pack.get("content") or content.get(platform) or {}
-        draft_path = write_platform_draft(out_dir, platform, platform_content, pack)
-        official_douyin_requested = platform == "douyin" and bool(args.douyin_video_file)
-        mode = "official_api_publish" if official_douyin_requested else str(pack.get("publishMode") or "manual_publish_required")
+        mode = effective_publish_mode(platform, pack)
+        effective_pack = with_douyin_video_payload(pack, args.douyin_video_file) if platform == "douyin" else dict(pack)
+        effective_pack["publishMode"] = mode
+        draft_path = write_platform_draft(out_dir, platform, platform_content, effective_pack)
         record: dict[str, Any] = {
             "id": f"{TODAY}-{platform}",
             "platform": platform,
             "publishMode": mode,
-            "approvalRequired": bool(pack.get("approvalRequired", True)),
-            "viralTitle": pack.get("viralTitle") or content_title(platform_content),
-            "copy": pack.get("copy", ""),
-            "tags": pack.get("tags") or platform_content.get("tags", []),
-            "firstBatch": pack.get("firstBatch", {}),
-            "video": pack.get("video", {}),
-            "cover": pack.get("cover", {}),
-            "detailImages": pack.get("detailImages", []),
-            "assets": pack.get("assets", []),
+            "approvalRequired": bool(effective_pack.get("approvalRequired", True)),
+            "viralTitle": effective_pack.get("viralTitle") or content_title(platform_content),
+            "copy": effective_pack.get("copy", ""),
+            "tags": effective_pack.get("tags") or platform_content.get("tags", []),
+            "firstBatch": effective_pack.get("firstBatch", {}),
+            "video": effective_pack.get("video", {}),
+            "cover": effective_pack.get("cover", {}),
+            "detailImages": effective_pack.get("detailImages", []),
+            "assets": effective_pack.get("assets", []),
             "contentDraft": str(draft_path),
-            "scheduleSuggestion": pack.get("scheduleSuggestion", ""),
-            "trackingFields": pack.get("trackingFields", []),
-            "trackingPlan": pack.get("trackingPlan", {}),
-            "warnings": pack.get("warnings", []),
+            "scheduleSuggestion": effective_pack.get("scheduleSuggestion", ""),
+            "trackingFields": effective_pack.get("trackingFields", []),
+            "trackingPlan": effective_pack.get("trackingPlan", {}),
+            "warnings": effective_pack.get("warnings", []),
         }
-        if (platform in OFFICIAL_PLATFORMS or official_douyin_requested) and mode == "official_api_publish":
-            record.update(run_official_queue_item(args, out_dir, promotion_dir, manifest, platform, platform_content, draft_path, pack))
+        if platform in OFFICIAL_PLATFORMS and mode == "official_api_publish":
+            record.update(run_official_queue_item(args, out_dir, promotion_dir, manifest, platform, platform_content, draft_path, effective_pack))
         elif mode in MANUAL_MODES:
             record.update(manual_queue_item(mode, platform))
         else:
@@ -157,12 +162,57 @@ def build_queue(
         "guardrails": [
             "Official API writes require --execute and the exact approval phrase.",
             "Credentials are read from environment variables by publish_executor.py and are never written to queue reports.",
-            "Zhihu, Xiaohongshu, and unverified platforms remain browser-assisted or manual.",
-            "Douyin can use the official executor only when a video file, user-authorized open-platform credentials, and explicit approval are supplied.",
+            "Zhihu, Xiaohongshu, Douyin, and unverified platforms remain browser-assisted or manual by default.",
+            "Douyin official API publishing is reserved for a future verified open-platform authorization path; current queues only attach MP4 assets for browser-assisted publishing.",
             "Do not bypass login, captcha, risk control, platform review, or account verification.",
             "Record published URLs and metrics only after real evidence exists.",
         ],
     }
+
+
+def effective_publish_mode(platform: str, pack: dict[str, Any]) -> str:
+    if platform == "douyin":
+        return "browser_assisted_publish"
+    return str(pack.get("publishMode") or "manual_publish_required")
+
+
+def with_douyin_video_payload(pack: dict[str, Any], video_file: str) -> dict[str, Any]:
+    effective = dict(pack)
+    path_text = str(video_file or "").strip()
+    if not path_text:
+        return effective
+    status = "ready" if Path(path_text).exists() else "missing"
+    video = dict(effective.get("video") or {})
+    video.update(
+        {
+            "required": True,
+            "status": status,
+            "path": path_text,
+            "source": "douyin_video_file_arg",
+        }
+    )
+    effective["video"] = video
+    assets = [item for item in (effective.get("assets") or []) if isinstance(item, dict)]
+    if not any(str(item.get("path") or "") == path_text for item in assets):
+        assets.append(
+            {
+                "type": "video",
+                "platform": "douyin",
+                "status": status,
+                "path": path_text,
+                "source": "douyin_video_file_arg",
+            }
+        )
+    effective["assets"] = assets
+    warnings = [str(item) for item in (effective.get("warnings") or []) if str(item).strip()]
+    warning = (
+        "Douyin is configured for browser-assisted publishing; --douyin-video-file attaches an MP4 asset "
+        "but does not enable official API publishing."
+    )
+    if warning not in warnings:
+        warnings.append(warning)
+    effective["warnings"] = warnings
+    return effective
 
 
 def run_official_queue_item(

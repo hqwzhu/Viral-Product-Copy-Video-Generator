@@ -12,6 +12,16 @@ const {
   saveJsonState
 } = require("./state-store");
 const { commitUsage, startHostedWorker } = require("./hosted-worker");
+const {
+  ZPAY_PRICE_ENV_BY_PLAN,
+  buildZpayPaymentRequest,
+  isZpayConfigured,
+  loadZpayConfig,
+  normalizeZpayType,
+  requestZpayPayment,
+  verifyZpayNotifyPayload,
+  zpayPriceForPlan
+} = require("./zpay");
 require("dotenv").config();
 
 const app = express();
@@ -85,7 +95,47 @@ app.post(
   })
 );
 
+app.get("/api/promotion-manager/webhooks/zpay", asyncHandler(async (req, res) => {
+  if (!isZpayConfigured()) {
+    return res.status(500).send("missing-zpay-config");
+  }
+  const payload = zpayPayloadFromQuery(req.query);
+  const state = await store.load();
+  const payment = Object.values(state.payments).find(
+    (item) => item.orderNo === String(payload.out_trade_no || "")
+  );
+  if (!payment) return res.status(404).send("order-not-found");
+
+  const validation = verifyZpayNotifyPayload(payload, payment, loadZpayConfig());
+  if (!validation.ok) return res.status(400).send(validation.reason);
+
+  await store.update((currentState) => {
+    const currentPayment = currentState.payments[payment.id];
+    const license = currentState.licenses[payment.licenseId];
+    if (!currentPayment || !license) throw new Error("ZPAY payment state is incomplete.");
+    if (currentPayment.status !== "paid") {
+      currentPayment.status = "paid";
+      currentPayment.providerTradeNo = String(payload.trade_no || currentPayment.providerTradeNo || "");
+      currentPayment.paidAt = nowIso();
+      currentPayment.updatedAt = nowIso();
+      license.status = "active";
+      license.creditsRemaining = PLAN_CREDITS[license.plan];
+      license.renewsAt = addDaysIso(loadZpayConfig().licenseDays);
+      license.updatedAt = nowIso();
+      audit(currentState, "zpay_payment_succeeded", {
+        paymentId: currentPayment.id,
+        licenseId: license.id,
+        plan: license.plan,
+        amount: currentPayment.amount,
+        paymentType: currentPayment.paymentType
+      });
+    }
+  });
+  return res.type("text").send("success");
+}));
+
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "100kb" }));
 
 app.get("/health", asyncHandler(async (_req, res) => {
   await store.init();
@@ -93,6 +143,7 @@ app.get("/health", asyncHandler(async (_req, res) => {
     ok: true,
     service: "enhe-promotion-manager-license-service",
     stripeConfigured: Boolean(stripe),
+    zpayConfigured: isZpayConfigured(),
     stateBackend: process.env.DATABASE_URL ? "postgres" : "json",
     workerEnabled: process.env.HOSTED_WORKER_ENABLED === "true",
     stateFile: process.env.DATABASE_URL ? "" : stateFile
@@ -100,6 +151,13 @@ app.get("/health", asyncHandler(async (_req, res) => {
 }));
 
 app.get("/promotion-manager/checkout", asyncHandler(async (req, res) => {
+  if (isZpayConfigured()) {
+    const plan = normalizePlan(req.query.plan || "starter");
+    if (plan === "free") {
+      return res.status(400).json({ error: "free_plan_does_not_use_checkout" });
+    }
+    return res.type("html").send(renderZpayCheckoutPage(plan));
+  }
   const error = requireStripeConfig(["STRIPE_SECRET_KEY"]);
   if (error) return res.status(500).json(error);
 
@@ -130,7 +188,117 @@ app.get("/promotion-manager/checkout", asyncHandler(async (req, res) => {
   }
 }));
 
+app.post("/api/promotion-manager/payments/zpay/checkout", asyncHandler(async (req, res) => {
+  if (!isZpayConfigured()) {
+    return res.status(500).json({ error: "missing_zpay_config" });
+  }
+  const plan = normalizePlan(req.body.plan || "starter");
+  if (plan === "free") return res.status(400).json({ error: "free_plan_does_not_use_checkout" });
+  const amount = zpayPriceForPlan(plan);
+  if (!amount) {
+    return res.status(500).json({ error: "missing_zpay_price", env: ZPAY_PRICE_ENV_BY_PLAN[plan] });
+  }
+  const email = String(req.body.email || "").trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: "invalid_email" });
+
+  const paymentId = `pay_${crypto.randomUUID()}`;
+  const orderNo = `pm_${Date.now()}_${crypto.randomBytes(5).toString("hex")}`;
+  const licenseId = `lic_${crypto.randomUUID()}`;
+  const licenseKey = generateLicenseKey();
+  const paymentType = normalizeZpayType(req.body.type || loadZpayConfig().defaultType);
+  const request = buildZpayPaymentRequest({
+    config: loadZpayConfig(),
+    paymentId,
+    orderNo,
+    plan,
+    type: paymentType,
+    amount,
+    clientIp: requestIp(req),
+    notifyUrl: `${publicBaseUrl}/api/promotion-manager/webhooks/zpay`,
+    returnUrl: `${publicBaseUrl}/promotion-manager/checkout/success?orderNo=${encodeURIComponent(orderNo)}`
+  });
+  const providerResponse = await requestZpayPayment(request);
+  if (String(providerResponse.code) !== "1") {
+    return res.status(502).json({
+      error: "zpay_checkout_failed",
+      message: String(providerResponse.msg || "ZPAY rejected the payment request.")
+    });
+  }
+  const destination = String(
+    providerResponse.payurl || providerResponse.payurl2 || providerResponse.qrcode || providerResponse.img || ""
+  );
+  if (!/^https?:\/\//i.test(destination)) {
+    return res.status(502).json({ error: "zpay_checkout_missing_destination" });
+  }
+
+  await store.update((state) => {
+    const account = accountForEmail(state, email);
+    state.licenses[licenseId] = {
+      id: licenseId,
+      accountId: account.id,
+      licenseKeyHash: hashLicenseKey(licenseKey),
+      status: "pending_payment",
+      plan,
+      creditsRemaining: 0,
+      renewsAt: "",
+      paymentProvider: "zpay",
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    state.payments[paymentId] = {
+      id: paymentId,
+      orderNo,
+      accountId: account.id,
+      licenseId,
+      provider: "zpay",
+      providerTradeNo: String(providerResponse.trade_no || ""),
+      status: "pending",
+      plan,
+      amount,
+      currency: "CNY",
+      paymentType,
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    audit(state, "zpay_checkout_created", { paymentId, licenseId, plan, amount, paymentType });
+  });
+
+  res.cookie("enhe_pm_claim", licenseKey, {
+    httpOnly: true,
+    secure: publicBaseUrl.startsWith("https://"),
+    sameSite: "lax",
+    maxAge: 24 * 60 * 60 * 1000,
+    path: "/promotion-manager"
+  });
+  return res.redirect(303, destination);
+}));
+
+app.get("/promotion-manager/checkout/success", asyncHandler(async (req, res) => {
+  const state = await store.load();
+  const orderNo = String(req.query.orderNo || "");
+  const payment = Object.values(state.payments).find((item) => item.orderNo === orderNo);
+  if (!payment) return res.status(404).type("html").send(renderCheckoutResult("Payment not found", ""));
+  if (payment.status !== "paid") {
+    return res.type("html").send(renderCheckoutResult("Payment is being confirmed", "Refresh this page in a moment."));
+  }
+  const license = state.licenses[payment.licenseId];
+  const claim = cookieValue(req.headers.cookie, "enhe_pm_claim");
+  if (!license || !claim || hashLicenseKey(claim) !== license.licenseKeyHash) {
+    return res.status(403).type("html").send(renderCheckoutResult(
+      "Payment confirmed",
+      "The license claim is not available in this browser. Contact support with your order number."
+    ));
+  }
+  return res.type("html").send(renderCheckoutResult("Payment confirmed", `License key: ${claim}`));
+}));
+
 app.get("/promotion-manager/billing", asyncHandler(async (req, res) => {
+  if (isZpayConfigured()) {
+    return res.type("html").send(renderCheckoutResult(
+      "ENHE Promotion Manager billing",
+      "Domestic plans use one-time payments. Renew or change plans through /promotion-manager/checkout."
+    ));
+  }
   const error = requireStripeConfig(["STRIPE_SECRET_KEY"]);
   if (error) return res.status(500).json(error);
 
@@ -463,6 +631,21 @@ function accountForCustomer(state, customerId, email) {
   return account;
 }
 
+function accountForEmail(state, email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const existing = Object.values(state.accounts).find(
+    (account) => String(account.email || "").trim().toLowerCase() === normalizedEmail
+  );
+  if (existing) return existing;
+  const account = {
+    id: `acct_${crypto.randomUUID()}`,
+    email: normalizedEmail,
+    createdAt: nowIso()
+  };
+  state.accounts[account.id] = account;
+  return account;
+}
+
 function findLicenseByKey(state, licenseKey) {
   if (!licenseKey) return null;
   const licenseKeyHash = hashLicenseKey(String(licenseKey));
@@ -563,6 +746,65 @@ function renderRunPage(run) {
   <p>Reason: ${reason || "ok"}</p>
   <p>Artifacts: <code>${artifacts}</code></p>
   <p>JSON status: <a href="/api/promotion-manager/run/${runId}">/api/promotion-manager/run/${runId}</a></p>
+</body>
+</html>`;
+}
+
+function renderZpayCheckoutPage(selectedPlan) {
+  const planOptions = ["starter", "growth", "scale"]
+    .map((plan) => {
+      const price = zpayPriceForPlan(plan);
+      const label = `${labelPlan(plan)}${price ? ` - ¥${price}` : " - price unavailable"}`;
+      return `<option value="${plan}"${plan === selectedPlan ? " selected" : ""}${price ? "" : " disabled"}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ENHE Promotion Manager 国内支付</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 620px; margin: 48px auto; padding: 0 20px; line-height: 1.6; color: #18181b; }
+    form { display: grid; gap: 16px; }
+    label { display: grid; gap: 6px; font-weight: 600; }
+    input, select, button { font: inherit; padding: 10px 12px; }
+    button { cursor: pointer; background: #111827; color: white; border: 0; border-radius: 6px; }
+    .hint { color: #52525b; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>ENHE Promotion Manager</h1>
+  <p>使用微信支付或支付宝购买 30 天许可证。支付成功后请返回本页面领取许可证。</p>
+  <form method="post" action="/api/promotion-manager/payments/zpay/checkout">
+    <label>套餐<select name="plan" required>${planOptions}</select></label>
+    <label>接收与找回许可证的邮箱<input type="email" name="email" autocomplete="email" required></label>
+    <label>支付方式
+      <select name="type" required>
+        <option value="wxpay">微信支付</option>
+        <option value="alipay">支付宝</option>
+      </select>
+    </label>
+    <button type="submit">前往支付</button>
+  </form>
+  <p class="hint">支付由 ENHE AI 网站当前 ZPAY 商户通道处理。许可证密钥不会以明文存储在服务器。</p>
+</body>
+</html>`;
+}
+
+function renderCheckoutResult(title, message) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>body { font-family: system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 20px; line-height: 1.6; } code { word-break: break-all; }</style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <p><code>${escapeHtml(message)}</code></p>
+  <p><a href="/promotion-manager/checkout">返回套餐页面</a></p>
 </body>
 </html>`;
 }
@@ -730,6 +972,36 @@ function dateFromUnix(value) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function addDaysIso(days) {
+  const value = new Date();
+  value.setUTCDate(value.getUTCDate() + Number(days || 0));
+  return value.toISOString().slice(0, 10);
+}
+
+function requestIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket.remoteAddress || "127.0.0.1";
+}
+
+function zpayPayloadFromQuery(query) {
+  return Object.fromEntries(
+    Object.entries(query || {}).map(([key, value]) => [key, Array.isArray(value) ? String(value[0] || "") : String(value || "")])
+  );
+}
+
+function cookieValue(header, name) {
+  for (const part of String(header || "").split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0 || part.slice(0, index).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(index + 1).trim());
+    } catch (_error) {
+      return "";
+    }
+  }
+  return "";
 }
 
 function trimTrailingSlash(value) {

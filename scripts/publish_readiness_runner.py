@@ -12,6 +12,16 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from env_loader import (
+    YOUTUBE_ACCESS_TOKEN_ENVS,
+    YOUTUBE_CLIENT_ID_ENVS,
+    YOUTUBE_CLIENT_SECRET_ENVS,
+    blank_env_names,
+    load_project_env,
+    preparse_env_file,
+    present_env_names,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -31,8 +41,9 @@ PLATFORM_RULES = {
     },
     "youtube": {
         "mode": "official_api_publish",
-        "requiredEnvAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+        "requiredEnvAny": list(YOUTUBE_ACCESS_TOKEN_ENVS),
         "alternativeEnvAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        "alternativeEnvGroups": [list(YOUTUBE_CLIENT_ID_ENVS), list(YOUTUBE_CLIENT_SECRET_ENVS)],
         "target": "youtubeVideoFile",
         "executor": "publish_executor.py or youtube_oauth_publish.py",
         "notes": "YouTube upload requires OAuth channel authorization and quota.",
@@ -52,11 +63,11 @@ PLATFORM_RULES = {
         "notes": "No verified stable public note publishing API is integrated.",
     },
     "douyin": {
-        "mode": "official_api_publish",
-        "requiredEnvAll": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
+        "mode": "browser_assisted_publish",
+        "requiredEnvAny": [],
         "target": "douyinVideoFile",
-        "executor": "publish_executor.py",
-        "notes": "Official Douyin upload/create is supported through publish_executor.py, but still requires approved open-platform app scopes, user authorization, and platform review.",
+        "executor": "browser_publish_session.py / browser_publish_assistant.py",
+        "notes": "Douyin official authorization is not available in the current operator setup, so Douyin publishes through browser-assisted/manual payloads and stops before the final publish action. The official executor remains a reserved future port.",
     },
     "tiktok": {
         "mode": "official_api_candidate",
@@ -69,6 +80,7 @@ PLATFORM_RULES = {
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +91,7 @@ def main() -> None:
     records = build_records(args, queue, manifest)
     report = {
         "generatedAt": TODAY,
+        "envLoad": env_load,
         "status": readiness_status(records),
         "mode": "execute_requested" if args.execute_publish else "dry_run_or_planning",
         "approval": {
@@ -117,6 +130,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit readiness for official, browser-assisted, and manual publishing.")
     parser.add_argument("--workflow-manifest", default="", help="Existing workflow manifest.")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before auditing credential presence. Values are never written to reports.")
     parser.add_argument("--publish-queue", default="", help="Existing publish-queue.json.")
     parser.add_argument("--build-queue", action="store_true", help="Build a dry-run/guarded publish queue from --workflow-manifest first.")
     parser.add_argument("--platforms", default="", help="Comma-separated platform filter. Defaults to queue/workflow platforms or common defaults.")
@@ -208,24 +222,51 @@ def env_status(rule: dict[str, Any]) -> dict[str, Any]:
     any_names = list(rule.get("requiredEnvAny") or [])
     all_names = list(rule.get("requiredEnvAll") or [])
     alternative_all = list(rule.get("alternativeEnvAll") or [])
-    present_any = [name for name in any_names if os.environ.get(name)]
-    present_all = [name for name in all_names if os.environ.get(name)]
-    present_alternative = [name for name in alternative_all if os.environ.get(name)]
+    alternative_groups = [list(group) for group in rule.get("alternativeEnvGroups") or []]
+    grouped_names = [name for group in alternative_groups for name in group]
+    present_any = present_env_names(any_names)
+    present_all = present_env_names(all_names)
+    present_alternative = present_env_names(alternative_all + grouped_names)
+    alternative_all_ready = bool(alternative_all) and len(present_env_names(alternative_all)) == len(alternative_all)
+    alternative_group_ready = bool(alternative_groups) and all(any(os.environ.get(name) for name in group) for group in alternative_groups)
     if any_names:
-        ready = bool(present_any) or (bool(alternative_all) and len(present_alternative) == len(alternative_all))
+        ready = bool(present_any) or alternative_all_ready or alternative_group_ready
     elif all_names:
         ready = len(present_all) == len(all_names)
     else:
         ready = True
+    missing = missing_env_names(any_names, all_names, alternative_all, alternative_groups)
+    all_known_names = any_names + all_names + alternative_all + grouped_names
     return {
         "ready": ready,
         "requiredAny": any_names,
         "requiredAll": all_names,
         "alternativeAll": alternative_all,
+        "alternativeGroups": alternative_groups,
         "presentEnv": sorted(set(present_any + present_all + present_alternative)),
-        "missingEnv": [name for name in any_names + all_names + alternative_all if not os.environ.get(name)],
+        "missingEnv": missing,
+        "blankEnv": blank_env_names(all_known_names),
         "valuesStored": False,
     }
+
+
+def missing_env_names(
+    any_names: list[str],
+    all_names: list[str],
+    alternative_all: list[str],
+    alternative_groups: list[list[str]],
+) -> list[str]:
+    missing: list[str] = []
+    if any_names and not any(os.environ.get(name) for name in any_names):
+        missing.extend(any_names)
+    missing.extend(name for name in all_names if not os.environ.get(name))
+    if alternative_groups:
+        for group in alternative_groups:
+            if not any(os.environ.get(name) for name in group):
+                missing.append(" or ".join(group))
+    elif alternative_all and not all(os.environ.get(name) for name in alternative_all):
+        missing.extend(name for name in alternative_all if not os.environ.get(name))
+    return missing
 
 
 def target_status(args: argparse.Namespace, platform: str, rule: dict[str, Any], queue_item: dict[str, Any]) -> dict[str, Any]:
@@ -237,7 +278,12 @@ def target_status(args: argparse.Namespace, platform: str, rule: dict[str, Any],
         return {"ready": bool(value), "field": "youtubeVideoFile", "valuePresent": bool(value), "missing": "" if value else "--youtube-video-file"}
     if platform == "douyin":
         value = args.douyin_video_file or douyin_file_from_queue(queue_item)
-        return {"ready": bool(value), "field": "douyinVideoFile", "valuePresent": bool(value), "missing": "" if value else "--douyin-video-file"}
+        return {
+            "ready": True,
+            "field": "douyinVideoFile",
+            "valuePresent": bool(value),
+            "missing": "" if value else "optional --douyin-video-file to attach an MP4 asset",
+        }
     if platform == "tiktok":
         return {"ready": False, "field": rule.get("target", ""), "valuePresent": False, "missing": "approved developer/open-platform app integration"}
     return {"ready": True, "field": "", "valuePresent": False, "missing": ""}
@@ -245,7 +291,7 @@ def target_status(args: argparse.Namespace, platform: str, rule: dict[str, Any],
 
 def approval_status(args: argparse.Namespace, platform: str, rule: dict[str, Any]) -> dict[str, Any]:
     official_like = rule.get("mode") in {"official_api_publish", "official_api_candidate"}
-    required = official_like or platform in {"douyin", "tiktok"}
+    required = official_like or platform in {"tiktok"}
     return {
         "required": required,
         "executionRequested": args.execute_publish,
@@ -267,8 +313,8 @@ def platform_readiness(
         return "already_published"
     if platform in {"zhihu", "xiaohongshu"}:
         return "manual_publish_required"
-    if platform == "douyin" and queue_status == "queued_browser_assisted":
-        return "browser_assisted_or_official_app_required"
+    if platform == "douyin":
+        return "browser_assisted_publish_ready"
     if platform == "tiktok":
         return "official_app_integration_required"
     if mode == "official_api_publish":
@@ -303,8 +349,8 @@ def platform_next_action(
         return f"Add --approval {APPROVAL_PHRASE}."
     if readiness == "manual_publish_required":
         return "Use the generated draft in a user-visible browser/manual workflow, then register the real published URL."
-    if readiness == "browser_assisted_or_official_app_required":
-        return "Use browser-assisted publishing or integrate verified Douyin open-platform app authorization."
+    if readiness == "browser_assisted_publish_ready":
+        return "Use browser-assisted Douyin publishing, review the prepared payload, and let the user complete the final publish action."
     if readiness == "official_app_integration_required":
         return "Integrate approved TikTok Direct Post app scopes and creator authorization."
     if readiness == "already_published":
@@ -342,7 +388,7 @@ def readiness_status(records: list[dict[str, Any]]) -> str:
     readiness = {record["readiness"] for record in records}
     if readiness and readiness <= {"ready_to_execute", "already_published"}:
         return "ready_to_execute"
-    if readiness & {"ready_to_execute", "dry_run_ready", "manual_publish_required", "browser_assisted_or_official_app_required"}:
+    if readiness & {"ready_to_execute", "dry_run_ready", "manual_publish_required", "browser_assisted_publish_ready"}:
         return "partial_ready"
     return "blocked"
 
@@ -421,6 +467,10 @@ def youtube_file_from_queue(queue_item: dict[str, Any]) -> str:
 
 
 def douyin_file_from_queue(queue_item: dict[str, Any]) -> str:
+    video = queue_item.get("video") if isinstance(queue_item.get("video"), dict) else {}
+    path_value = str(video.get("path") or "").strip()
+    if path_value:
+        return path_value
     command = ((queue_item.get("officialExecution") or {}).get("command") or [])
     if "--douyin-video-file" in command:
         index = command.index("--douyin-video-file")

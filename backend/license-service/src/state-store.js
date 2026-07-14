@@ -11,6 +11,7 @@ function emptyState() {
   return {
     accounts: {},
     licenses: {},
+    payments: {},
     subscriptions: {},
     usageLedger: {},
     hostedRuns: {},

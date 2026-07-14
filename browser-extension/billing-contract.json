@@ -1,7 +1,7 @@
 {
   "name": "ENHE Promotion Manager Billing Contract",
   "version": "0.6.1",
-  "provider": "stripe_or_equivalent_subscription_provider",
+  "provider": "zpay_domestic_or_stripe_international",
   "website": "https://www.enhe-tech.com.cn/",
   "checkoutUrl": "https://www.enhe-tech.com.cn/promotion-manager/checkout",
   "customerPortalUrl": "https://www.enhe-tech.com.cn/promotion-manager/billing",
@@ -11,6 +11,7 @@
   "hostedRunEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/run",
   "hostedRunStatusEndpointTemplate": "https://www.enhe-tech.com.cn/api/promotion-manager/run/{runId}",
   "webhookEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/stripe",
+  "domesticWebhookEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay",
   "legalUrls": {
     "privacyPolicy": "https://www.enhe-tech.com.cn/promotion-manager/privacy",
     "termsOfService": "https://www.enhe-tech.com.cn/promotion-manager/terms",

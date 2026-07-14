@@ -395,7 +395,8 @@ def publish_row(
     manual_required = sum(
         1
         for item in readiness_records
-        if item.get("readiness") in {"manual_publish_required", "browser_assisted_or_official_app_required"}
+        if item.get("readiness")
+        in {"manual_publish_required", "browser_assisted_or_official_app_required", "browser_assisted_publish_ready"}
     )
     missing: list[str] = publish_missing_from_readiness(readiness_records)
     if not readiness_records:
@@ -450,7 +451,7 @@ def platform_credential_missing_message(platform: str, credential_status: Any) -
     if platform == "youtube":
         return "YouTube OAuth access token or OAuth client credentials"
     if platform == "douyin":
-        return "Douyin open-platform app credentials and user authorization"
+        return "Douyin is currently configured for browser-assisted publishing; no DOUYIN_* credential is required unless the future official port is re-enabled"
     if platform == "tiktok":
         return "TikTok open-platform app credentials and user authorization"
     missing_env: list[str] = []
