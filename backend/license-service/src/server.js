@@ -137,9 +137,9 @@ app.get("/api/promotion-manager/webhooks/zpay", asyncHandler(async (req, res) =>
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "100kb" }));
 
-app.get("/health", asyncHandler(async (_req, res) => {
+async function sendHealth(_req, res) {
   await store.init();
-  res.json({
+  return res.json({
     ok: true,
     service: "enhe-promotion-manager-license-service",
     stripeConfigured: Boolean(stripe),
@@ -148,7 +148,10 @@ app.get("/health", asyncHandler(async (_req, res) => {
     workerEnabled: process.env.HOSTED_WORKER_ENABLED === "true",
     stateFile: process.env.DATABASE_URL ? "" : stateFile
   });
-}));
+}
+
+app.get("/health", asyncHandler(sendHealth));
+app.get("/api/promotion-manager/health", asyncHandler(sendHealth));
 
 app.get("/promotion-manager/checkout", asyncHandler(async (req, res) => {
   if (isZpayConfigured()) {

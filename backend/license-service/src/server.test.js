@@ -21,6 +21,22 @@ test.after(() => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test("public health alias matches the canonical health endpoint", async () => {
+  saveState(emptyState());
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const canonical = await fetch(`${baseUrl}/health`);
+    const publicAlias = await fetch(`${baseUrl}/api/promotion-manager/health`);
+    assert.equal(canonical.status, 200);
+    assert.equal(publicAlias.status, 200);
+    assert.deepEqual(await publicAlias.json(), await canonical.json());
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("license service queues and completes a hosted worker run", async () => {
   const licenseKey = "pm_test_hosted_worker_license";
   const state = emptyState();
