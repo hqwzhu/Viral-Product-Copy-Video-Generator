@@ -15,7 +15,7 @@ process.env.ENHE_PUBLIC_BASE_URL = "https://www.enhe-tech.com.cn";
 process.env.HOSTED_WORKER_MODE = "simulate";
 
 const { app, emptyState, hashLicenseKey, saveState, store } = require("./server");
-const { processNextHostedRun } = require("./hosted-worker");
+const { processNextHostedRun, runRetentionCleanup } = require("./hosted-worker");
 
 test.after(() => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -94,6 +94,54 @@ test("license service queues and completes a hosted worker run", async () => {
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("retention cleanup deletes hosted artifacts after 30 days and audit logs after 180 days", async () => {
+  const outputRoot = path.join(tmpRoot, "retention-runs");
+  const oldDirectory = path.join(outputRoot, "run_old");
+  const recentDirectory = path.join(outputRoot, "run_recent");
+  fs.mkdirSync(oldDirectory, { recursive: true });
+  fs.mkdirSync(recentDirectory, { recursive: true });
+  fs.writeFileSync(path.join(oldDirectory, "artifact.txt"), "old");
+  fs.writeFileSync(path.join(recentDirectory, "artifact.txt"), "recent");
+
+  const state = emptyState();
+  state.hostedRuns.run_old = {
+    id: "run_old",
+    status: "succeeded",
+    finishedAt: "2026-06-14T00:00:00.000Z",
+    artifactDirectory: oldDirectory,
+    reportPath: path.join(oldDirectory, "report.json")
+  };
+  state.hostedRuns.run_recent = {
+    id: "run_recent",
+    status: "succeeded",
+    finishedAt: "2026-06-16T00:00:00.000Z",
+    artifactDirectory: recentDirectory,
+    reportPath: path.join(recentDirectory, "report.json")
+  };
+  state.auditLog = [
+    { at: "2026-01-15T00:00:00.000Z", action: "old_audit", details: {} },
+    { at: "2026-01-17T00:00:00.000Z", action: "recent_audit", details: {} }
+  ];
+  state.payments.pay_keep = { id: "pay_keep", status: "paid" };
+  const retentionStore = { update: async (mutator) => mutator(state) };
+
+  await runRetentionCleanup(retentionStore, {
+    outputRoot,
+    now: "2026-07-15T00:00:00.000Z",
+    artifactRetentionDays: 30,
+    auditRetentionDays: 180
+  });
+
+  assert.equal(fs.existsSync(oldDirectory), false);
+  assert.equal(fs.existsSync(recentDirectory), true);
+  assert.equal(state.hostedRuns.run_old.artifactDirectory, "");
+  assert.equal(state.hostedRuns.run_recent.artifactDirectory, recentDirectory);
+  assert.equal(state.auditLog.some((entry) => entry.action === "old_audit"), false);
+  assert.equal(state.auditLog.some((entry) => entry.action === "recent_audit"), true);
+  assert.equal(state.auditLog.some((entry) => entry.action === "hosted_artifacts_deleted"), true);
+  assert.deepEqual(state.payments.pay_keep, { id: "pay_keep", status: "paid" });
 });
 
 test("ZPAY checkout activates a hashed license after a verified domestic payment", async () => {

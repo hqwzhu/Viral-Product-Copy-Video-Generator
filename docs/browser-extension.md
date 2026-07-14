@@ -2,6 +2,8 @@
 
 The `browser-extension` folder contains a Chrome Manifest V3 operator popup for ENHE Promotion Manager.
 
+Version 0.5.2 provides a complete Chinese/English popup. On first launch it follows Chrome's UI language, then remembers the operator's explicit `中文 / EN` selection in local extension storage. Store metadata is also localized through Chrome `_locales` resources.
+
 ## What It Does
 
 - Reads the active tab URL and title after the user opens the extension.
@@ -18,6 +20,7 @@ The `browser-extension` folder contains a Chrome Manifest V3 operator popup for 
 - Opens the ENHE checkout URL with the selected plan and estimated monthly credits.
 - Opens the ENHE customer billing portal.
 - Links to ENHE website and project documentation for traffic.
+- Uses ENHE-branded text-free 16/48 px toolbar icons and a 128 px store icon optimized for Chrome's required transparent safe area.
 
 ## What It Does Not Do
 

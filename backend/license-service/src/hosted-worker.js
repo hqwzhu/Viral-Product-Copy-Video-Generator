@@ -6,6 +6,108 @@ const path = require("path");
 
 const ALLOWED_PLATFORMS = new Set(["youtube", "zhihu", "xiaohongshu", "douyin", "github", "tiktok"]);
 const LOCAL_HOST_RE = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|\[?::1\]?)/i;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_ARTIFACT_RETENTION_DAYS = 30;
+const DEFAULT_AUDIT_RETENTION_DAYS = 180;
+const DEFAULT_RETENTION_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+async function startRetentionCleanup(store, options = {}) {
+  const intervalMs = Math.max(
+    60 * 1000,
+    Number(options.intervalMs || process.env.RETENTION_CLEANUP_INTERVAL_MS || DEFAULT_RETENTION_CLEANUP_INTERVAL_MS)
+  );
+  await runRetentionCleanup(store, options);
+  return setInterval(() => {
+    runRetentionCleanup(store, options).catch((error) => {
+      console.error(`retention cleanup failed: ${error.stack || error.message}`);
+    });
+  }, intervalMs);
+}
+
+async function runRetentionCleanup(store, options = {}) {
+  const now = new Date(options.now || Date.now());
+  if (!Number.isFinite(now.getTime())) {
+    throw new Error("invalid_retention_cleanup_time");
+  }
+  const outputRoot = path.resolve(
+    options.outputRoot || process.env.HOSTED_RUN_OUTPUT_ROOT || path.join(__dirname, "..", "var", "hosted-runs")
+  );
+  const artifactRetentionDays = positiveDays(
+    options.artifactRetentionDays || process.env.HOSTED_ARTIFACT_RETENTION_DAYS,
+    DEFAULT_ARTIFACT_RETENTION_DAYS
+  );
+  const auditRetentionDays = positiveDays(
+    options.auditRetentionDays || process.env.SECURITY_AUDIT_LOG_RETENTION_DAYS,
+    DEFAULT_AUDIT_RETENTION_DAYS
+  );
+  const artifactCutoff = now.getTime() - artifactRetentionDays * DAY_MS;
+  const auditCutoff = now.getTime() - auditRetentionDays * DAY_MS;
+  const summary = { artifactsDeleted: 0, artifactDeleteFailures: 0, auditEventsDeleted: 0 };
+
+  await store.update((state) => {
+    const auditLog = Array.isArray(state.auditLog) ? state.auditLog : [];
+    state.auditLog = auditLog.filter((entry) => {
+      const timestamp = Date.parse(String(entry && entry.at || ""));
+      const keep = !Number.isFinite(timestamp) || timestamp > auditCutoff;
+      if (!keep) summary.auditEventsDeleted += 1;
+      return keep;
+    });
+
+    for (const run of Object.values(state.hostedRuns || {})) {
+      const finishedAt = Date.parse(String(run.finishedAt || ""));
+      if (!Number.isFinite(finishedAt) || finishedAt > artifactCutoff || run.artifactsDeletedAt) {
+        continue;
+      }
+      const artifactDirectory = String(run.artifactDirectory || "").trim();
+      if (!artifactDirectory) {
+        continue;
+      }
+      const resolvedDirectory = path.resolve(artifactDirectory);
+      if (!isPathInside(outputRoot, resolvedDirectory)) {
+        summary.artifactDeleteFailures += 1;
+        state.auditLog.push({
+          at: now.toISOString(),
+          action: "hosted_artifact_delete_blocked",
+          details: { runId: run.id, reason: "artifact_path_outside_output_root" }
+        });
+        continue;
+      }
+      try {
+        fs.rmSync(resolvedDirectory, { recursive: true, force: true });
+        run.artifactDirectory = "";
+        run.reportPath = "";
+        run.reportUrl = "";
+        run.artifactsDeletedAt = now.toISOString();
+        run.updatedAt = now.toISOString();
+        summary.artifactsDeleted += 1;
+        state.auditLog.push({
+          at: now.toISOString(),
+          action: "hosted_artifacts_deleted",
+          details: { runId: run.id, retentionDays: artifactRetentionDays }
+        });
+      } catch (error) {
+        summary.artifactDeleteFailures += 1;
+        state.auditLog.push({
+          at: now.toISOString(),
+          action: "hosted_artifact_delete_failed",
+          details: { runId: run.id, reason: error.message }
+        });
+      }
+    }
+    return summary;
+  });
+  return summary;
+}
+
+function isPathInside(root, target) {
+  const relative = path.relative(root, target);
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function positiveDays(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 async function startHostedWorker(store, options = {}) {
   const intervalMs = Math.max(5000, Number(options.intervalMs || process.env.HOSTED_WORKER_INTERVAL_MS || 15000));
@@ -327,6 +429,8 @@ module.exports = {
   commitUsage,
   executeHostedRun,
   processNextHostedRun,
+  runRetentionCleanup,
   startHostedWorker,
+  startRetentionCleanup,
   validateHostedRequest
 };

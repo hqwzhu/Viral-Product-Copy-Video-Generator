@@ -77,3 +77,11 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
 - Website: https://www.enhe-tech.com.cn/
 - Product page: https://www.enhe-tech.com.cn/promotion-manager
 - Repository: https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git
+
+## 0.5.2 中英文界面
+
+- 插件首次打开时自动跟随 Chrome 界面语言：中文环境使用中文，其他环境使用英文。
+- 右上角提供 `中文 / EN` 切换，用户选择会保存在插件本地存储中，后续打开继续使用该语言。
+- 静态标签、动态状态、校验提示、套餐与点数估算均支持中英文。
+- 商店名称、简介和工具栏标题通过 Chrome `_locales` 资源提供中英文版本。
+- 16/48 像素工具栏图标保持无文字，128 像素商店图标采用 ENHE 品牌标识和透明安全边距。

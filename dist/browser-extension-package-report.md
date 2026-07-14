@@ -1,9 +1,9 @@
 # Browser Extension Package Report
 
-- Generated: 2026-07-13
+- Generated: 2026-07-15
 - Status: `ready`
-- Package: dist\enhe-promotion-manager-0.5.1.zip
-- Version: 0.5.1
+- Package: dist\enhe-promotion-manager-0.5.2.zip
+- Version: 0.5.2
 
 ## Checks
 - requiredFiles: `True`

@@ -12,6 +12,11 @@
 
 ## File map
 
+- Modify `docs/legal/privacy-policy.md`: approved retention and data-request wording.
+- Modify `backend/license-service/src/hosted-worker.js`: automatic artifact and audit-log retention cleanup.
+- Modify `backend/license-service/src/server.js`: start retention cleanup with the API even when hosted execution is disabled.
+- Modify `backend/license-service/src/server.test.js`: deterministic 30-day/180-day cleanup regression test.
+- Modify `deploy/promotion-manager/.env.production.example` and `deploy/promotion-manager/README.md`: production retention configuration.
 - Modify `scripts/test_promotion_manager.py`: regression coverage for bilingual UI, locale completeness, version, icon dimensions/alpha, and ZIP contents.
 - Modify `browser-extension/popup.html`: translation keys and upper-right language control.
 - Modify `browser-extension/popup.css`: compact segmented switch and top-bar action layout.
@@ -22,6 +27,100 @@
 - Replace `browser-extension/icons/icon16.png`, `icon48.png`, and `icon128.png`: ENHE-branded PNG assets; text appears only at 128px.
 - Modify `docs/browser-extension.md` and `docs/zh-CN/browser-extension.md`: language behavior and versioned package notes.
 - Regenerate `dist/browser-extension-package-report.json`, `dist/browser-extension-package-report.md`, and `dist/enhe-promotion-manager-0.5.2.zip` without touching the user's existing 0.5.0 ZIP or store-assets directory.
+
+### Task 0: Enforce the approved privacy retention policy
+
+**Files:**
+- Modify: `docs/legal/privacy-policy.md`
+- Modify: `backend/license-service/src/hosted-worker.js`
+- Modify: `backend/license-service/src/server.js`
+- Modify: `backend/license-service/src/server.test.js`
+- Modify: `deploy/promotion-manager/.env.production.example`
+- Modify: `deploy/promotion-manager/README.md`
+
+- [ ] **Step 1: Write a failing retention cleanup test**
+
+Import `runRetentionCleanup` from `hosted-worker.js`. Create old and recent hosted-run directories under a temporary output root, a state object with runs finished 31 and 29 days ago, audit events 181 and 179 days old, and a payment record. Run cleanup at a fixed `now` with 30/180-day options. Assert the old directory is removed, the recent directory remains, only the old run has `artifactsDeletedAt`, the 181-day audit event is removed, the 179-day event remains, a deletion audit event is added, and the payment record remains unchanged.
+
+```javascript
+const { processNextHostedRun, runRetentionCleanup } = require("./hosted-worker");
+
+test("retention cleanup deletes hosted artifacts after 30 days and audit logs after 180 days", async () => {
+  const outputRoot = path.join(tmpRoot, "retention-runs");
+  const oldDirectory = path.join(outputRoot, "run_old");
+  const recentDirectory = path.join(outputRoot, "run_recent");
+  fs.mkdirSync(oldDirectory, { recursive: true });
+  fs.mkdirSync(recentDirectory, { recursive: true });
+  fs.writeFileSync(path.join(oldDirectory, "artifact.txt"), "old");
+  fs.writeFileSync(path.join(recentDirectory, "artifact.txt"), "recent");
+
+  const state = emptyState();
+  state.hostedRuns.run_old = {
+    id: "run_old", status: "succeeded", finishedAt: "2026-06-14T00:00:00.000Z",
+    artifactDirectory: oldDirectory, reportPath: path.join(oldDirectory, "report.json")
+  };
+  state.hostedRuns.run_recent = {
+    id: "run_recent", status: "succeeded", finishedAt: "2026-06-16T00:00:00.000Z",
+    artifactDirectory: recentDirectory, reportPath: path.join(recentDirectory, "report.json")
+  };
+  state.auditLog = [
+    { at: "2026-01-15T00:00:00.000Z", action: "old_audit", details: {} },
+    { at: "2026-01-17T00:00:00.000Z", action: "recent_audit", details: {} }
+  ];
+  state.payments.pay_keep = { id: "pay_keep", status: "paid" };
+  const retentionStore = { update: async (mutator) => mutator(state) };
+
+  await runRetentionCleanup(retentionStore, {
+    outputRoot,
+    now: "2026-07-15T00:00:00.000Z",
+    artifactRetentionDays: 30,
+    auditRetentionDays: 180
+  });
+
+  assert.equal(fs.existsSync(oldDirectory), false);
+  assert.equal(fs.existsSync(recentDirectory), true);
+  assert.equal(state.hostedRuns.run_old.artifactDirectory, "");
+  assert.equal(state.hostedRuns.run_recent.artifactDirectory, recentDirectory);
+  assert.equal(state.auditLog.some((entry) => entry.action === "old_audit"), false);
+  assert.equal(state.auditLog.some((entry) => entry.action === "recent_audit"), true);
+  assert.equal(state.auditLog.some((entry) => entry.action === "hosted_artifacts_deleted"), true);
+  assert.deepEqual(state.payments.pay_keep, { id: "pay_keep", status: "paid" });
+});
+```
+
+- [ ] **Step 2: Run the backend test and verify RED**
+
+Run `npm test` from `backend/license-service`.
+
+Expected: failure because `runRetentionCleanup` is not exported.
+
+- [ ] **Step 3: Implement retention cleanup**
+
+Add 30-day artifact and 180-day audit defaults, safe path containment, fixed-time injection for testing, and `startRetentionCleanup`. Only delete completed-run artifact directories inside `HOSTED_RUN_OUTPUT_ROOT`. Clear artifact paths and record `artifactsDeletedAt`; never delete account, license, payment, refund, subscription, or legally required accounting records.
+
+- [ ] **Step 4: Start cleanup independently of hosted execution**
+
+Import `startRetentionCleanup` in `server.js` and start it after store initialization. Use a six-hour default interval. Keep `HOSTED_WORKER_ENABLED` behavior unchanged so enabling retention does not start hosted jobs.
+
+- [ ] **Step 5: Add production configuration**
+
+```dotenv
+HOSTED_ARTIFACT_RETENTION_DAYS=30
+SECURITY_AUDIT_LOG_RETENTION_DAYS=180
+RETENTION_CLEANUP_INTERVAL_MS=21600000
+```
+
+Document that the API performs cleanup even when the hosted worker is disabled.
+
+- [ ] **Step 6: Apply the approved legal wording**
+
+Set the effective date to 2026-07-15 and state exactly that Hosted Task artifacts are automatically deleted 30 days after completion; security and audit logs are retained for 180 days; payment, refund, and legally required accounting records are retained under applicable law; and users may email `huqingwei5942@gmail.com` to request access to or deletion of data that is not subject to mandatory retention.
+
+- [ ] **Step 7: Verify GREEN**
+
+Run `npm test` from `backend/license-service` and the privacy-policy regression test in `scripts/test_promotion_manager.py`.
+
+Expected: both commands exit 0.
 
 ### Task 1: Add failing bilingual and icon regression tests
 

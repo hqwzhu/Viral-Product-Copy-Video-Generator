@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-13",
+  "generatedAt": "2026-07-15",
   "status": "ready",
   "extensionDir": "C:\\Users\\HU\\Documents\\viral-product-copy-video-generator\\browser-extension",
-  "package": "dist\\enhe-promotion-manager-0.5.1.zip",
-  "version": "0.5.1",
-  "name": "ENHE Promotion Manager",
+  "package": "dist\\enhe-promotion-manager-0.5.2.zip",
+  "version": "0.5.2",
+  "name": "__MSG_extensionName__",
   "checks": {
     "requiredFiles": true,
     "manifestV3": true,
@@ -16,9 +16,14 @@
     "packageCreated": true
   },
   "files": [
+    "_locales/en/messages.json",
+    "_locales/zh_CN/messages.json",
     "billing-contract.json",
+    "icons/icon128-v2.png",
     "icons/icon128.png",
+    "icons/icon16-v2.png",
     "icons/icon16.png",
+    "icons/icon48-v2.png",
     "icons/icon48.png",
     "manifest.json",
     "popup.css",

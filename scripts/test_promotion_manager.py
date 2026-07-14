@@ -8,7 +8,9 @@ import argparse
 import json
 import http.server
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -6918,6 +6920,56 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
         self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
 
+    def test_browser_extension_popup_is_bilingual_and_remembers_language(self) -> None:
+        manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+        popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
+        script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+
+        self.assertEqual(manifest["version"], "0.5.2")
+        self.assertEqual(manifest["default_locale"], "en")
+        self.assertEqual(manifest["name"], "__MSG_extensionName__")
+        self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
+        self.assertIn('id="languageZh"', popup)
+        self.assertIn('id="languageEn"', popup)
+        self.assertIn("data-i18n=", popup)
+        self.assertIn("data-i18n-placeholder=", popup)
+        self.assertIn("data-i18n-aria-label=", popup)
+        self.assertIn("chrome.i18n.getUILanguage", script)
+        self.assertIn('"uiLanguage"', script)
+        self.assertIn("chrome.storage.local.set({ uiLanguage", script)
+        self.assertIn("aria-pressed", script)
+
+        english_block = script.split("const EN_TRANSLATIONS = Object.freeze({", 1)[1].split("});", 1)[0]
+        chinese_block = script.split("const ZH_TRANSLATIONS = Object.freeze({", 1)[1].split("});", 1)[0]
+        english_keys = set(re.findall(r"^  ([A-Za-z][A-Za-z0-9]*):", english_block, re.MULTILINE))
+        chinese_keys = set(re.findall(r"^  ([A-Za-z][A-Za-z0-9]*):", chinese_block, re.MULTILINE))
+        html_keys = set(
+            re.findall(r'data-i18n(?:-placeholder|-aria-label)?="([A-Za-z][A-Za-z0-9]*)"', popup)
+        )
+        self.assertSetEqual(english_keys, chinese_keys)
+        self.assertTrue(html_keys)
+        self.assertTrue(html_keys.issubset(english_keys), sorted(html_keys - english_keys))
+
+        for locale in ["en", "zh_CN"]:
+            messages = json.loads(
+                (BROWSER_EXTENSION / "_locales" / locale / "messages.json").read_text(encoding="utf-8")
+            )
+            for key in ["extensionName", "extensionShortName", "extensionDescription", "actionTitle"]:
+                self.assertTrue(messages[key]["message"].strip())
+
+    def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
+        for size in [16, 48, 128]:
+            icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
+            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-v2.png"
+            self.assertTrue(versioned_path.exists(), versioned_path)
+            data = icon_path.read_bytes()
+            self.assertEqual(data, versioned_path.read_bytes())
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", data[16:26])
+            self.assertEqual((width, height), (size, size))
+            self.assertEqual(bit_depth, 8)
+            self.assertIn(color_type, {4, 6})
+
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -6934,6 +6986,7 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["version"], "0.5.2")
         package_path = Path(report["package"])
         self.assertTrue(package_path.exists())
         self.assertTrue(report["checks"]["manifestV3"])
@@ -6953,6 +7006,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon16.png", names)
         self.assertIn("icons/icon48.png", names)
         self.assertIn("icons/icon128.png", names)
+        self.assertIn("_locales/en/messages.json", names)
+        self.assertIn("_locales/zh_CN/messages.json", names)
 
     def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
         package_json_path = LICENSE_SERVICE / "package.json"
@@ -7104,9 +7159,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("publication-ready draft", lower)
         self.assertNotIn("review it with counsel", lower)
         self.assertNotIn("before production launch", lower)
-        self.assertIn("30 days", privacy)
-        self.assertIn("180 days", privacy)
+        self.assertIn("automatically deleted 30 days", lower)
+        self.assertIn("security and audit logs are retained for 180 days", lower)
+        self.assertIn("payment, refund, and legally required accounting records", lower)
+        self.assertIn("applicable law", lower)
         self.assertIn("huqingwei5942@gmail.com", privacy)
+        self.assertIn("request access to or deletion of data", lower)
+        self.assertIn("mandatory retention", lower)
 
     def test_legal_store_and_deployment_launch_materials_are_ready(self) -> None:
         required_markers = {

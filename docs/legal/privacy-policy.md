@@ -1,6 +1,6 @@
 # ENHE Promotion Manager Privacy Policy
 
-Effective date: 2026-07-14
+Effective date: 2026-07-15
 
 This policy explains how ENHE AI processes information for the ENHE Promotion Manager browser extension and optional hosted service.
 
@@ -44,12 +44,12 @@ Payments are handled by ZPAY, Stripe, or an equivalent provider. ENHE servers do
 
 ## Retention
 
-- Hosted-run artifacts are retained for up to 30 days after a run finishes, unless the user requests earlier deletion or a longer period is required to investigate abuse, resolve a dispute, or comply with law.
-- Security, usage, and audit logs are retained for up to 180 days.
-- Billing, refund, tax, and license records are retained for the period required by applicable law and payment-provider obligations.
+- Hosted Task artifacts are automatically deleted 30 days after the task finishes.
+- Security and audit logs are retained for 180 days.
+- Payment, refund, and legally required accounting records are retained as required by applicable law.
 - Local extension settings remain on the user's device until the user clears extension storage or uninstalls the extension.
 
-After the applicable period ends, information is deleted or anonymized unless continued retention is legally required.
+Users may email huqingwei5942@gmail.com to request access to or deletion of data that is not subject to mandatory retention.
 
 ## Security
 

@@ -30,6 +30,8 @@ Recommended if hosted runs generate videos or run many browser captures:
 - Dedicated worker user
 - Queue output cleanup/backup policy
 
+The API process runs retention cleanup independently of hosted task execution. By default it automatically deletes completed Hosted Task artifact directories after 30 days and removes security and audit events after 180 days. Configure `HOSTED_ARTIFACT_RETENTION_DAYS`, `SECURITY_AUDIT_LOG_RETENTION_DAYS`, and `RETENTION_CLEANUP_INTERVAL_MS` in `api.env`. Payment, refund, subscription, license, and legally required accounting records are not removed by this cleanup job.
+
 If the current ENHE website server has less than 2 vCPU or 4 GB RAM, upgrade before enabling hosted worker execution. You can still deploy the API/license service without the worker.
 
 ## Install

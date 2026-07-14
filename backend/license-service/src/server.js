@@ -11,7 +11,7 @@ const {
   loadJsonState,
   saveJsonState
 } = require("./state-store");
-const { commitUsage, startHostedWorker } = require("./hosted-worker");
+const { commitUsage, startHostedWorker, startRetentionCleanup } = require("./hosted-worker");
 const {
   ZPAY_PRICE_ENV_BY_PLAN,
   buildZpayPaymentRequest,
@@ -1029,6 +1029,11 @@ if (require.main === module) {
   store.init().then(() => {
     app.listen(port, () => {
       console.log(`ENHE Promotion Manager license service listening on ${port}`);
+    });
+    startRetentionCleanup(store).then(() => {
+      console.log("ENHE Promotion Manager retention cleanup enabled");
+    }).catch((error) => {
+      console.error(`retention cleanup failed: ${error.stack || error.message}`);
     });
     if (process.env.HOSTED_WORKER_ENABLED === "true") {
       startHostedWorker(store).then(() => {
