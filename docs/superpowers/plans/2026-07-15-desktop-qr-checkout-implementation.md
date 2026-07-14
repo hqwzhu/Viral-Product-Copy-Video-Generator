@@ -27,7 +27,7 @@
 - Modify: `backend/license-service/src/server.test.js`
 - Modify: `backend/license-service/src/server.js`
 
-- [ ] **Step 1: Write the failing health-equivalence test**
+- [x] **Step 1: Write the failing health-equivalence test**
 
 Add this test near the top of `backend/license-service/src/server.test.js`:
 
@@ -49,7 +49,7 @@ test("public health alias matches the canonical health endpoint", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -59,7 +59,7 @@ node --test --test-name-pattern="public health alias" src/server.test.js
 
 Expected: FAIL because `/api/promotion-manager/health` returns 404.
 
-- [ ] **Step 3: Implement one shared health handler**
+- [x] **Step 3: Implement one shared health handler**
 
 In `backend/license-service/src/server.js`, replace the inline `/health` callback with:
 
@@ -81,7 +81,7 @@ app.get("/health", asyncHandler(sendHealth));
 app.get("/api/promotion-manager/health", asyncHandler(sendHealth));
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -91,7 +91,7 @@ node --test --test-name-pattern="public health alias" src/server.test.js
 
 Expected: one matching test passes with exit code 0.
 
-- [ ] **Step 5: Commit the health alias**
+- [x] **Step 5: Commit the health alias**
 
 ```powershell
 git add -- backend/license-service/src/server.js backend/license-service/src/server.test.js
@@ -106,7 +106,7 @@ git commit -m "feat: expose promotion manager health alias"
 - Modify: `backend/license-service/src/server.test.js`
 - Modify: `backend/license-service/src/server.js`
 
-- [ ] **Step 1: Extend the ZPAY test with a failing JSON-checkout assertion**
+- [x] **Step 1: Extend the ZPAY test with a failing JSON-checkout assertion**
 
 In the existing ZPAY integration test, keep the current form POST and `303` assertion. Then create a second order with:
 
@@ -139,7 +139,7 @@ assert.match(jsonCheckout.headers.get("set-cookie") || "", /enhe_pm_claim=/);
 
 Also assert the provider received `money === "59.00"` for the second request while the original redirect request remains `19.00`.
 
-- [ ] **Step 2: Run the ZPAY test and verify RED**
+- [x] **Step 2: Run the ZPAY test and verify RED**
 
 ```powershell
 node --test --test-name-pattern="ZPAY checkout" src/server.test.js
@@ -147,7 +147,7 @@ node --test --test-name-pattern="ZPAY checkout" src/server.test.js
 
 Expected: FAIL because the endpoint returns `303` instead of JSON.
 
-- [ ] **Step 3: Install the pinned QR dependency**
+- [x] **Step 3: Install the pinned QR dependency**
 
 ```powershell
 npm install qrcode@1.5.4 --save-exact
@@ -159,7 +159,7 @@ Confirm `package.json` contains:
 "qrcode": "1.5.4"
 ```
 
-- [ ] **Step 4: Implement content negotiation and QR generation**
+- [x] **Step 4: Implement content negotiation and QR generation**
 
 At the top of `server.js`, add:
 
@@ -193,11 +193,11 @@ return res.status(201).json({
 
 Use the same `claimUrl` variable when building the ZPAY `return_url` so the provider and JSON response cannot drift.
 
-- [ ] **Step 5: Run the focused test and verify GREEN**
+- [x] **Step 5: Run the focused test and verify GREEN**
 
 Run the focused ZPAY command. Expected: the test passes, the original form submission is still `303`, and the JSON submission is `201`.
 
-- [ ] **Step 6: Commit JSON checkout and QR generation**
+- [x] **Step 6: Commit JSON checkout and QR generation**
 
 ```powershell
 git add -- backend/license-service/package.json backend/license-service/package-lock.json backend/license-service/src/server.js backend/license-service/src/server.test.js
@@ -210,7 +210,7 @@ git commit -m "feat: return QR payment checkout data"
 - Modify: `backend/license-service/src/server.test.js`
 - Modify: `backend/license-service/src/server.js`
 
-- [ ] **Step 1: Add failing ownership and state tests**
+- [x] **Step 1: Add failing ownership and state tests**
 
 Continue the JSON checkout test using the JSON response and its claim cookie:
 
@@ -250,11 +250,11 @@ assert.deepEqual(await paidStatus.json(), {
 
 Add a separate assertion that an unknown order returns 404.
 
-- [ ] **Step 2: Run the ZPAY test and verify RED**
+- [x] **Step 2: Run the ZPAY test and verify RED**
 
 Run the focused ZPAY test. Expected: FAIL because the status route does not exist.
 
-- [ ] **Step 3: Implement the protected status endpoint**
+- [x] **Step 3: Implement the protected status endpoint**
 
 Add this route after checkout creation and before the success page:
 
@@ -279,11 +279,11 @@ app.get("/api/promotion-manager/payments/zpay/status", asyncHandler(async (req, 
 }));
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Expected: anonymous access is 403, the owning browser sees pending, the signed webhook changes it to paid, and an unknown order is 404.
 
-- [ ] **Step 5: Commit protected polling**
+- [x] **Step 5: Commit protected polling**
 
 ```powershell
 git add -- backend/license-service/src/server.js backend/license-service/src/server.test.js
@@ -296,7 +296,7 @@ git commit -m "feat: add protected payment status polling"
 - Modify: `backend/license-service/src/server.test.js`
 - Modify: `backend/license-service/src/server.js`
 
-- [ ] **Step 1: Add failing checkout-page contract assertions**
+- [x] **Step 1: Add failing checkout-page contract assertions**
 
 Inside the existing ZPAY integration test, after the provider and app servers are listening and before creating the first order, request `/promotion-manager/checkout?plan=growth` and assert:
 
@@ -318,11 +318,11 @@ assert.match(html, /10 \* 60 \* 1_000/);
 assert.match(html, /localStorage\.getItem\("enhe_pm_language"\)/);
 ```
 
-- [ ] **Step 2: Run the checkout-page test and verify RED**
+- [x] **Step 2: Run the checkout-page test and verify RED**
 
 Expected: FAIL because the current page is Chinese-only and has no QR panel or browser script.
 
-- [ ] **Step 3: Replace `renderZpayCheckoutPage` with the minimal bilingual page**
+- [x] **Step 3: Replace `renderZpayCheckoutPage` with the minimal bilingual page**
 
 Keep one form and one payment panel. The server-rendered option labels must use:
 
@@ -389,7 +389,7 @@ On submit, call `fetch` with `Accept: application/json`. If `mobile` is true, ca
 
 All translated text must be assigned with `textContent`; provider and claim links must be assigned through validated `href` values returned by the same-origin backend.
 
-- [ ] **Step 4: Run the checkout-page and ZPAY tests and verify GREEN**
+- [x] **Step 4: Run the checkout-page and ZPAY tests and verify GREEN**
 
 ```powershell
 node --test --test-name-pattern="checkout|ZPAY" src/server.test.js
@@ -397,7 +397,7 @@ node --test --test-name-pattern="checkout|ZPAY" src/server.test.js
 
 Expected: all matching tests pass, including redirect compatibility, JSON checkout, protected polling, prices, and HTML contract assertions.
 
-- [ ] **Step 5: Commit the browser experience**
+- [x] **Step 5: Commit the browser experience**
 
 ```powershell
 git add -- backend/license-service/src/server.js backend/license-service/src/server.test.js
@@ -411,7 +411,7 @@ git commit -m "feat: add bilingual desktop QR checkout"
 - Modify: `backend/license-service/src/server.test.js`
 - Modify: `backend/license-service/src/server.js`
 
-- [ ] **Step 1: Add failing result-page and privacy assertions**
+- [x] **Step 1: Add failing result-page and privacy assertions**
 
 Add tests that assert the payment result renderer and `/promotion-manager/privacy` HTML include:
 
@@ -434,11 +434,11 @@ assert.match(html, /按照适用法律保留/);
 assert.match(html, /huqingwei5942@gmail\.com/);
 ```
 
-- [ ] **Step 2: Run the new tests and verify RED**
+- [x] **Step 2: Run the new tests and verify RED**
 
 Expected: FAIL because the result page has no language toggle and the privacy page has no Chinese policy source.
 
-- [ ] **Step 3: Create the approved Chinese privacy source**
+- [x] **Step 3: Create the approved Chinese privacy source**
 
 Create `docs/legal/privacy-policy.zh-CN.md` with this complete content:
 
@@ -509,7 +509,7 @@ ENHE Promotion Manager 帮助用户将产品或网站 URL 转换为受控的推�
 邮寄地址：深圳市龙岗区横岗街道塘坑社区宸和路51号中联展数字电商产业园C栋C305
 ```
 
-- [ ] **Step 4: Implement bilingual result and privacy rendering**
+- [x] **Step 4: Implement bilingual result and privacy rendering**
 
 Change checkout-result call sites to pass a stable result key and optional License Key rather than arbitrary user-facing prose. Support these keys in both languages:
 
@@ -531,7 +531,7 @@ const checkoutResultMessages = {
 
 For `privacy`, load `privacy-policy.md` and `privacy-policy.zh-CN.md`, render each through the existing safe Markdown converter into separate language panels, and add a `中文 / EN` control using the same `enhe_pm_language` local-storage key. Keep the existing single-file behavior for terms, refund, and support.
 
-- [ ] **Step 5: Run focused tests and verify GREEN**
+- [x] **Step 5: Run focused tests and verify GREEN**
 
 Run:
 
@@ -541,7 +541,7 @@ node --test --test-name-pattern="privacy|result|ZPAY" src/server.test.js
 
 Expected: all matching tests pass and the License Key appears only on the authorized paid claim page.
 
-- [ ] **Step 6: Commit bilingual public content**
+- [x] **Step 6: Commit bilingual public content**
 
 ```powershell
 git add -- docs/legal/privacy-policy.zh-CN.md backend/license-service/src/server.js backend/license-service/src/server.test.js
@@ -555,7 +555,7 @@ git commit -m "feat: localize payment and privacy pages"
 - Modify: `deploy/promotion-manager/README.md`
 - Modify: `docs/superpowers/plans/2026-07-15-desktop-qr-checkout-implementation.md`
 
-- [ ] **Step 1: Update service documentation**
+- [x] **Step 1: Update service documentation**
 
 Document these exact endpoint contracts in `backend/license-service/README.md`:
 
@@ -572,7 +572,7 @@ GET /api/promotion-manager/health
 
 Also document desktop QR, mobile direct launch, the ten-minute polling limit, and the exact 30-day prices.
 
-- [ ] **Step 2: Update deployment verification documentation**
+- [x] **Step 2: Update deployment verification documentation**
 
 Add these commands to `deploy/promotion-manager/README.md`:
 
@@ -584,7 +584,7 @@ curl -fsS https://www.enhe-tech.com.cn/promotion-manager/checkout
 curl -fsS https://www.enhe-tech.com.cn/promotion-manager/privacy
 ```
 
-- [ ] **Step 3: Run backend tests**
+- [x] **Step 3: Run backend tests**
 
 ```powershell
 npm test
@@ -592,7 +592,7 @@ npm test
 
 Expected: exit code 0, no failed Node tests.
 
-- [ ] **Step 4: Run the full Python regression suite**
+- [x] **Step 4: Run the full Python regression suite**
 
 From repository root:
 
@@ -602,7 +602,7 @@ python -m unittest discover -s scripts -p 'test_*.py'
 
 Expected: exit code 0 and `OK` with no failures.
 
-- [ ] **Step 5: Run static and dependency checks**
+- [x] **Step 5: Run static and dependency checks**
 
 ```powershell
 git diff --check origin/main...HEAD
@@ -612,7 +612,7 @@ git status --short
 
 Expected: no whitespace errors, zero production vulnerabilities, and only intended branch files plus the preserved user-owned `dist` changes in the original checkout.
 
-- [ ] **Step 6: Commit documentation and completed plan state**
+- [x] **Step 6: Commit documentation and completed plan state**
 
 Mark completed plan checkboxes, then commit only the plan and documentation:
 
