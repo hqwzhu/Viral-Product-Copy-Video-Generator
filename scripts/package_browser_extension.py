@@ -84,7 +84,7 @@ def build_report(out_dir: Path) -> dict[str, Any]:
         "storeSubmission": {
             "chrome": "https://developer.chrome.com/docs/webstore/publish",
             "edge": "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
-            "privacyPolicyUrl": "https://www.enhe-tech.com.cn/privacy",
+            "privacyPolicyUrl": "https://www.enhe-tech.com.cn/promotion-manager/privacy",
             "supportUrl": "https://www.enhe-tech.com.cn/",
         },
         "guardrails": [

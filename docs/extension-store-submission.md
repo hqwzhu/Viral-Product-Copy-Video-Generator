@@ -33,7 +33,7 @@ Upload the zip file to the store. Keep the report as release evidence.
 - No platform secrets, payment provider secrets, cookies, OAuth tokens, or webhook secrets are bundled.
 - The package contains `icons/icon16.png`, `icons/icon48.png`, and `icons/icon128.png`.
 - The extension links to the ENHE website, product page, and GitHub repository for traffic.
-- A public privacy policy URL is ready, recommended: `https://www.enhe-tech.com.cn/privacy`.
+- A public privacy policy URL is ready: `https://www.enhe-tech.com.cn/promotion-manager/privacy`.
 - A support URL is ready, recommended: `https://www.enhe-tech.com.cn/`.
 - Publication-ready policy pages are drafted in `docs/legal/`.
 - Store listing and reviewer copy are drafted in `docs/store/`.

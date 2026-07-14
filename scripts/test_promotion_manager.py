@@ -6939,6 +6939,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])
+        self.assertEqual(
+            report["storeSubmission"]["privacyPolicyUrl"],
+            "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+        )
         with zipfile.ZipFile(package_path) as package:
             names = set(package.namelist())
         self.assertIn("manifest.json", names)
@@ -7092,6 +7096,17 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("remote code", text.lower())
         self.assertIn("收费订阅", zh_extension)
         self.assertIn("上架", chinese)
+
+    def test_privacy_policy_is_publication_ready(self) -> None:
+        privacy = (DOCS / "legal/privacy-policy.md").read_text(encoding="utf-8")
+        lower = privacy.lower()
+
+        self.assertNotIn("publication-ready draft", lower)
+        self.assertNotIn("review it with counsel", lower)
+        self.assertNotIn("before production launch", lower)
+        self.assertIn("30 days", privacy)
+        self.assertIn("180 days", privacy)
+        self.assertIn("huqingwei5942@gmail.com", privacy)
 
     def test_legal_store_and_deployment_launch_materials_are_ready(self) -> None:
         required_markers = {

@@ -1,8 +1,8 @@
 # ENHE Promotion Manager Privacy Policy
 
-Effective date: 2026-07-10
+Effective date: 2026-07-14
 
-This policy is a publication-ready draft for the ENHE Promotion Manager browser extension and hosted service. Review it with counsel before public launch.
+This policy explains how ENHE AI processes information for the ENHE Promotion Manager browser extension and optional hosted service.
 
 ## What The Product Does
 
@@ -14,7 +14,7 @@ ENHE Promotion Manager helps users turn product or website URLs into guarded pro
 - Selected target platforms and workflow options.
 - Locally stored extension settings, including license key and endpoint preferences.
 - Hosted-run payloads submitted by the user, including product URL, selected platforms, workflow depth, and safe workflow options.
-- Billing and subscription status from Stripe or an equivalent payment provider.
+- Billing and subscription status from ZPAY, Stripe, or an equivalent payment provider.
 - Server logs, quota events, usage reservations, hosted-run status, and audit events.
 
 ## Data We Do Not Collect
@@ -40,11 +40,16 @@ The extension stores the license key, endpoint preferences, and last run metadat
 
 ## Payment Processing
 
-Payments are handled by Stripe or an equivalent provider. ENHE servers do not receive or store raw card numbers. Payment provider privacy terms apply to checkout and billing portal activity.
+Payments are handled by ZPAY, Stripe, or an equivalent provider. ENHE servers do not receive or store raw payment card numbers or users' payment-account passwords. Payment provider privacy terms apply to checkout and billing activity.
 
 ## Retention
 
-Hosted-run artifacts and audit logs are retained only as long as needed for service delivery, troubleshooting, billing records, abuse prevention, and legal compliance. Operators should configure an artifact cleanup policy before production launch.
+- Hosted-run artifacts are retained for up to 30 days after a run finishes, unless the user requests earlier deletion or a longer period is required to investigate abuse, resolve a dispute, or comply with law.
+- Security, usage, and audit logs are retained for up to 180 days.
+- Billing, refund, tax, and license records are retained for the period required by applicable law and payment-provider obligations.
+- Local extension settings remain on the user's device until the user clears extension storage or uninstalls the extension.
+
+After the applicable period ends, information is deleted or anonymized unless continued retention is legally required.
 
 ## Security
 
@@ -52,5 +57,8 @@ The extension does not load remote executable code. Backend secrets, Stripe keys
 
 ## Contact
 
+Email: huqingwei5942@gmail.com
+
 Support: https://www.enhe-tech.com.cn/promotion-manager/support
 
+Mailing address: 深圳市龙岗区横岗街道塘坑社区宸和路51号中联展数字电商产业园C栋C305
