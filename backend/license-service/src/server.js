@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
+const QRCode = require("qrcode");
 const Stripe = require("stripe");
 const {
   createStateStore,
@@ -209,6 +210,7 @@ app.post("/api/promotion-manager/payments/zpay/checkout", asyncHandler(async (re
   const licenseId = `lic_${crypto.randomUUID()}`;
   const licenseKey = generateLicenseKey();
   const paymentType = normalizeZpayType(req.body.type || loadZpayConfig().defaultType);
+  const claimUrl = `${publicBaseUrl}/promotion-manager/checkout/success?orderNo=${encodeURIComponent(orderNo)}`;
   const request = buildZpayPaymentRequest({
     config: loadZpayConfig(),
     paymentId,
@@ -218,7 +220,7 @@ app.post("/api/promotion-manager/payments/zpay/checkout", asyncHandler(async (re
     amount,
     clientIp: requestIp(req),
     notifyUrl: `${publicBaseUrl}/api/promotion-manager/webhooks/zpay`,
-    returnUrl: `${publicBaseUrl}/promotion-manager/checkout/success?orderNo=${encodeURIComponent(orderNo)}`
+    returnUrl: claimUrl
   });
   const providerResponse = await requestZpayPayment(request);
   if (String(providerResponse.code) !== "1") {
@@ -273,7 +275,24 @@ app.post("/api/promotion-manager/payments/zpay/checkout", asyncHandler(async (re
     maxAge: 24 * 60 * 60 * 1000,
     path: "/promotion-manager"
   });
-  return res.redirect(303, destination);
+  const wantsJson = String(req.get("accept") || "").toLowerCase().includes("application/json");
+  if (!wantsJson) return res.redirect(303, destination);
+
+  const qrCodeDataUrl = await QRCode.toDataURL(destination, {
+    errorCorrectionLevel: "M",
+    margin: 2,
+    width: 280
+  });
+  return res.status(201).json({
+    orderNo,
+    plan,
+    amount,
+    termDays: loadZpayConfig().licenseDays,
+    paymentType,
+    paymentUrl: destination,
+    qrCodeDataUrl,
+    claimUrl
+  });
 }));
 
 app.get("/promotion-manager/checkout/success", asyncHandler(async (req, res) => {

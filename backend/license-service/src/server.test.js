@@ -210,7 +210,32 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     const licenseKey = decodeURIComponent(setCookie.match(/enhe_pm_claim=([^;]+)/)[1]);
     assert.match(licenseKey, /^pm_live_/);
 
-    assert.equal(providerRequests.length, 1);
+    const jsonCheckout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        plan: "growth",
+        email: "qr-buyer@example.com",
+        type: "wxpay"
+      }),
+      redirect: "manual"
+    });
+    assert.equal(jsonCheckout.status, 201);
+    const jsonBody = await jsonCheckout.json();
+    assert.equal(jsonBody.plan, "growth");
+    assert.equal(jsonBody.amount, "59.00");
+    assert.equal(jsonBody.termDays, 30);
+    assert.equal(jsonBody.paymentType, "wxpay");
+    assert.match(jsonBody.orderNo, /^pm_/);
+    assert.equal(jsonBody.paymentUrl, "https://pay.example.test/order/zpay_trade_test");
+    assert.match(jsonBody.qrCodeDataUrl, /^data:image\/png;base64,/);
+    assert.match(jsonBody.claimUrl, /\/promotion-manager\/checkout\/success\?orderNo=/);
+    assert.match(jsonCheckout.headers.get("set-cookie") || "", /enhe_pm_claim=/);
+
+    assert.equal(providerRequests.length, 2);
     const providerRequest = providerRequests[0];
     assert.equal(providerRequest.type, "wxpay");
     assert.equal(providerRequest.money, "19.00");
@@ -218,6 +243,13 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.equal(providerRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
     assert.match(providerRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
     assert.equal(providerRequest.sign, signZpay(providerRequest, process.env.ZPAY_KEY));
+    const qrProviderRequest = providerRequests[1];
+    assert.equal(qrProviderRequest.type, "wxpay");
+    assert.equal(qrProviderRequest.money, "59.00");
+    assert.equal(qrProviderRequest.name, "ENHE Promotion Manager Growth");
+    assert.equal(qrProviderRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
+    assert.match(qrProviderRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
+    assert.equal(qrProviderRequest.sign, signZpay(qrProviderRequest, process.env.ZPAY_KEY));
 
     const pendingState = await store.load();
     const payment = Object.values(pendingState.payments)[0];
