@@ -295,6 +295,27 @@ app.post("/api/promotion-manager/payments/zpay/checkout", asyncHandler(async (re
   });
 }));
 
+app.get("/api/promotion-manager/payments/zpay/status", asyncHandler(async (req, res) => {
+  const orderNo = String(req.query.orderNo || "").trim();
+  const state = await store.load();
+  const payment = Object.values(state.payments).find((item) => item.orderNo === orderNo);
+  if (!payment) return res.status(404).json({ error: "payment_not_found" });
+
+  const license = state.licenses[payment.licenseId];
+  const claim = cookieValue(req.headers.cookie, "enhe_pm_claim");
+  if (!license || !claim || hashLicenseKey(claim) !== license.licenseKeyHash) {
+    return res.status(403).json({ error: "payment_claim_mismatch" });
+  }
+
+  const status = payment.status === "paid"
+    ? "paid"
+    : payment.status === "failed" ? "failed" : "pending";
+  const claimUrl = status === "paid"
+    ? `${publicBaseUrl}/promotion-manager/checkout/success?orderNo=${encodeURIComponent(orderNo)}`
+    : "";
+  return res.json({ orderNo, status, claimUrl });
+}));
+
 app.get("/promotion-manager/checkout/success", asyncHandler(async (req, res) => {
   const state = await store.load();
   const orderNo = String(req.query.orderNo || "");

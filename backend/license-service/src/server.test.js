@@ -233,7 +233,30 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.equal(jsonBody.paymentUrl, "https://pay.example.test/order/zpay_trade_test");
     assert.match(jsonBody.qrCodeDataUrl, /^data:image\/png;base64,/);
     assert.match(jsonBody.claimUrl, /\/promotion-manager\/checkout\/success\?orderNo=/);
-    assert.match(jsonCheckout.headers.get("set-cookie") || "", /enhe_pm_claim=/);
+    const jsonSetCookie = jsonCheckout.headers.get("set-cookie") || "";
+    assert.match(jsonSetCookie, /enhe_pm_claim=/);
+    const jsonClaimCookie = jsonSetCookie.split(";", 1)[0];
+
+    const unknownStatus = await fetch(
+      `${baseUrl}/api/promotion-manager/payments/zpay/status?orderNo=pm_unknown`
+    );
+    assert.equal(unknownStatus.status, 404);
+
+    const anonymousStatus = await fetch(
+      `${baseUrl}/api/promotion-manager/payments/zpay/status?orderNo=${encodeURIComponent(jsonBody.orderNo)}`
+    );
+    assert.equal(anonymousStatus.status, 403);
+
+    const pendingStatus = await fetch(
+      `${baseUrl}/api/promotion-manager/payments/zpay/status?orderNo=${encodeURIComponent(jsonBody.orderNo)}`,
+      { headers: { cookie: jsonClaimCookie } }
+    );
+    assert.equal(pendingStatus.status, 200);
+    assert.deepEqual(await pendingStatus.json(), {
+      orderNo: jsonBody.orderNo,
+      status: "pending",
+      claimUrl: ""
+    });
 
     assert.equal(providerRequests.length, 2);
     const providerRequest = providerRequests[0];
@@ -286,6 +309,36 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     });
     assert.equal(success.status, 200);
     assert.match(await success.text(), new RegExp(licenseKey));
+
+    const stateBeforeQrPayment = await store.load();
+    const qrPayment = Object.values(stateBeforeQrPayment.payments)
+      .find((item) => item.orderNo === jsonBody.orderNo);
+    const qrNotify = {
+      pid: process.env.ZPAY_PID,
+      out_trade_no: qrPayment.orderNo,
+      trade_no: "zpay_trade_qr_test",
+      trade_status: "TRADE_SUCCESS",
+      type: "wxpay",
+      money: "59.00"
+    };
+    qrNotify.sign_type = "MD5";
+    qrNotify.sign = signZpay(qrNotify, process.env.ZPAY_KEY);
+    const qrNotified = await fetch(
+      `${baseUrl}/api/promotion-manager/webhooks/zpay?${new URLSearchParams(qrNotify)}`
+    );
+    assert.equal(qrNotified.status, 200);
+    assert.equal(await qrNotified.text(), "success");
+
+    const paidStatus = await fetch(
+      `${baseUrl}/api/promotion-manager/payments/zpay/status?orderNo=${encodeURIComponent(jsonBody.orderNo)}`,
+      { headers: { cookie: jsonClaimCookie } }
+    );
+    assert.equal(paidStatus.status, 200);
+    assert.deepEqual(await paidStatus.json(), {
+      orderNo: jsonBody.orderNo,
+      status: "paid",
+      claimUrl: jsonBody.claimUrl
+    });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => provider.close(resolve));
