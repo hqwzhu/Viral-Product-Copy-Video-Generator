@@ -78,6 +78,19 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
+生成完整发布媒体包，并把视频、封面、详情图等路径写回发布包：
+
+```powershell
+python scripts\media_asset_pack.py `
+  --content-json ".\promotion-output\reports\promotion-manager\generated-content\product-platform-content.json" `
+  --publish-pack ".\promotion-output\reports\promotion-manager\publish-packs\product-publish-pack.json" `
+  --video-file "youtube=.\promotion-output\videos\product-youtube.mp4" `
+  --video-file "douyin=.\promotion-output\videos\product-douyin.mp4" `
+  --out-dir ".\promotion-output"
+```
+
+完整发布包必须包含：爆款标题、正式文案、平台标签、首批评论/置顶评论/回复提示、视频成品状态和路径、封面图、详情图，以及统一的 `assets` 列表。完整工作流会在视频渲染后自动运行这一步；如果使用 `--skip-video`，仍会生成封面和详情图，并把缺失视频标记为 `missing`，不会伪造成品视频。
+
 内容审核桥接包：
 
 ```powershell
@@ -136,6 +149,14 @@ python scripts\browser_publish_session.py `
 ```
 
 官方 API 发布只有在凭证、目标和审批都存在时才执行：
+
+先检查 YouTube 官方 API 凭证是否被项目识别；该命令不会上传视频，也不会输出密钥值：
+
+```powershell
+python scripts\youtube_credential_check.py --env-file "C:\path\to\.env" --out-dir ".\promotion-output"
+```
+
+YouTube OAuth 客户端变量支持 `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`，也支持 `.env` 模板里的 `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`。
 
 ```powershell
 python scripts\publish_executor.py `

@@ -7,6 +7,7 @@ import argparse
 import gzip
 import ipaddress
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -16,6 +17,9 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
+
+from env_loader import load_project_env, preparse_env_file
+from web_data_provider import DEFAULT_FIRECRAWL_BASE_URL, WebDataProviderError, map_site
 
 
 TODAY = date.today().isoformat()
@@ -128,10 +132,13 @@ class LinkParser(HTMLParser):
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     pages, fetch_records, sitemap_records, sitemap_urls = load_sources(args)
-    candidates = rank_candidates(args, pages, sitemap_urls)
-    report = build_report(args, pages, fetch_records, sitemap_records, sitemap_urls, candidates)
+    web_data_records, web_data_urls = load_web_data_sources(args)
+    candidates = rank_candidates(args, pages, sitemap_urls, web_data_urls)
+    report = build_report(args, pages, fetch_records, sitemap_records, sitemap_urls, web_data_records, web_data_urls, candidates)
+    report["envLoad"] = env_load
     write_report(Path(args.out_dir), report)
     print(f"Product URL discovery written to: {(report_dir(Path(args.out_dir)) / 'product-url-discovery.json').resolve()}")
 
@@ -145,6 +152,7 @@ def parse_args() -> argparse.Namespace:
     source.add_argument("--sitemap-file", help="Saved sitemap.xml, sitemap index, or .xml.gz file.")
     parser.add_argument("--base-url", default="", help="Base URL for resolving links in --html-file.")
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before reading provider credentials. Values are never written to reports.")
     parser.add_argument("--top-n", type=int, default=50)
     parser.add_argument("--min-score", type=float, default=3.0)
     parser.add_argument("--max-pages", type=int, default=20)
@@ -154,6 +162,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-external", action="store_true")
     parser.add_argument("--skip-sitemaps", action="store_true", help="Do not try robots.txt or /sitemap.xml when --site-url is used.")
     parser.add_argument("--allow-localhost", action="store_true")
+    parser.add_argument("--web-data-provider", default=os.environ.get("WEB_DATA_PROVIDER", "auto"), choices=["auto", "local", "firecrawl"], help="Optional provider for site mapping before ranking product URLs.")
+    parser.add_argument("--firecrawl-base-url", default=os.environ.get("FIRECRAWL_BASE_URL", DEFAULT_FIRECRAWL_BASE_URL), help="Firecrawl API base URL. API key is read only from FIRECRAWL_API_KEY.")
+    parser.add_argument("--web-data-fixture-json", default="", help="Local web data fixture for tests/offline review.")
+    parser.add_argument("--web-data-search", default="", help="Optional provider-side map search term, such as product or pricing.")
     return parser.parse_args()
 
 
@@ -175,6 +187,44 @@ def load_sources(args: argparse.Namespace) -> tuple[list[Page], list[dict[str, A
     if not args.skip_sitemaps:
         sitemap_urls, sitemap_records = discover_sitemap_urls(args)
     return pages, fetch_records, sitemap_records, sitemap_urls
+
+
+def load_web_data_sources(args: argparse.Namespace) -> tuple[list[dict[str, Any]], list[str]]:
+    if not args.site_url:
+        return [], []
+    record: dict[str, Any] = {
+        "source": "web_data_provider",
+        "provider": args.web_data_provider,
+        "status": "skipped",
+        "links": 0,
+        "apiKeyPresent": False,
+        "credentialValuesStored": False,
+    }
+    try:
+        result = map_site(
+            args.site_url,
+            provider=args.web_data_provider,
+            base_url=args.firecrawl_base_url,
+            fixture_json=args.web_data_fixture_json,
+            search=args.web_data_search,
+        )
+    except WebDataProviderError as exc:
+        record.update({"status": "error", "reason": str(exc)})
+        return [record], []
+
+    links = [item.get("url", "") for item in result.get("links", []) if isinstance(item, dict)]
+    urls = [url for url in links if is_http_url(url)]
+    record.update(
+        {
+            "provider": result.get("provider", args.web_data_provider),
+            "status": result.get("status", "skipped"),
+            "reason": result.get("reason", ""),
+            "links": len(urls),
+            "apiKeyPresent": bool(result.get("apiKeyPresent")),
+            "credentialValuesStored": False,
+        }
+    )
+    return [record], dedupe(urls)
 
 
 def crawl_site(args: argparse.Namespace) -> tuple[list[Page], list[dict[str, Any]]]:
@@ -215,7 +265,7 @@ def crawl_site(args: argparse.Namespace) -> tuple[list[Page], list[dict[str, Any
     return pages, fetch_records
 
 
-def rank_candidates(args: argparse.Namespace, pages: list[Page], sitemap_urls: list[str]) -> list[dict[str, Any]]:
+def rank_candidates(args: argparse.Namespace, pages: list[Page], sitemap_urls: list[str], web_data_urls: list[str] | None = None) -> list[dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
     base_origin = first_origin(args.site_url or args.sitemap_url or args.base_url or (pages[0].url if pages else "") or (sitemap_urls[0] if sitemap_urls else ""))
     for page in pages:
@@ -254,6 +304,24 @@ def rank_candidates(args: argparse.Namespace, pages: list[Page], sitemap_urls: l
                 "score": score,
                 "reasons": reasons,
                 "sourceType": "sitemap",
+                "selected": False,
+            }
+    for url in web_data_urls or []:
+        if not url or not is_http_url(url):
+            continue
+        if not args.include_external and base_origin and first_origin(url) != base_origin:
+            continue
+        score, reasons = product_score(url, "")
+        record = records.get(url)
+        if not record or score > record["score"]:
+            records[url] = {
+                "url": url,
+                "anchorText": "",
+                "sourcePage": "web_data_provider",
+                "sourceDepth": 0,
+                "score": score,
+                "reasons": reasons,
+                "sourceType": "web_data_map",
                 "selected": False,
             }
     candidates = sorted(records.values(), key=lambda item: (item["score"], -item["sourceDepth"], item["url"]), reverse=True)
@@ -304,6 +372,8 @@ def build_report(
     fetch_records: list[dict[str, Any]],
     sitemap_records: list[dict[str, Any]],
     sitemap_urls: list[str],
+    web_data_records: list[dict[str, Any]],
+    web_data_urls: list[str],
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
     selected = [item for item in candidates if item["selected"]]
@@ -329,6 +399,7 @@ def build_report(
             "robotsTxtRead": sum(1 for item in sitemap_records if item.get("source") == "robots.txt" and item.get("status") == "ready"),
             "sitemapsRead": sum(1 for item in sitemap_records if item.get("source") in {"sitemap_file", "sitemap_url"} and item.get("status") == "ready"),
             "sitemapUrls": len(sitemap_urls),
+            "webDataLinks": len(web_data_urls),
             "candidateUrls": len(candidates),
             "selectedUrls": len(selected),
         },
@@ -336,11 +407,13 @@ def build_report(
         "candidates": candidates,
         "fetchRecords": fetch_records,
         "sitemapRecords": sitemap_records,
+        "webDataRecords": web_data_records,
         "artifacts": {
             "urlsFile": str(urls_file(Path(args.out_dir))),
         },
         "guardrails": [
             "Only public HTML links and public sitemap URLs are used for discovery.",
+            "Optional Firecrawl Map results are used only for public site URL discovery and read FIRECRAWL_API_KEY from the environment.",
             "No login, captcha bypass, cookie extraction, hidden token reuse, or private endpoint calls.",
             "Private, localhost, and link-local URLs are blocked unless --allow-localhost is supplied for local testing.",
             "Discovered URLs are candidates; product claims still require product_url_reader.py and product_intake.py evidence.",
@@ -367,6 +440,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Robots.txt read: {report['summary'].get('robotsTxtRead', 0)}",
         f"- Sitemaps read: {report['summary'].get('sitemapsRead', 0)}",
         f"- Sitemap URLs: {report['summary'].get('sitemapUrls', 0)}",
+        f"- Web data links: {report['summary'].get('webDataLinks', 0)}",
         f"- Candidate URLs: {report['summary']['candidateUrls']}",
         f"- Selected URLs: {report['summary']['selectedUrls']}",
         f"- URLs file: {report['artifacts']['urlsFile']}",

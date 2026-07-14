@@ -33,7 +33,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
 - 不打包平台密钥、支付密钥、cookie、OAuth token 或 webhook secret。
 - 插件包包含 `icons/icon16.png`、`icons/icon48.png`、`icons/icon128.png`。
 - 插件内带 ENHE 网站、产品页和 GitHub 链接，用于网站引流。
-- 准备公开 privacy policy，建议使用 `https://www.enhe-tech.com.cn/privacy`。
+- 准备公开 privacy policy：`https://www.enhe-tech.com.cn/promotion-manager/privacy`。
 - 准备支持网址，建议使用 `https://www.enhe-tech.com.cn/`。
 
 ## Chrome Web Store 上架步骤
@@ -48,7 +48,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
    - 分类：按后台可选项选择 productivity 或 marketing。
    - 网站：`https://www.enhe-tech.com.cn/`
    - 支持网址：`https://www.enhe-tech.com.cn/`
-   - privacy policy：`https://www.enhe-tech.com.cn/privacy`
+   - privacy policy：`https://www.enhe-tech.com.cn/promotion-manager/privacy`
 6. 填写隐私实践。插件使用 `activeTab`、`storage`、`clipboardWrite` 和 ENHE 数据接口，不收集平台密码、cookie、支付密钥或 API token。
 7. 说明收费订阅：托管运行消耗 ENHE 订阅积分，本地命令生成可作为免费或试用能力。
 8. 提交审核。

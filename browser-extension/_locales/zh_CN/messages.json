@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "ENHE 推广管理器"
+  },
+  "extensionShortName": {
+    "message": "ENHE 推广"
+  },
+  "extensionDescription": {
+    "message": "采集产品页面，生成受控的 ENHE 本地命令或托管任务，用于文案、视频、发布和效果复盘。"
+  },
+  "actionTitle": {
+    "message": "ENHE 推广管理器"
+  }
+}

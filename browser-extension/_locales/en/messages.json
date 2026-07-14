@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "ENHE Promotion Manager"
+  },
+  "extensionShortName": {
+    "message": "ENHE Promote"
+  },
+  "extensionDescription": {
+    "message": "Capture product pages and build guarded ENHE commands or hosted runs for copy, video, publishing, and performance reviews."
+  },
+  "actionTitle": {
+    "message": "ENHE Promotion Manager"
+  }
+}

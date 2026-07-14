@@ -1,7 +1,7 @@
 {
   "name": "ENHE Promotion Manager Billing Contract",
   "version": "0.6.1",
-  "provider": "stripe_or_equivalent_subscription_provider",
+  "provider": "zpay_domestic_or_stripe_international",
   "website": "https://www.enhe-tech.com.cn/",
   "checkoutUrl": "https://www.enhe-tech.com.cn/promotion-manager/checkout",
   "customerPortalUrl": "https://www.enhe-tech.com.cn/promotion-manager/billing",
@@ -9,7 +9,15 @@
   "usageAuthorizeEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize",
   "usageCommitEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/usage/commit",
   "hostedRunEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/run",
+  "hostedRunStatusEndpointTemplate": "https://www.enhe-tech.com.cn/api/promotion-manager/run/{runId}",
   "webhookEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/stripe",
+  "domesticWebhookEndpoint": "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay",
+  "legalUrls": {
+    "privacyPolicy": "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+    "termsOfService": "https://www.enhe-tech.com.cn/promotion-manager/terms",
+    "refundPolicy": "https://www.enhe-tech.com.cn/promotion-manager/refund",
+    "support": "https://www.enhe-tech.com.cn/promotion-manager/support"
+  },
   "plans": {
     "free": {
       "monthlyPriceUsd": 0,
@@ -48,6 +56,8 @@
     "hosted_mp4_render": 3,
     "browser_publish_session": 2,
     "launch_unlock_pack": 2,
+    "viral_evidence_inbox_setup": 1,
+    "viral_evidence_inbox": 2,
     "real_evidence_inbox_setup": 1,
     "real_evidence_inbox": 2,
     "performance_monitor": 2,
@@ -63,7 +73,7 @@
       "requestedPlan": "free|starter|growth|scale",
       "extensionVersion": "string",
       "website": "string",
-      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
+      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|viral_evidence_inbox_setup|viral_evidence_inbox|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
       "estimatedMonthlyCredits": "number"
     }
   },
@@ -80,10 +90,10 @@
     "method": "POST",
     "body": {
       "licenseKey": "string",
-      "workflowType": "command_only|standard_run|research_run|deep_strategy_review|hosted_mp4_render|browser_publish_session|launch_unlock_pack|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness_audit|automation_config_init|automation_due_run|automation_windows_task",
+      "workflowType": "command_only|standard_run|research_run|deep_strategy_review|hosted_mp4_render|browser_publish_session|launch_unlock_pack|viral_evidence_inbox_setup|viral_evidence_inbox|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness_audit|automation_config_init|automation_due_run|automation_windows_task",
       "estimatedCredits": "number",
       "idempotencyKey": "string",
-      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
+      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|viral_evidence_inbox_setup|viral_evidence_inbox|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
       "extensionVersion": "string",
       "website": "string"
     }
@@ -100,9 +110,9 @@
     "body": {
       "licenseKey": "string",
       "usageId": "string",
-      "workflowType": "command_only|standard_run|research_run|deep_strategy_review|hosted_mp4_render|browser_publish_session|launch_unlock_pack|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness_audit|automation_config_init|automation_due_run|automation_windows_task",
+      "workflowType": "command_only|standard_run|research_run|deep_strategy_review|hosted_mp4_render|browser_publish_session|launch_unlock_pack|viral_evidence_inbox_setup|viral_evidence_inbox|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness_audit|automation_config_init|automation_due_run|automation_windows_task",
       "estimatedCredits": "number",
-      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
+      "commandType": "skill_entry|browser_publish_session|launch_unlock_pack|viral_evidence_inbox_setup|viral_evidence_inbox|real_evidence_inbox_setup|real_evidence_inbox|performance_monitor|final_readiness|automation_init|automation_run|automation_windows_task",
       "extensionVersion": "string",
       "website": "string",
       "requestSource": "chrome_extension",
@@ -120,6 +130,7 @@
     "runId": "string",
     "status": "queued|running|succeeded|failed|blocked",
     "dashboardUrl": "string",
+    "statusUrl": "string",
     "reportUrl": "string",
     "reason": "quota_required|inactive_license|missing_usage_reservation|ok"
   },

@@ -13,6 +13,17 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from env_loader import (
+    YOUTUBE_ACCESS_TOKEN_ENVS,
+    YOUTUBE_CLIENT_ID_ENVS,
+    YOUTUBE_CLIENT_SECRET_ENVS,
+    blank_env_names,
+    grouped_env_ready,
+    load_project_env,
+    preparse_env_file,
+    present_env_names,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -23,6 +34,7 @@ SAFE_INSTALLS = {"playwright_chromium"}
 SCRIPT_REQUIREMENTS = {
     "browser_snapshot": "browser_snapshot.py",
     "browser_video_sampler": "browser_video_sampler.py",
+    "web_data_provider": "web_data_provider.py",
     "product_url_discovery": "product_url_discovery.py",
     "product_url_reader": "product_url_reader.py",
     "product_batch_runner": "product_batch_runner.py",
@@ -41,6 +53,7 @@ SCRIPT_REQUIREMENTS = {
     "follow_up_capture_runner": "follow_up_capture_runner.py",
     "competitor_content_enhancer": "competitor_content_enhancer.py",
     "render_video": "render_video.py",
+    "media_asset_pack": "media_asset_pack.py",
     "publish_queue": "publish_queue.py",
     "publish_readiness": "publish_readiness_runner.py",
     "publish_setup_assistant": "publish_setup_assistant.py",
@@ -49,8 +62,10 @@ SCRIPT_REQUIREMENTS = {
     "browser_publish_form_fill": "browser_publish_form_fill.py",
     "browser_publish_session": "browser_publish_session.py",
     "platform_access_audit": "platform_access_audit.py",
+    "platform_capabilities": "platform_capabilities.py",
     "publish_executor": "publish_executor.py",
     "youtube_oauth_publish": "youtube_oauth_publish.py",
+    "youtube_credential_check": "youtube_credential_check.py",
     "published_items": "published_items.py",
     "publish_url_capture": "publish_url_capture.py",
     "post_publish_metrics_capture": "post_publish_metrics_capture.py",
@@ -73,16 +88,23 @@ SCRIPT_REQUIREMENTS = {
     "self_evolution_audit": "self_evolution_audit.py",
     "billing_contract_simulator": "billing_contract_simulator.py",
     "package_browser_extension": "package_browser_extension.py",
+    "completion_roadmap": "completion_roadmap.py",
+    "operator_action_checklist": "operator_action_checklist.py",
 }
 
 
 CREDENTIALS = {
     "youtube_search_metrics": ["YOUTUBE_API_KEY"],
-    "youtube_oauth_upload": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
-    "youtube_oauth_flow": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+    "youtube_oauth_upload": list(YOUTUBE_ACCESS_TOKEN_ENVS),
+    "youtube_oauth_flow": list(YOUTUBE_CLIENT_ID_ENVS + YOUTUBE_CLIENT_SECRET_ENVS),
     "github_write": ["GITHUB_TOKEN", "GH_TOKEN"],
     "tiktok_direct_post": ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "TIKTOK_ACCESS_TOKEN", "TIKTOK_OPEN_ID"],
-    "douyin_publish": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
+    "firecrawl_web_data": ["FIRECRAWL_API_KEY"],
+}
+
+CREDENTIAL_ANY_CAPABILITIES = {"youtube_search_metrics", "youtube_oauth_upload", "github_write", "firecrawl_web_data"}
+CREDENTIAL_GROUP_CAPABILITIES = {
+    "youtube_oauth_flow": [YOUTUBE_CLIENT_ID_ENVS, YOUTUBE_CLIENT_SECRET_ENVS],
 }
 
 
@@ -107,9 +129,9 @@ OFFICIAL_SOURCES = [
     },
     {
         "platform": "douyin",
-        "capability": "upload_create_publish",
+        "capability": "reserved_upload_create_publish",
         "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
-        "notes": "Official open-platform upload/create path is integrated through publish_executor.py; app permission approval, user authorization, and platform review still apply.",
+        "notes": "Official open-platform upload/create is kept as a reserved future port. Current operator flow uses browser-assisted/manual publishing because Douyin authorization is unavailable.",
     },
     {
         "platform": "xiaohongshu",
@@ -123,6 +145,7 @@ OFFICIAL_SOURCES = [
 GITHUB_DOC_FILES = [
     "README.md",
     "README.zh-CN.md",
+    "README.en.md",
     "docs/installation.md",
     "docs/zh-CN/installation.md",
     "docs/usage.md",
@@ -134,6 +157,22 @@ GITHUB_DOC_FILES = [
     "docs/subscription-pricing.md",
     "docs/billing-backend-contract.md",
     "docs/final-capability-map.md",
+    "docs/100-percent-completion-roadmap.md",
+    "docs/zh-CN/100-percent-completion-guide.md",
+    "docs/open-source-integration.md",
+    "docs/legal/privacy-policy.md",
+    "docs/legal/terms-of-service.md",
+    "docs/legal/refund-policy.md",
+    "docs/legal/support.md",
+    "docs/store/chrome-listing.md",
+    "docs/store/edge-listing.md",
+    "docs/store/reviewer-notes.md",
+    "docs/store/screenshot-plan.md",
+    "deploy/promotion-manager/README.md",
+    "deploy/promotion-manager/.env.production.example",
+    "deploy/promotion-manager/nginx-promotion-manager.conf",
+    "deploy/promotion-manager/enhe-promotion-manager-api.service",
+    "deploy/promotion-manager/enhe-promotion-manager-worker.service",
 ]
 
 
@@ -149,13 +188,32 @@ BROWSER_EXTENSION_FILES = [
 ]
 
 
+BACKEND_DEPLOY_FILES = [
+    "backend/license-service/package.json",
+    "backend/license-service/.env.example",
+    "backend/license-service/README.md",
+    "backend/license-service/src/server.js",
+    "backend/license-service/src/state-store.js",
+    "backend/license-service/src/hosted-worker.js",
+    "backend/license-service/src/migrate.js",
+    "backend/license-service/src/worker.js",
+    "backend/license-service/migrations/001_state_store.sql",
+    "deploy/promotion-manager/README.md",
+    "deploy/promotion-manager/.env.production.example",
+    "deploy/promotion-manager/nginx-promotion-manager.conf",
+    "deploy/promotion-manager/enhe-promotion-manager-api.service",
+    "deploy/promotion-manager/enhe-promotion-manager-worker.service",
+]
+
+
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.install_safe_missing_tools:
         install_safe_missing_tools(args)
-    report = build_report(args, out_dir)
+    report = build_report(args, out_dir, env_load)
     write_report(out_dir, report)
     print(f"Final capability audit written to: {(audit_dir(out_dir) / 'final-capability-audit.json').resolve()}")
 
@@ -163,6 +221,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit final capability readiness for the product promotion Skill.")
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before auditing credential presence. Values are never written to reports.")
     parser.add_argument(
         "--skip-runtime-checks",
         action="store_true",
@@ -194,7 +253,7 @@ def install_safe_missing_tools(args: argparse.Namespace) -> None:
         subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], cwd=ROOT, check=False)
 
 
-def build_report(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
+def build_report(args: argparse.Namespace, out_dir: Path, env_load: dict[str, object]) -> dict[str, Any]:
     scripts = script_status()
     tools = tool_status(skip_runtime_checks=args.skip_runtime_checks)
     credentials = credential_status()
@@ -206,6 +265,7 @@ def build_report(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         "generatedAt": TODAY,
         "root": str(ROOT),
         "outDir": str(out_dir),
+        "envLoad": env_load,
         "finalStatus": final_status(requirements),
         "requirements": requirements,
         "platforms": platforms,
@@ -246,6 +306,9 @@ def tool_status(skip_runtime_checks: bool) -> dict[str, dict[str, Any]]:
         "git": command_status("git"),
         "ffmpeg": command_status("ffmpeg"),
         "playwright": python_module_status("playwright"),
+        "googleApiPythonClient": python_module_status("googleapiclient"),
+        "googleAuthOauthlib": python_module_status("google_auth_oauthlib"),
+        "googleAuthHttplib2": python_module_status("google_auth_httplib2"),
         "playwrightChromium": {
             "available": playwright_chromium_available(skip_runtime_checks),
             "checked": not skip_runtime_checks,
@@ -293,11 +356,18 @@ def playwright_chromium_available(skip_runtime_checks: bool) -> bool:
 def credential_status() -> dict[str, dict[str, Any]]:
     status = {}
     for capability, names in CREDENTIALS.items():
-        present = [name for name in names if bool(os.environ.get(name))]
+        present = present_env_names(names)
+        if capability in CREDENTIAL_GROUP_CAPABILITIES:
+            ready = grouped_env_ready(CREDENTIAL_GROUP_CAPABILITIES[capability])
+        elif capability in CREDENTIAL_ANY_CAPABILITIES:
+            ready = bool(present)
+        else:
+            ready = all(name in present for name in names)
         status[capability] = {
             "requiredEnv": names,
             "presentEnv": present,
-            "ready": bool(present) if len(names) == 1 else all(name in present for name in names),
+            "blankEnv": blank_env_names(names),
+            "ready": ready,
             "valuesStored": False,
         }
     status["business_exports"] = {
@@ -320,38 +390,42 @@ def platform_status(
     return {
         "youtube": {
             "viralSearch": status_value(scripts_ready(scripts, ["competitor_collector"]) or (shared_browser_search and browser_ready)),
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "local_browser_static_fallback",
             "directPublish": "ready" if credentials["youtube_oauth_upload"]["ready"] else "needs_oauth_or_access_token",
             "metricsRecovery": "ready" if credentials["youtube_search_metrics"]["ready"] else "needs_youtube_api_key",
             "ordersRevenue": "business_export_required",
         },
         "github": {
             "viralSearch": status_value(scripts_ready(scripts, ["competitor_collector"])),
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "local_public_api_fallback",
             "directPublish": "ready" if credentials["github_write"]["ready"] else "needs_github_token",
             "metricsRecovery": "ready_public_repo_metrics",
             "ordersRevenue": "business_export_required",
         },
         "zhihu": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "browser_or_user_evidence_fallback",
             "directPublish": "manual_or_browser_assisted_only",
             "metricsRecovery": "manual_export_or_structured_snapshot_required",
             "ordersRevenue": "business_export_required",
         },
         "xiaohongshu": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "browser_or_user_evidence_fallback",
             "directPublish": "manual_or_browser_assisted_only",
             "metricsRecovery": "manual_export_or_structured_snapshot_required",
             "ordersRevenue": "business_export_required",
         },
         "douyin": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
-            "directPublish": "ready_with_open_platform_authorization"
-            if credentials["douyin_publish"]["ready"]
-            else "needs_douyin_open_platform_credentials_and_user_authorization",
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "browser_or_user_evidence_fallback",
+            "directPublish": "browser_assisted_publish_selected",
             "metricsRecovery": "manual_structured_snapshot_or_official_export_required",
             "ordersRevenue": "business_export_required",
         },
         "tiktok": {
             "viralSearch": "browser_visible_ready" if shared_browser_search and browser_ready else "browser_runtime_required",
+            "webData": "optional_firecrawl_ready" if credentials["firecrawl_web_data"]["ready"] else "browser_or_user_evidence_fallback",
             "directPublish": "official_app_authorization_required"
             if credentials["tiktok_direct_post"]["ready"]
             else "developer_app_scope_and_creator_auth_required",
@@ -375,7 +449,13 @@ def requirement_status(
     browser_runtime_ready = bool(tools["playwright"]["available"]) and (
         bool(tools["playwrightChromium"]["available"]) or not tools["playwrightChromium"]["checked"]
     )
-    video_scripts_ready = scripts_ready(scripts, ["render_video"])
+    web_data_ready = scripts_ready(scripts, ["web_data_provider"])
+    platform_capabilities_ready = scripts_ready(scripts, ["platform_capabilities"])
+    completion_roadmap_ready = scripts_ready(scripts, ["completion_roadmap"]) and (ROOT / "docs/100-percent-completion-roadmap.md").exists()
+    operator_action_checklist_ready = scripts_ready(scripts, ["operator_action_checklist"]) and (
+        ROOT / "docs/zh-CN/100-percent-completion-guide.md"
+    ).exists()
+    video_scripts_ready = scripts_ready(scripts, ["render_video", "media_asset_pack"])
     video_ready = video_scripts_ready and bool(tools["ffmpeg"]["available"])
     search_ready = scripts_ready(
         scripts,
@@ -405,6 +485,9 @@ def requirement_status(
             "youtube_oauth_publish",
         ],
     )
+    youtube_google_client_ready = all(
+        bool(tools[name]["available"]) for name in ["googleApiPythonClient", "googleAuthOauthlib", "googleAuthHttplib2"]
+    ) and (ROOT / "requirements-youtube.txt").exists()
     metrics_ready = scripts_ready(
         scripts,
         [
@@ -490,15 +573,27 @@ def requirement_status(
             ],
         },
         {
+            "id": "optional_firecrawl_web_data_backend",
+            "label": "Optionally use Firecrawl-style Search, Scrape, Map, Crawl, and Batch Scrape for public web evidence",
+            "status": "ready" if web_data_ready else "not_ready",
+            "evidence": scripts_present(scripts, ["web_data_provider", "product_url_reader", "product_url_discovery", "platform_search_browser"]),
+            "missing": [] if web_data_ready else ["web_data_provider.py"],
+            "limits": [
+                "The provider is optional; local browser/static/user-evidence fallbacks remain available when FIRECRAWL_API_KEY is absent.",
+                "Only public URLs and public search results may be sent to Firecrawl or a self-hosted compatible provider.",
+                "Self-hosting Firecrawl should be isolated from the lightweight license service and may require a larger server.",
+            ],
+        },
+        {
             "id": "copy_and_real_video_generation",
-            "label": "Generate real copy, scripts, storyboards, and MP4 video files",
+            "label": "Generate real copy, scripts, storyboards, MP4 video files, cover images, and detail images",
             "status": "ready" if video_ready else "partial_ready",
-            "evidence": scripts_present(scripts, ["competitor_content_enhancer", "render_video"]),
-            "missing": [] if video_ready else ["ffmpeg runtime"] if video_scripts_ready else ["render_video.py"],
+            "evidence": scripts_present(scripts, ["competitor_content_enhancer", "render_video", "media_asset_pack"]),
+            "missing": [] if video_ready else ["ffmpeg runtime"] if video_scripts_ready else ["render_video.py", "media_asset_pack.py"],
         },
         {
             "id": "all_platform_auto_publish",
-            "label": "Automatically publish to YouTube, Zhihu, Xiaohongshu, Douyin, and GitHub",
+            "label": "Publish through official APIs where available and browser-assisted/manual flows where required",
             "status": "ready" if publish_ready and full_platform_publish_ready else "blocked_by_authorization_or_platform_limits",
             "evidence": scripts_present(
                 scripts,
@@ -518,9 +613,29 @@ def requirement_status(
             "missing": missing_publish_credentials(credentials),
             "limits": [
                 "GitHub and YouTube writes require official credentials plus explicit publish approval.",
-                "Zhihu and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is verified.",
-                "Douyin has an official upload/create executor, but still requires approved open-platform app scopes, user authorization, and platform review.",
+                "Zhihu, Xiaohongshu, and Douyin remain manual/browser-assisted unless official creator publishing access is verified.",
+                "Douyin official upload/create code is a reserved future port only; current operation does not require DOUYIN_* credentials.",
                 "TikTok requires approved open-platform app scopes and user authorization.",
+            ],
+        },
+        {
+            "id": "youtube_google_api_python_client_dependency",
+            "label": "Install and record the official Google API Python client dependency for YouTube Data API publishing",
+            "status": "ready" if youtube_google_client_ready else "partial_ready",
+            "evidence": [
+                str(ROOT / "requirements-youtube.txt"),
+                f"googleapiclient={tools['googleApiPythonClient']['available']}",
+                f"google_auth_oauthlib={tools['googleAuthOauthlib']['available']}",
+                f"google_auth_httplib2={tools['googleAuthHttplib2']['available']}",
+            ],
+            "missing": []
+            if youtube_google_client_ready
+            else [
+                "Install YouTube dependencies with: python -m pip install -r requirements-youtube.txt",
+                "requirements-youtube.txt",
+            ],
+            "limits": [
+                "The client library enables official YouTube Data API calls, but real uploads still require OAuth consent, approved scopes, quota, target video files, and explicit publish approval.",
             ],
         },
         {
@@ -566,6 +681,47 @@ def requirement_status(
             ],
         },
         {
+            "id": "platform_registry_and_monetization_blueprint",
+            "label": "Expose platform capability registry and creator-task monetization blueprint inspired by AiToEarn",
+            "status": "ready" if platform_capabilities_ready else "not_ready",
+            "evidence": scripts_present(scripts, ["platform_capabilities"]),
+            "missing": [] if platform_capabilities_ready else ["platform_capabilities.py"],
+            "limits": [
+                "The current implementation is a machine-readable registry and safe MVP blueprint, not a live creator marketplace.",
+                "CPS/CPE/CPM settlement remains manual-review-first until real platform, business, payment, and legal gates are connected.",
+                "Store-safe engagement supports monitoring and AI reply drafts; final likes, follows, comments, and DMs require human confirmation.",
+            ],
+        },
+        {
+            "id": "completion_roadmap_to_100_percent",
+            "label": "Document every module gap to 100%, what Codex can do, open-source references, operator actions, and acceptance evidence",
+            "status": "ready" if completion_roadmap_ready else "partial_ready",
+            "evidence": scripts_present(scripts, ["completion_roadmap"])
+            + ([str(ROOT / "docs/100-percent-completion-roadmap.md")] if (ROOT / "docs/100-percent-completion-roadmap.md").exists() else []),
+            "missing": [] if completion_roadmap_ready else ["scripts/completion_roadmap.py or docs/100-percent-completion-roadmap.md"],
+            "limits": [
+                "The roadmap can make external gates explicit, but it cannot complete operator-owned platform approvals, store approvals, live Stripe setup, server deployment, or real creator payouts.",
+                "A module reaches production 100% only when its acceptance evidence exists for a current real run.",
+            ],
+        },
+        {
+            "id": "zh_cn_operator_action_checklist_to_100_percent",
+            "label": "Provide a Chinese beginner-friendly action checklist for reaching 100% module readiness",
+            "status": "ready" if operator_action_checklist_ready else "partial_ready",
+            "evidence": scripts_present(scripts, ["operator_action_checklist"])
+            + (
+                [str(ROOT / "docs/zh-CN/100-percent-completion-guide.md")]
+                if (ROOT / "docs/zh-CN/100-percent-completion-guide.md").exists()
+                else []
+            ),
+            "missing": []
+            if operator_action_checklist_ready
+            else ["scripts/operator_action_checklist.py or docs/zh-CN/100-percent-completion-guide.md"],
+            "limits": [
+                "The checklist gives beginner execution steps and acceptance evidence, but operator-owned accounts, approvals, server deployment, live payments, and real publication evidence still have to be completed outside Codex.",
+            ],
+        },
+        {
             "id": "periodic_codex_operation",
             "label": "Run the whole promotion loop periodically in Codex/local automation",
             "status": "ready" if cycle_ready else "not_ready",
@@ -593,13 +749,14 @@ def requirement_status(
         },
         {
             "id": "browser_extension_operator_ui_subscription",
-            "label": "Provide a Chrome MV3 browser extension with operator UI, multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, store submission package, listing tutorial, reference backend simulator, developer info, and ENHE website links",
+            "label": "Provide a Chrome MV3 browser extension with operator UI, subscription hooks, hosted-run submission, deployable license backend, store materials, legal pages, and ENHE website links",
             "status": "ready" if extension["ready"] else "partial_ready",
             "evidence": extension["evidence"],
             "missing": extension["missing"],
             "limits": [
-                "The extension can generate Skill, browser publish session, real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, reserve hosted usage credits, and build a Chrome/Edge submission zip; the local simulator proves the contract shape for license, usage, hosted run, and webhook flows.",
-                "Production paid usage enforcement still requires a deployed backend license service and payment provider integration.",
+                "The extension can generate Skill, browser publish session, viral/real evidence inbox, readiness audit, and periodic automation commands, validate a license endpoint, reserve hosted usage credits, start hosted runs, and build a Chrome/Edge submission zip.",
+                "The repository includes a Stripe-backed license service, PostgreSQL JSONB state backend, isolated hosted worker, same-host HTTPS deployment files, legal pages, listing drafts, screenshot plan, and reviewer notes.",
+                "External account setup, live Stripe prices/webhooks, deployed HTTPS server configuration, hosted-worker capacity, and Chrome/Edge store approval remain operator-controlled launch gates.",
                 "Remote code is not allowed in the extension package; hosted services may return data only.",
             ],
         },
@@ -685,6 +842,21 @@ def github_docs_status() -> dict[str, Any]:
             "Reference Simulator",
         ],
         "docs/final-capability-map.md": ["Final Capability Map", "Acceptance Command"],
+        "docs/100-percent-completion-roadmap.md": ["100% Completion Roadmap", "Detailed user steps", "Acceptance evidence"],
+        "docs/zh-CN/100-percent-completion-guide.md": ["100% 完成指南", "新手步骤", "验收证据"],
+        "docs/legal/privacy-policy.md": ["Privacy Policy", "Data We Do Not Collect"],
+        "docs/legal/terms-of-service.md": ["Terms Of Service", "Publishing Boundary"],
+        "docs/legal/refund-policy.md": ["Refund Policy", "Credit Usage"],
+        "docs/legal/support.md": ["Support", "Hosted run ID"],
+        "docs/store/chrome-listing.md": ["Chrome Web Store Listing Draft", "Permission Justification"],
+        "docs/store/edge-listing.md": ["Microsoft Edge Add-ons Listing Draft", "Certification Notes"],
+        "docs/store/reviewer-notes.md": ["Store Reviewer Notes", "Manifest V3"],
+        "docs/store/screenshot-plan.md": ["Store Screenshot Plan", "Hosted run"],
+        "deploy/promotion-manager/README.md": ["same HTTPS host", "Server Requirement", "systemd"],
+        "deploy/promotion-manager/.env.production.example": ["DATABASE_URL=", "HOSTED_RUN_OUTPUT_ROOT="],
+        "deploy/promotion-manager/nginx-promotion-manager.conf": ["/api/promotion-manager/", "/promotion-manager/privacy"],
+        "deploy/promotion-manager/enhe-promotion-manager-api.service": ["ExecStart", "api.env"],
+        "deploy/promotion-manager/enhe-promotion-manager-worker.service": ["ExecStart", "api.env"],
     }
     for path, markers in required_markers.items():
         if not (ROOT / path).exists():
@@ -703,6 +875,12 @@ def github_docs_status() -> dict[str, Any]:
 def browser_extension_status() -> dict[str, Any]:
     missing = [path for path in BROWSER_EXTENSION_FILES if not (ROOT / path).exists()]
     evidence = [str(ROOT / path) for path in BROWSER_EXTENSION_FILES if (ROOT / path).exists()]
+    for path in BACKEND_DEPLOY_FILES:
+        full_path = ROOT / path
+        if full_path.exists():
+            evidence.append(str(full_path))
+        else:
+            missing.append(path)
     simulator_path = ROOT / "scripts/billing_contract_simulator.py"
     if simulator_path.exists():
         evidence.append(str(simulator_path))
@@ -756,12 +934,20 @@ def browser_extension_status() -> dict[str, Any]:
             "usageAuthorizeEndpoint",
             "usageCommitEndpoint",
             "hostedRunEndpoint",
+            "hostedRunStatusEndpointTemplate",
+            "legalUrls",
         ]:
             if not contract.get(key):
                 missing.append(f"browser-extension/billing-contract.json missing key: {key}")
+        legal_urls = contract.get("legalUrls") if isinstance(contract.get("legalUrls"), dict) else {}
+        for key in ["privacyPolicy", "termsOfService", "refundPolicy", "support"]:
+            if not legal_urls.get(key):
+                missing.append(f"browser-extension/billing-contract.json missing legal URL: {key}")
         credit_costs = contract.get("creditCosts") if isinstance(contract.get("creditCosts"), dict) else {}
         for workflow in [
             "browser_publish_session",
+            "viral_evidence_inbox_setup",
+            "viral_evidence_inbox",
             "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
@@ -790,6 +976,10 @@ def browser_extension_status() -> dict[str, Any]:
             for key in ["licenseKey", "usageId", "workflowType", "estimatedCredits", "commandType", "productUrl", "platforms", "localCommand", "safety"]:
                 if key not in hosted_run_body:
                     missing.append(f"browser-extension/billing-contract.json hostedRunRequest missing key: {key}")
+        hosted_run_response = (contract.get("hostedRunResponse") or {}) if isinstance(contract.get("hostedRunResponse"), dict) else {}
+        for key in ["accepted", "runId", "status", "dashboardUrl", "statusUrl"]:
+            if key not in hosted_run_response:
+                missing.append(f"browser-extension/billing-contract.json hostedRunResponse missing key: {key}")
         events = contract.get("requiredWebhookEvents") if isinstance(contract.get("requiredWebhookEvents"), list) else []
         for event in ["checkout.session.completed", "customer.subscription.updated", "invoice.payment_failed"]:
             if event not in events:
@@ -845,6 +1035,8 @@ def browser_extension_status() -> dict[str, Any]:
             "COST_PER_CREDIT",
             "skill_entry.py",
             "browser_publish_session.py",
+            "viral_evidence_inbox_setup.py",
+            "viral_evidence_inbox.py",
             "real_evidence_inbox_setup.py",
             "real_evidence_inbox.py",
             "performance_monitor.py",
@@ -852,6 +1044,8 @@ def browser_extension_status() -> dict[str, Any]:
             "final_capability_readiness.py",
             "automation_scheduler.py",
             "browser_publish_session",
+            "viral_evidence_inbox_setup",
+            "viral_evidence_inbox",
             "real_evidence_inbox_setup",
             "real_evidence_inbox",
             "performance_monitor",
@@ -867,6 +1061,30 @@ def browser_extension_status() -> dict[str, Any]:
         style_text = safe_read(style_path)
         if "--accent" not in style_text or "grid-template-columns" not in style_text:
             missing.append("browser-extension/popup.css missing operator UI tokens or stable layout rules")
+    backend_package = read_json_file(ROOT / "backend/license-service/package.json")
+    if backend_package:
+        dependencies = backend_package.get("dependencies") if isinstance(backend_package.get("dependencies"), dict) else {}
+        scripts = backend_package.get("scripts") if isinstance(backend_package.get("scripts"), dict) else {}
+        for dependency in ["express", "stripe", "pg"]:
+            if dependency not in dependencies:
+                missing.append(f"backend/license-service/package.json missing dependency: {dependency}")
+        for script in ["start", "migrate", "worker", "test"]:
+            if script not in scripts:
+                missing.append(f"backend/license-service/package.json missing script: {script}")
+    server_text = safe_read(ROOT / "backend/license-service/src/server.js")
+    for marker in [
+        "/promotion-manager/:page(privacy|terms|refund|support)",
+        "/api/promotion-manager/run/:runId",
+        "createStateStore",
+        "startHostedWorker",
+        "renderLegalPage",
+    ]:
+        if marker not in server_text:
+            missing.append(f"backend/license-service/src/server.js missing marker: {marker}")
+    worker_text = safe_read(ROOT / "backend/license-service/src/hosted-worker.js")
+    for marker in ["buildHostedCommand", "safeWorkerEnv", "I_APPROVE_PUBLISH", "PUBLISH_DRY_RUN", "unsupported_hosted_command_type"]:
+        if marker not in worker_text:
+            missing.append(f"backend/license-service/src/hosted-worker.js missing marker: {marker}")
     return {
         "ready": not missing,
         "evidence": evidence,
@@ -896,8 +1114,6 @@ def missing_publish_credentials(credentials: dict[str, dict[str, Any]]) -> list[
         missing.append("GITHUB_TOKEN or GH_TOKEN for GitHub writes")
     if not (credentials["youtube_oauth_upload"]["ready"] or credentials["youtube_oauth_flow"]["ready"]):
         missing.append("YouTube OAuth access token or OAuth client credentials")
-    if not credentials["douyin_publish"]["ready"]:
-        missing.append("Douyin open-platform app credentials and user authorization")
     return missing
 
 
@@ -1047,7 +1263,23 @@ def recommended_commands(out_dir: Path) -> list[dict[str, str]]:
         },
         {
             "purpose": "review_github_docs",
-            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/subscription-pricing.md docs/final-capability-map.md",
+            "command": "review README.md docs/installation.md docs/usage.md docs/browser-extension.md docs/extension-store-submission.md docs/legal docs/store deploy/promotion-manager docs/subscription-pricing.md docs/final-capability-map.md docs/100-percent-completion-roadmap.md docs/zh-CN/100-percent-completion-guide.md",
+        },
+        {
+            "purpose": "build_completion_roadmap",
+            "command": f"python scripts/completion_roadmap.py --out-dir \"{out_dir}\"",
+        },
+        {
+            "purpose": "install_youtube_google_api_python_client",
+            "command": "python -m pip install -r requirements-youtube.txt",
+        },
+        {
+            "purpose": "check_youtube_credentials_without_upload",
+            "command": f"python scripts/youtube_credential_check.py --env-file \"C:/path/to/.env\" --out-dir \"{out_dir}\"",
+        },
+        {
+            "purpose": "build_zh_cn_operator_action_checklist",
+            "command": f"python scripts/operator_action_checklist.py --out-dir \"{out_dir}\"",
         },
         {
             "purpose": "package_browser_extension",

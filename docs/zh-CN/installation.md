@@ -9,6 +9,7 @@
 - Git。
 - 可选：Playwright Chromium，用于读取动态网页和抓取浏览器可见平台搜索页。
 - 可选：ffmpeg，用于渲染 MP4 视频文件。
+- 可选：Pillow，用于生成发布包里的 PNG 封面图和详情图。
 
 ## 克隆仓库
 
@@ -55,6 +56,14 @@ winget install Gyan.FFmpeg
 ffmpeg -version
 ```
 
+## 安装可选图片运行时
+
+当需要让 `media_asset_pack.py` 生成封面图和详情图时安装：
+
+```powershell
+python -m pip install pillow
+```
+
 ## 安装为 Codex Skill
 
 先验证本地文件，再同步到 Codex Skill 目录：
@@ -66,7 +75,7 @@ python scripts\self_evolution_audit.py `
   --out-dir ".\promotion-output"
 ```
 
-同步只覆盖受管理文件，例如 `SKILL.md`、`references/`、`scripts/`、`docs/`、`README.md`、`README.zh-CN.md` 和 `browser-extension/`。
+同步只覆盖受管理文件，例如 `SKILL.md`、`references/`、`scripts/`、`docs/`、`README.md`、`README.en.md`、`README.zh-CN.md` 和 `browser-extension/`。
 
 ## 验证安装
 

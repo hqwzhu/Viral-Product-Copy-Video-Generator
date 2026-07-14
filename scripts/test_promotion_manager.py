@@ -8,7 +8,9 @@ import argparse
 import json
 import http.server
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -24,10 +26,12 @@ SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
 BROWSER_VIDEO_SAMPLER = ROOT / "scripts" / "browser_video_sampler.py"
+WEB_DATA_PROVIDER = ROOT / "scripts" / "web_data_provider.py"
 PRODUCT_URL_READER = ROOT / "scripts" / "product_url_reader.py"
 PRODUCT_URL_DISCOVERY = ROOT / "scripts" / "product_url_discovery.py"
 PRODUCT_BATCH_RUNNER = ROOT / "scripts" / "product_batch_runner.py"
 RENDER_VIDEO = ROOT / "scripts" / "render_video.py"
+MEDIA_ASSET_PACK = ROOT / "scripts" / "media_asset_pack.py"
 COMPETITOR_INTAKE = ROOT / "scripts" / "competitor_intake.py"
 COMPETITOR_DISCOVERY = ROOT / "scripts" / "competitor_discovery.py"
 COMPETITOR_COLLECTOR = ROOT / "scripts" / "competitor_collector.py"
@@ -53,6 +57,7 @@ COMMENT_EVIDENCE_CAPTURE = ROOT / "scripts" / "comment_evidence_capture.py"
 PERFORMANCE_MONITOR = ROOT / "scripts" / "performance_monitor.py"
 LAUNCH_UNLOCK_PACK = ROOT / "scripts" / "launch_unlock_pack.py"
 YOUTUBE_OAUTH_PUBLISH = ROOT / "scripts" / "youtube_oauth_publish.py"
+YOUTUBE_CREDENTIAL_CHECK = ROOT / "scripts" / "youtube_credential_check.py"
 RUN_WORKFLOW = ROOT / "scripts" / "run_promotion_workflow.py"
 PROMOTION_CYCLE_RUNNER = ROOT / "scripts" / "promotion_cycle_runner.py"
 REAL_RUN_PLAYBOOK = ROOT / "scripts" / "real_run_playbook.py"
@@ -73,12 +78,16 @@ FINAL_CAPABILITY_READINESS = ROOT / "scripts" / "final_capability_readiness.py"
 SELF_EVOLUTION_AUDIT = ROOT / "scripts" / "self_evolution_audit.py"
 BILLING_CONTRACT_SIMULATOR = ROOT / "scripts" / "billing_contract_simulator.py"
 PLATFORM_ACCESS_AUDIT = ROOT / "scripts" / "platform_access_audit.py"
+PLATFORM_CAPABILITIES = ROOT / "scripts" / "platform_capabilities.py"
+COMPLETION_ROADMAP = ROOT / "scripts" / "completion_roadmap.py"
+OPERATOR_ACTION_CHECKLIST = ROOT / "scripts" / "operator_action_checklist.py"
 VIRAL_DISCOVERY_RUNNER = ROOT / "scripts" / "viral_discovery_runner.py"
 MULTI_QUERY_VIRAL_DISCOVERY = ROOT / "scripts" / "multi_query_viral_discovery.py"
 PACKAGE_BROWSER_EXTENSION = ROOT / "scripts" / "package_browser_extension.py"
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
 BROWSER_EXTENSION = ROOT / "browser-extension"
+LICENSE_SERVICE = ROOT / "backend" / "license-service"
 
 
 def load_script_module(path: Path):
@@ -274,6 +283,15 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertTrue(all(item["publishSteps"] for item in publish_pack))
         self.assertTrue(all(item["trackingPlan"]["utm"]["utm_content"] for item in publish_pack))
         self.assertTrue(all("utm_campaign=" in item["trackingPlan"]["trackedUrl"] for item in publish_pack))
+        for item in publish_pack:
+            self.assertTrue(item["viralTitle"])
+            self.assertTrue(item["copy"])
+            self.assertIsInstance(item["tags"], list)
+            self.assertTrue(item["tags"])
+            self.assertTrue(item["firstBatch"]["pinnedComment"])
+            self.assertIn("video", item)
+            self.assertIn("cover", item)
+            self.assertIn("detailImages", item)
         self.assertIn("utm_content", publish_pack[0]["trackingFields"])
         warnings = " ".join(" ".join(item["warnings"]) for item in publish_pack)
         self.assertIn("No cookie/token/password storage", warnings)
@@ -286,6 +304,49 @@ class PromotionManagerScriptTest(unittest.TestCase):
         retrospective = self.load_json(out_dir, "reports/promotion-manager/retrospectives/ai-prompt-kit-retrospective.json")
         self.assertEqual(retrospective["status"], "waiting_real_data")
         self.assertEqual(retrospective["publishedItems"], [])
+
+    def test_media_asset_pack_generates_required_assets_and_updates_publish_pack(self) -> None:
+        out_dir = self.run_all()
+        content_path = out_dir / "reports/promotion-manager/generated-content/ai-prompt-kit-platform-content.json"
+        publish_pack_path = out_dir / "reports/promotion-manager/publish-packs/ai-prompt-kit-publish-pack.json"
+        video_path = out_dir / "videos" / "ai-prompt-kit-youtube.mp4"
+        video_path.parent.mkdir(parents=True, exist_ok=True)
+        video_path.write_bytes(b"dry-run video placeholder")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(MEDIA_ASSET_PACK),
+                "--content-json",
+                str(content_path),
+                "--publish-pack",
+                str(publish_pack_path),
+                "--video-file",
+                f"youtube={video_path}",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "reports/promotion-manager/media-assets/media-asset-pack.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertGreaterEqual(report["summary"]["coversReady"], 5)
+        self.assertGreater(report["summary"]["detailImagesReady"], 0)
+
+        publish_pack = json.loads(publish_pack_path.read_text(encoding="utf-8"))
+        by_platform = {item["platform"]: item for item in publish_pack}
+        youtube = by_platform["youtube"]
+        self.assertEqual(youtube["video"]["status"], "ready")
+        self.assertEqual(Path(youtube["video"]["path"]), video_path)
+        for item in publish_pack:
+            self.assertTrue(Path(item["cover"]["path"]).exists(), item["platform"])
+            self.assertTrue(item["detailImages"], item["platform"])
+            self.assertTrue(all(Path(image["path"]).exists() for image in item["detailImages"]), item["platform"])
+            self.assertTrue(item["assets"], item["platform"])
+            self.assertTrue(item["firstBatch"]["pinnedComment"], item["platform"])
 
     def test_product_intake_extracts_profile_from_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-intake-test-"))
@@ -641,6 +702,127 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("--product-url", record["nextWorkflowCommand"])
         self.assertTrue((out_dir / "output/reports/promotion-manager/intake/product-url-reader.md").exists())
 
+    def test_web_data_provider_scrape_fixture_writes_report_without_secrets(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="web-data-provider-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        fixture = out_dir / "firecrawl-fixture.json"
+        fixture.write_text(
+            json.dumps(
+                {
+                    "scrape": {
+                        "data": {
+                            "markdown": "# LumiOS AI\n\nProduct: LumiOS AI\nURL: https://example.com/lumios\nDescription: Windows AI workspace.",
+                            "metadata": {"sourceURL": "https://example.com/lumios", "title": "LumiOS AI"},
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(WEB_DATA_PROVIDER),
+                "--provider",
+                "firecrawl",
+                "--fixture-json",
+                str(fixture),
+                "--out-dir",
+                str(out_dir / "output"),
+                "scrape",
+                "--url",
+                "https://example.com/lumios",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/web-data/scrape.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertFalse(report["credentialValuesStored"])
+        self.assertIn("LumiOS AI", report["markdown"])
+
+    def test_web_data_provider_interact_plan_blocks_platform_side_effects(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="web-data-provider-interact-plan-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(WEB_DATA_PROVIDER),
+                "--out-dir",
+                str(out_dir / "output"),
+                "interact-plan",
+                "--url",
+                "https://example.com/public-page",
+                "--goal",
+                "collect public launch evidence",
+                "--action",
+                "click:Pricing",
+                "--action",
+                "publish:final",
+                "--action",
+                "like:post",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/web-data/interact-plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("click:Pricing", report["allowedActions"])
+        self.assertIn("publish:final", report["blockedActions"])
+        self.assertIn("like:post", report["blockedActions"])
+        self.assertFalse(report["providerExecutionEnabled"])
+        self.assertTrue(report["requiresManualApprovalBeforeExecution"])
+
+    def test_product_url_reader_uses_firecrawl_scrape_before_web_text_fallback(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-firecrawl-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        fixture = out_dir / "firecrawl-fixture.json"
+        fixture.write_text(
+            json.dumps(
+                {
+                    "scrape": {
+                        "data": {
+                            "markdown": "\n".join(
+                                [
+                                    "Product: Firecrawl Product Lab",
+                                    "URL: https://example.com/firecrawl-product-lab",
+                                    "Description: Turns product pages into promotion research and launch content.",
+                                    "Pricing: unknown",
+                                    "Audience: AI tool operators, creators",
+                                    "Pain points: slow competitor research, repeated launch copy setup",
+                                ]
+                            )
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_URL_READER),
+                "--url",
+                "https://127.0.0.1:9/firecrawl-product-lab",
+                "--skip-browser",
+                "--web-data-provider",
+                "firecrawl",
+                "--web-data-fixture-json",
+                str(fixture),
+                "--disable-web-text-fallback",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/intake/product-url-reader.json").read_text(encoding="utf-8"))
+        record = report["records"][0]
+        self.assertEqual(record["sourceMode"], "firecrawl_scrape")
+        self.assertEqual(report["summary"]["firecrawlScrapeProfiles"], 1)
+        self.assertTrue(Path(record["webData"]["textFile"]).exists())
+        self.assertIn("--text-file", record["nextWorkflowCommand"])
+
     def test_product_url_reader_uses_web_text_fallback_after_browser_and_static_fail(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-url-reader-web-fallback-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -899,6 +1081,48 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         source_types = {item["sourceType"] for item in report["candidates"]}
         self.assertEqual(source_types, {"sitemap"})
+
+    def test_product_url_discovery_uses_firecrawl_map_fixture(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="product-url-firecrawl-map-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        fixture = out_dir / "firecrawl-map.json"
+        fixture.write_text(
+            json.dumps(
+                {
+                    "map": {
+                        "success": True,
+                        "links": [
+                            {"url": "https://example.com/products/viral-copy-kit", "title": "Viral Copy Kit"},
+                            {"url": "https://example.com/blog/launch-notes", "title": "Launch Notes"},
+                        ],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PRODUCT_URL_DISCOVERY),
+                "--site-url",
+                "http://127.0.0.1:9",
+                "--allow-localhost",
+                "--include-external",
+                "--skip-sitemaps",
+                "--web-data-provider",
+                "firecrawl",
+                "--web-data-fixture-json",
+                str(fixture),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/intake/product-url-discovery.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["webDataLinks"], 2)
+        self.assertIn("https://example.com/products/viral-copy-kit", report["selectedUrls"])
+        self.assertTrue(any(item["sourceType"] == "web_data_map" for item in report["candidates"]))
 
     def test_product_batch_runner_reads_urls_then_runs_promotion_cycles(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-batch-runner-test-"))
@@ -3445,6 +3669,147 @@ Prompt templates for product copy, SEO content, and video scripts.
         summary = json.loads((out_dir / "output/reports/promotion-manager/competitors/browser-search-snapshots.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["records"][0]["status"], "ready")
 
+    def test_platform_search_browser_uses_firecrawl_search_fixture(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-firecrawl-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        fixture = out_dir / "firecrawl-search.json"
+        fixture.write_text(
+            json.dumps(
+                {
+                    "search": {
+                        "data": [
+                            {
+                                "url": "https://www.youtube.com/watch?v=firecrawl123",
+                                "title": "One product URL into a launch engine",
+                                "markdown": "Public result with views 120k likes 9k and a strong hook.",
+                            },
+                            {
+                                "url": "https://example.com/not-youtube",
+                                "title": "Wrong platform",
+                                "markdown": "Should be filtered by platform.",
+                            },
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        snapshot_dir = out_dir / "snapshots"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_BROWSER),
+                "--query",
+                "AI product promotion",
+                "--platforms",
+                "youtube",
+                "--web-data-provider",
+                "firecrawl",
+                "--web-data-fixture-json",
+                str(fixture),
+                "--snapshot-dir",
+                str(snapshot_dir),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        snapshot = json.loads((snapshot_dir / "youtube.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["captureMode"], "firecrawl_search")
+        self.assertEqual(len(snapshot["items"]), 1)
+        self.assertIn("site:youtube.com", snapshot["webDataQuery"])
+
+    def test_platform_capabilities_registry_outputs_monetization_blueprint(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-capabilities-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_CAPABILITIES),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/capability/platform-capabilities.json").read_text(encoding="utf-8"))
+        platforms = {item["platform"] for item in report["platforms"]}
+        self.assertIn("youtube", platforms)
+        self.assertIn("xiaohongshu", platforms)
+        self.assertEqual(report["monetizationBlueprint"]["status"], "blueprint_ready")
+        self.assertEqual(report["relayBridgePolicy"]["status"], "temporary_optional_bridge")
+        self.assertIn("loginCookie storage", report["inspiredBy"]["AiToEarn"]["rejected"])
+        self.assertIn("opaque third-party relay as the long-term core security promise", report["inspiredBy"]["AiToEarn"]["rejected"])
+        self.assertIn("Chrome/Edge store builds do not implement automatic like, follow, comment, or DM actions.", report["guardrails"])
+        by_platform = {item["platform"]: item for item in report["platforms"]}
+        self.assertEqual(by_platform["douyin"]["publish"]["defaultMode"], "browser_assisted_publish_pack")
+        self.assertEqual(by_platform["douyin"]["publish"]["requiredEnv"], [])
+
+    def test_completion_roadmap_outputs_module_gaps_and_operator_steps(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="completion-roadmap-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(COMPLETION_ROADMAP),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/capability/completion-roadmap.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "roadmap_ready")
+        modules = {item["id"]: item for item in report["modules"]}
+        self.assertIn("codex_skill_local_promotion_loop", modules)
+        self.assertIn("true_all_platform_auto_publish", modules)
+        self.assertIn("creator_tasks_settlement_monetize_marketplace", modules)
+        self.assertEqual(modules["true_all_platform_auto_publish"]["currentEstimate"], 40)
+        self.assertTrue(modules["true_all_platform_auto_publish"]["operatorExternalGates"])
+        self.assertTrue(modules["creator_tasks_settlement_monetize_marketplace"]["operatorSteps"])
+        references = {item["project"] for item in report["openSourceReferences"]}
+        self.assertIn("firecrawl/firecrawl", references)
+        self.assertIn("yikart/AiToEarn", references)
+        self.assertIn("cookie capture", report["summary"]["unsafeShortcutsRejected"])
+        self.assertTrue((out_dir / "output/reports/promotion-manager/capability/completion-roadmap.md").exists())
+
+    def test_operator_action_checklist_outputs_chinese_beginner_steps(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="operator-action-checklist-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(OPERATOR_ACTION_CHECKLIST),
+                "--out-dir",
+                str(out_dir / "output"),
+                "--product-url",
+                "https://example.com/real-product",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report_path = out_dir / "output/reports/promotion-manager/capability/operator-action-checklist.zh-CN.json"
+        report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        self.assertEqual(report["status"], "operator_action_checklist_ready")
+        self.assertEqual(report["language"], "zh-CN")
+        modules = {item["id"]: item for item in report["modules"]}
+        self.assertIn("true_all_platform_auto_publish", modules)
+        self.assertIn("创作者任务", modules["creator_tasks_settlement_monetize_marketplace"]["name"])
+        self.assertTrue(modules["codex_skill_local_promotion_loop"]["beginnerSteps"])
+        self.assertIn("https://example.com/real-product", report["copyReadyCommands"]["真实产品本地闭环"])
+        self.assertIn("cookie capture", report["rejectedShortcuts"])
+        self.assertTrue(report["acceptanceRule"])
+        markdown = (out_dir / "output/reports/promotion-manager/capability/operator-action-checklist.zh-CN.md").read_text(
+            encoding="utf-8-sig"
+        )
+        self.assertIn("100% 完成操作清单", markdown)
+        self.assertIn("新手逐步执行", markdown)
+        self.assertIn("验收证据", markdown)
+
     def test_agent_workflow_auto_searches_competitors_from_saved_html(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-auto-search-workflow-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3942,12 +4307,15 @@ Prompt templates for product copy, SEO content, and video scripts.
         run_report = json.loads((out_dir / "automation-output/scheduler/automation-run.json").read_text(encoding="utf-8"))
         publish_queue = run_report["records"][0]["publishQueue"]
         self.assertEqual(publish_queue["status"], "ready")
-        self.assertEqual(publish_queue["summary"]["officialDryRuns"], 1)
+        self.assertEqual(publish_queue["summary"]["officialDryRuns"], 0)
+        self.assertEqual(publish_queue["summary"]["browserQueued"], 1)
         queue = json.loads(Path(publish_queue["report"]).read_text(encoding="utf-8"))
         record = queue["records"][0]
         self.assertEqual(record["platform"], "douyin")
-        self.assertEqual(record["publishMode"], "official_api_publish")
-        self.assertEqual(record["status"], "dry_run")
+        self.assertEqual(record["publishMode"], "browser_assisted_publish")
+        self.assertEqual(record["status"], "queued_browser_assisted")
+        self.assertEqual(record["video"]["path"], str(video_path))
+        self.assertNotIn("officialExecution", record)
 
     def test_automation_scheduler_runs_business_attribution_before_recovery(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-automation-attribution-test-"))
@@ -6387,12 +6755,29 @@ Prompt templates for product copy, SEO content, and video scripts.
             "zh-CN/installation.md",
             "zh-CN/usage.md",
             "browser-extension.md",
+            "extension-store-submission.md",
             "subscription-pricing.md",
             "billing-backend-contract.md",
             "final-capability-map.md",
+            "legal/privacy-policy.md",
+            "legal/terms-of-service.md",
+            "legal/refund-policy.md",
+            "legal/support.md",
+            "store/chrome-listing.md",
+            "store/edge-listing.md",
+            "store/reviewer-notes.md",
+            "store/screenshot-plan.md",
         ]
         for filename in required_docs:
             self.assertTrue((DOCS / filename).exists(), filename)
+        for path in [
+            ROOT / "deploy/promotion-manager/README.md",
+            ROOT / "deploy/promotion-manager/.env.production.example",
+            ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf",
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service",
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service",
+        ]:
+            self.assertTrue(path.exists(), path)
         chinese_readme = ROOT / "README.zh-CN.md"
         self.assertTrue(chinese_readme.exists())
         chinese_readme_text = chinese_readme.read_text(encoding="utf-8")
@@ -6423,6 +6808,7 @@ Prompt templates for product copy, SEO content, and video scripts.
     def test_browser_extension_manifest_popup_and_subscription_ui_are_static_mv3(self) -> None:
         manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["manifest_version"], 3)
+        self.assertLessEqual(len(manifest["description"]), 132)
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
         self.assertEqual(manifest["icons"]["128"], "icons/icon128.png")
         self.assertEqual(manifest["action"]["default_icon"]["48"], "icons/icon48.png")
@@ -6469,9 +6855,16 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("idempotencyKey", script)
         self.assertIn("estimatedMonthlyCredits", script)
         self.assertIn("COST_PER_CREDIT", script)
+        self.assertIn('starter: { label: "Starter", credits: 60, priceCny: 19 }', script)
+        self.assertIn('growth: { label: "Growth", credits: 220, priceCny: 59 }', script)
+        self.assertIn('scale: { label: "Scale", credits: 800, priceCny: 199 }', script)
+        self.assertIn('at CNY ${plan.priceCny}/30 days', script)
+        self.assertNotIn('at USD ${plan.price}/month', script)
         self.assertIn("skill_entry.py", script)
         self.assertIn("browser_publish_session.py", script)
         self.assertIn("launch_unlock_pack.py", script)
+        self.assertIn("viral_evidence_inbox_setup.py", script)
+        self.assertIn("viral_evidence_inbox.py", script)
         self.assertIn("real_evidence_inbox_setup.py", script)
         self.assertIn("real_evidence_inbox.py", script)
         self.assertIn("performance_monitor.py", script)
@@ -6479,6 +6872,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("browser_publish_session", script)
         self.assertIn("launch_unlock_pack", script)
+        self.assertIn("viral_evidence_inbox_setup", script)
+        self.assertIn("viral_evidence_inbox", script)
         self.assertIn("real_evidence_inbox_setup", script)
         self.assertIn("real_evidence_inbox", script)
         self.assertIn("performance_monitor", script)
@@ -6494,9 +6889,17 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("usageAuthorizeEndpoint", contract)
         self.assertIn("usageCommitEndpoint", contract)
         self.assertIn("hostedRunEndpoint", contract)
+        self.assertIn("hostedRunStatusEndpointTemplate", contract)
+        self.assertIn("legalUrls", contract)
+        self.assertIn("privacyPolicy", contract["legalUrls"])
+        self.assertIn("termsOfService", contract["legalUrls"])
+        self.assertIn("refundPolicy", contract["legalUrls"])
+        self.assertIn("support", contract["legalUrls"])
         self.assertEqual(contract["creditCosts"]["standard_run"], 4)
         self.assertIn("browser_publish_session", contract["creditCosts"])
         self.assertIn("launch_unlock_pack", contract["creditCosts"])
+        self.assertEqual(contract["creditCosts"]["viral_evidence_inbox_setup"], 1)
+        self.assertIn("viral_evidence_inbox", contract["creditCosts"])
         self.assertEqual(contract["creditCosts"]["real_evidence_inbox_setup"], 1)
         self.assertIn("real_evidence_inbox", contract["creditCosts"])
         self.assertIn("performance_monitor", contract["creditCosts"])
@@ -6512,9 +6915,60 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("usageId", contract["hostedRunRequest"]["body"])
         self.assertIn("localCommand", contract["hostedRunRequest"]["body"])
         self.assertIn("hostedRunResponse", contract)
+        self.assertIn("statusUrl", contract["hostedRunResponse"])
         self.assertIn("checkout.session.completed", contract["requiredWebhookEvents"])
         self.assertIn("customer.subscription.updated", contract["requiredWebhookEvents"])
         self.assertIn("invoice.payment_failed", contract["requiredWebhookEvents"])
+
+    def test_browser_extension_popup_is_bilingual_and_remembers_language(self) -> None:
+        manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+        popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
+        script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+
+        self.assertEqual(manifest["version"], "0.5.2")
+        self.assertEqual(manifest["default_locale"], "en")
+        self.assertEqual(manifest["name"], "__MSG_extensionName__")
+        self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
+        self.assertIn('id="languageZh"', popup)
+        self.assertIn('id="languageEn"', popup)
+        self.assertIn("data-i18n=", popup)
+        self.assertIn("data-i18n-placeholder=", popup)
+        self.assertIn("data-i18n-aria-label=", popup)
+        self.assertIn("chrome.i18n.getUILanguage", script)
+        self.assertIn('"uiLanguage"', script)
+        self.assertIn("chrome.storage.local.set({ uiLanguage", script)
+        self.assertIn("aria-pressed", script)
+
+        english_block = script.split("const EN_TRANSLATIONS = Object.freeze({", 1)[1].split("});", 1)[0]
+        chinese_block = script.split("const ZH_TRANSLATIONS = Object.freeze({", 1)[1].split("});", 1)[0]
+        english_keys = set(re.findall(r"^  ([A-Za-z][A-Za-z0-9]*):", english_block, re.MULTILINE))
+        chinese_keys = set(re.findall(r"^  ([A-Za-z][A-Za-z0-9]*):", chinese_block, re.MULTILINE))
+        html_keys = set(
+            re.findall(r'data-i18n(?:-placeholder|-aria-label)?="([A-Za-z][A-Za-z0-9]*)"', popup)
+        )
+        self.assertSetEqual(english_keys, chinese_keys)
+        self.assertTrue(html_keys)
+        self.assertTrue(html_keys.issubset(english_keys), sorted(html_keys - english_keys))
+
+        for locale in ["en", "zh_CN"]:
+            messages = json.loads(
+                (BROWSER_EXTENSION / "_locales" / locale / "messages.json").read_text(encoding="utf-8")
+            )
+            for key in ["extensionName", "extensionShortName", "extensionDescription", "actionTitle"]:
+                self.assertTrue(messages[key]["message"].strip())
+
+    def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
+        for size in [16, 48, 128]:
+            icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
+            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-v2.png"
+            self.assertTrue(versioned_path.exists(), versioned_path)
+            data = icon_path.read_bytes()
+            self.assertEqual(data, versioned_path.read_bytes())
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", data[16:26])
+            self.assertEqual((width, height), (size, size))
+            self.assertEqual(bit_depth, 8)
+            self.assertIn(color_type, {4, 6})
 
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
@@ -6532,11 +6986,16 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["version"], "0.5.2")
         package_path = Path(report["package"])
         self.assertTrue(package_path.exists())
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])
+        self.assertEqual(
+            report["storeSubmission"]["privacyPolicyUrl"],
+            "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+        )
         with zipfile.ZipFile(package_path) as package:
             names = set(package.namelist())
         self.assertIn("manifest.json", names)
@@ -6547,6 +7006,134 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon16.png", names)
         self.assertIn("icons/icon48.png", names)
         self.assertIn("icons/icon128.png", names)
+        self.assertIn("_locales/en/messages.json", names)
+        self.assertIn("_locales/zh_CN/messages.json", names)
+
+    def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
+        package_json_path = LICENSE_SERVICE / "package.json"
+        server_path = LICENSE_SERVICE / "src" / "server.js"
+        state_store_path = LICENSE_SERVICE / "src" / "state-store.js"
+        hosted_worker_path = LICENSE_SERVICE / "src" / "hosted-worker.js"
+        migrate_path = LICENSE_SERVICE / "src" / "migrate.js"
+        worker_path = LICENSE_SERVICE / "src" / "worker.js"
+        migration_path = LICENSE_SERVICE / "migrations" / "001_state_store.sql"
+        env_example_path = LICENSE_SERVICE / ".env.example"
+        readme_path = LICENSE_SERVICE / "README.md"
+
+        for path in [
+            package_json_path,
+            server_path,
+            state_store_path,
+            hosted_worker_path,
+            migrate_path,
+            worker_path,
+            migration_path,
+            env_example_path,
+            readme_path,
+        ]:
+            self.assertTrue(path.exists(), path)
+
+        package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
+        dependencies = package_json.get("dependencies", {})
+        scripts = package_json.get("scripts", {})
+        self.assertIn("express", dependencies)
+        self.assertIn("stripe", dependencies)
+        self.assertIn("pg", dependencies)
+        self.assertEqual(scripts["migrate"], "node src/migrate.js")
+        self.assertEqual(scripts["worker"], "node src/worker.js")
+        self.assertEqual(scripts["test"], "node --test")
+
+        server = server_path.read_text(encoding="utf-8")
+        for endpoint in [
+            "/health",
+            "/promotion-manager/checkout",
+            "/promotion-manager/billing",
+            "/promotion-manager/:page(privacy|terms|refund|support)",
+            "/promotion-manager/runs/:runId",
+            "/api/promotion-manager/license",
+            "/api/promotion-manager/usage/authorize",
+            "/api/promotion-manager/usage/commit",
+            "/api/promotion-manager/run",
+            "/api/promotion-manager/run/:runId",
+            "/api/promotion-manager/webhooks/stripe",
+        ]:
+            self.assertIn(endpoint, server)
+        for marker in [
+            "stripe.checkout.sessions.create",
+            'mode: "subscription"',
+            "stripe.webhooks.constructEvent",
+            "express.raw",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "LICENSE_PEPPER",
+            "licenseKeyHash",
+            "idempotencyKey",
+            "createStateStore",
+            "startHostedWorker",
+            "statusUrl",
+            "renderLegalPage",
+        ]:
+            self.assertIn(marker, server)
+
+        state_store = state_store_path.read_text(encoding="utf-8")
+        for marker in ["PostgresStateStore", "DATABASE_URL", "pg_advisory_xact_lock", "promotion_manager_state"]:
+            self.assertIn(marker, state_store)
+        hosted_worker = hosted_worker_path.read_text(encoding="utf-8")
+        for marker in [
+            "buildHostedCommand",
+            "unsupported_hosted_command_type",
+            "safeWorkerEnv",
+            "I_APPROVE_PUBLISH",
+            "PUBLISH_DRY_RUN",
+            "REQUIRE_MANUAL_APPROVAL",
+            "private_product_url_blocked",
+        ]:
+            self.assertIn(marker, hosted_worker)
+        self.assertNotIn("childProcess.exec(", hosted_worker)
+        self.assertIn("DATABASE_URL is not set", migrate_path.read_text(encoding="utf-8"))
+        self.assertIn("startHostedWorker", worker_path.read_text(encoding="utf-8"))
+        self.assertIn("CREATE TABLE IF NOT EXISTS promotion_manager_state", migration_path.read_text(encoding="utf-8"))
+
+        env_example = env_example_path.read_text(encoding="utf-8")
+        for marker in [
+            "DATABASE_URL=",
+            "STRIPE_SECRET_KEY=",
+            "STRIPE_WEBHOOK_SECRET=",
+            "STRIPE_PRICE_STARTER=",
+            "STRIPE_PRICE_GROWTH=",
+            "ENHE_PUBLIC_BASE_URL=",
+            "LICENSE_PEPPER=",
+            "LICENSE_SERVICE_STATE_FILE=",
+            "HOSTED_RUN_OUTPUT_ROOT=",
+            "HOSTED_WORKER_ENABLED=",
+            "HOSTED_WORKER_MODE=",
+            "PYTHON_BIN=",
+        ]:
+            self.assertIn(marker, env_example)
+        for forbidden in ["sk_live_", "whsec_", "github_pat_", "GITHUB_TOKEN=" + "github_"]:
+            self.assertNotIn(forbidden, env_example)
+            self.assertNotIn(forbidden, server)
+
+        readme = readme_path.read_text(encoding="utf-8")
+        self.assertIn("npm install", readme)
+        self.assertIn("npm run migrate", readme)
+        self.assertIn("npm run worker", readme)
+        self.assertIn("npm run start", readme)
+        self.assertIn("PostgreSQL", readme)
+        self.assertIn("hosted worker", readme)
+        self.assertIn("/promotion-manager/privacy", readme)
+        self.assertIn("Stripe CLI", readme)
+        self.assertIn("store approval remains external", readme)
+
+        deploy_readme = (ROOT / "deploy/promotion-manager/README.md").read_text(encoding="utf-8")
+        deploy_env = (ROOT / "deploy/promotion-manager/.env.production.example").read_text(encoding="utf-8")
+        nginx = (ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf").read_text(encoding="utf-8")
+        for marker in ["same HTTPS host", "Server Requirement", "systemd", "npm run migrate"]:
+            self.assertIn(marker, deploy_readme)
+        for marker in ["DATABASE_URL=", "HOSTED_RUN_OUTPUT_ROOT=", "HOSTED_WORKER_MODE=execute"]:
+            self.assertIn(marker, deploy_env)
+        for marker in ["/api/promotion-manager/", "/promotion-manager/privacy", "/promotion-manager/runs/"]:
+            self.assertIn(marker, nginx)
 
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
@@ -6564,6 +7151,82 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("remote code", text.lower())
         self.assertIn("收费订阅", zh_extension)
         self.assertIn("上架", chinese)
+
+    def test_privacy_policy_is_publication_ready(self) -> None:
+        privacy = (DOCS / "legal/privacy-policy.md").read_text(encoding="utf-8")
+        lower = privacy.lower()
+
+        self.assertNotIn("publication-ready draft", lower)
+        self.assertNotIn("review it with counsel", lower)
+        self.assertNotIn("before production launch", lower)
+        self.assertIn("automatically deleted 30 days", lower)
+        self.assertIn("security and audit logs are retained for 180 days", lower)
+        self.assertIn("payment, refund, and legally required accounting records", lower)
+        self.assertIn("applicable law", lower)
+        self.assertIn("huqingwei5942@gmail.com", privacy)
+        self.assertIn("request access to or deletion of data", lower)
+        self.assertIn("mandatory retention", lower)
+
+    def test_legal_store_and_deployment_launch_materials_are_ready(self) -> None:
+        required_markers = {
+            DOCS / "legal/privacy-policy.md": ["Privacy Policy", "Data We Do Not Collect"],
+            DOCS / "legal/terms-of-service.md": ["Terms Of Service", "Publishing Boundary"],
+            DOCS / "legal/refund-policy.md": ["Refund Policy", "Credit Usage"],
+            DOCS / "legal/support.md": ["Support", "Hosted run ID"],
+            DOCS / "store/chrome-listing.md": ["Chrome Web Store Listing Draft", "Permission Justification"],
+            DOCS / "store/edge-listing.md": ["Microsoft Edge Add-ons Listing Draft", "Certification Notes"],
+            DOCS / "store/reviewer-notes.md": ["Store Reviewer Notes", "Manifest V3"],
+            DOCS / "store/screenshot-plan.md": ["Store Screenshot Plan", "Hosted run"],
+            ROOT / "deploy/promotion-manager/README.md": ["same HTTPS host", "Server Requirement", "systemd"],
+            ROOT / "deploy/promotion-manager/nginx-promotion-manager.conf": [
+                "/api/promotion-manager/",
+                "/promotion-manager/privacy",
+                "/promotion-manager/runs/",
+            ],
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service": ["ExecStart", "api.env"],
+            ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service": ["ExecStart", "api.env"],
+        }
+        for path, markers in required_markers.items():
+            self.assertTrue(path.exists(), path)
+            text = path.read_text(encoding="utf-8")
+            for marker in markers:
+                self.assertIn(marker, text, f"{path} missing {marker}")
+
+    def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:
+        files = [
+            ROOT / "SKILL.md",
+            DOCS / "usage.md",
+            DOCS / "final-capability-map.md",
+        ]
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("manual publish packages are the primary path", text)
+            self.assertIn("auto-publish ports are reserved", text)
+            self.assertIn("official API-only", text)
+        capability_map = (DOCS / "final-capability-map.md").read_text(encoding="utf-8")
+        self.assertIn("Generate publish packages first; keep auto-publish ports reserved", capability_map)
+
+    def test_final_readiness_publish_row_uses_manual_package_first_strategy(self) -> None:
+        module = load_script_module(FINAL_CAPABILITY_READINESS)
+        row = module.publish_row(
+            {},
+            {},
+            [
+                {
+                    "records": [
+                        {"platform": "github", "readiness": "dry_run_ready"},
+                        {"platform": "xiaohongshu", "readiness": "manual_publish_required"},
+                    ]
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(row["id"], "official_or_browser_assisted_publish")
+        self.assertEqual(row["status"], "manual_package_ready_auto_ports_reserved")
+        self.assertIn("manual publish packages", row["label"])
+        self.assertTrue(row["metrics"]["autoPublishPortsReserved"])
+        self.assertEqual(row["metrics"]["manualOrBrowserRequired"], 1)
 
     def test_billing_contract_simulator_runs_license_usage_and_webhook_flow(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="billing-simulator-test-"))
@@ -6756,18 +7419,44 @@ Prompt templates for product copy, SEO content, and video scripts.
         module = load_script_module(SELF_EVOLUTION_AUDIT)
         files = {item.as_posix() for item in module.managed_skill_files(ROOT)}
         self.assertIn("README.md", files)
+        self.assertIn("README.en.md", files)
         self.assertIn("README.zh-CN.md", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/zh-CN/installation.md", files)
         self.assertIn("docs/zh-CN/usage.md", files)
         self.assertIn("docs/subscription-pricing.md", files)
         self.assertIn("docs/billing-backend-contract.md", files)
+        self.assertIn("docs/legal/privacy-policy.md", files)
+        self.assertIn("docs/legal/terms-of-service.md", files)
+        self.assertIn("docs/legal/refund-policy.md", files)
+        self.assertIn("docs/legal/support.md", files)
+        self.assertIn("docs/store/chrome-listing.md", files)
+        self.assertIn("docs/store/edge-listing.md", files)
+        self.assertIn("docs/store/reviewer-notes.md", files)
+        self.assertIn("docs/store/screenshot-plan.md", files)
+        self.assertIn("deploy/promotion-manager/README.md", files)
+        self.assertIn("deploy/promotion-manager/.env.production.example", files)
+        self.assertIn("deploy/promotion-manager/nginx-promotion-manager.conf", files)
+        self.assertIn("deploy/promotion-manager/enhe-promotion-manager-api.service", files)
+        self.assertIn("deploy/promotion-manager/enhe-promotion-manager-worker.service", files)
         self.assertIn("browser-extension/manifest.json", files)
         self.assertIn("browser-extension/billing-contract.json", files)
         self.assertIn("browser-extension/popup.html", files)
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
         self.assertIn("browser-extension/icons/icon128.png", files)
+        self.assertIn("backend/license-service/package.json", files)
+        self.assertIn("backend/license-service/package-lock.json", files)
+        self.assertIn("backend/license-service/.env.example", files)
+        self.assertIn("backend/license-service/src/server.js", files)
+        self.assertIn("backend/license-service/src/state-store.js", files)
+        self.assertIn("backend/license-service/src/hosted-worker.js", files)
+        self.assertIn("backend/license-service/src/migrate.js", files)
+        self.assertIn("backend/license-service/src/worker.js", files)
+        self.assertIn("backend/license-service/migrations/001_state_store.sql", files)
+        self.assertIn("backend/license-service/README.md", files)
+        self.assertFalse(any("/node_modules/" in item for item in files))
+        self.assertFalse(any("/var/" in item for item in files))
         self.assertIn("scripts/billing_contract_simulator.py", files)
         self.assertIn("scripts/package_browser_extension.py", files)
         self.assertIn("scripts/launch_unlock_pack.py", files)
@@ -6826,9 +7515,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         secret_value = "super-secret-token-for-test"
         for name in [
             "YOUTUBE_API_KEY",
+            "YOUTUBE_ACCESS_TOKEN",
             "YOUTUBE_OAUTH_ACCESS_TOKEN",
             "GOOGLE_OAUTH_CLIENT_ID",
             "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
             "GITHUB_TOKEN",
             "GH_TOKEN",
             "DOUYIN_CLIENT_KEY",
@@ -6874,12 +7566,15 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
         self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
+        self.assertEqual(by_requirement["completion_roadmap_to_100_percent"]["status"], "ready")
+        self.assertEqual(by_requirement["zh_cn_operator_action_checklist_to_100_percent"]["status"], "ready")
         self.assertEqual(by_requirement["phase_progress_reporting"]["status"], "ready")
         self.assertEqual(by_requirement["retrospective_next_round_optimization"]["status"], "ready")
         self.assertTrue(
             any("browser_video_sampler.py" in path for path in by_requirement["viral_creator_content_research"]["evidence"])
         )
         self.assertEqual(report["platforms"]["xiaohongshu"]["directPublish"], "manual_or_browser_assisted_only")
+        self.assertEqual(report["platforms"]["douyin"]["directPublish"], "browser_assisted_publish_selected")
         self.assertTrue(any(item["purpose"] == "one_command_cycle" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_real_run_playbook" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "capture_browser_visible_video_evidence" for item in report["recommendedCommands"]))
@@ -6908,6 +7603,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["scripts"]["final_capability_runner"]["exists"])
         self.assertTrue(report["scripts"]["final_capability_readiness"]["exists"])
         self.assertTrue(report["scripts"]["self_evolution_audit"]["exists"])
+        self.assertTrue(report["scripts"]["completion_roadmap"]["exists"])
+        self.assertTrue(report["scripts"]["operator_action_checklist"]["exists"])
         viral_evidence = "\n".join(by_requirement["viral_creator_content_research"]["evidence"])
         self.assertIn("multi_query_viral_discovery.py", viral_evidence)
         self.assertIn("viral_evidence_inbox_setup.py", viral_evidence)
@@ -6926,6 +7623,15 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("performance_monitor.py", optimization_evidence)
         docs_evidence = "\n".join(by_requirement["github_documentation_and_install_tutorial"]["evidence"]).replace("\\", "/")
         self.assertIn("README.md", docs_evidence)
+        self.assertIn("README.en.md", docs_evidence)
+        self.assertIn("docs/100-percent-completion-roadmap.md", docs_evidence)
+        self.assertIn("docs/zh-CN/100-percent-completion-guide.md", docs_evidence)
+        roadmap_evidence = "\n".join(by_requirement["completion_roadmap_to_100_percent"]["evidence"]).replace("\\", "/")
+        self.assertIn("scripts/completion_roadmap.py", roadmap_evidence)
+        self.assertIn("docs/100-percent-completion-roadmap.md", roadmap_evidence)
+        checklist_evidence = "\n".join(by_requirement["zh_cn_operator_action_checklist_to_100_percent"]["evidence"]).replace("\\", "/")
+        self.assertIn("scripts/operator_action_checklist.py", checklist_evidence)
+        self.assertIn("docs/zh-CN/100-percent-completion-guide.md", checklist_evidence)
         self.assertIn("README.zh-CN.md", docs_evidence)
         self.assertIn("docs/installation.md", docs_evidence)
         self.assertIn("docs/zh-CN/installation.md", docs_evidence)
@@ -6939,6 +7645,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("scripts/real_run_playbook.py", phase_evidence)
         self.assertTrue(report["scripts"]["billing_contract_simulator"]["exists"])
         self.assertTrue(any(item["purpose"] == "audit_self_evolution" for item in report["recommendedCommands"]))
+        self.assertTrue(any(item["purpose"] == "build_zh_cn_operator_action_checklist" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "prepare_browser_assisted_publish" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "run_browser_publish_session" for item in report["recommendedCommands"]))
         self.assertTrue(any(item["purpose"] == "build_publish_setup_kit" for item in report["recommendedCommands"]))
@@ -6977,6 +7684,85 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(report["selfEvolution"]["safeSkillSync"])
         self.assertTrue((out_dir / "reports/promotion-manager/self-evolution/self-evolution-audit.md").exists())
         self.assertTrue((out_dir / "reports/promotion-manager/capability/final-capability-audit.md").exists())
+
+    def test_final_capability_audit_loads_env_file_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-audit-env-file-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env_file = out_dir / ".env"
+        secret_value = "google-client-secret-test"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "GOOGLE_OAUTH_CLIENT_ID=client-id-test.apps.googleusercontent.com",
+                    f"GOOGLE_OAUTH_CLIENT_SECRET={secret_value}",
+                    "YOUTUBE_API_KEY=youtube-api-key-test",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        for name in ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "YOUTUBE_API_KEY"]:
+            env.pop(name, None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_AUDIT),
+                "--env-file",
+                str(env_file),
+                "--skip-runtime-checks",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_text = (out_dir / "reports/promotion-manager/capability/final-capability-audit.json").read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertTrue(report["credentials"]["youtube_oauth_flow"]["ready"])
+        self.assertTrue(report["credentials"]["youtube_search_metrics"]["ready"])
+        self.assertIn("GOOGLE_OAUTH_CLIENT_SECRET", report["envLoad"]["loadedKeys"])
+        self.assertNotIn(secret_value, report_text)
+
+    def test_final_capability_audit_accepts_youtube_client_aliases(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="final-capability-audit-youtube-alias-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env_file = out_dir / ".env"
+        secret_value = "youtube-client-secret-test"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "YOUTUBE_CLIENT_ID=client-id-test.apps.googleusercontent.com",
+                    f"YOUTUBE_CLIENT_SECRET={secret_value}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        for name in ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET"]:
+            env.pop(name, None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(FINAL_CAPABILITY_AUDIT),
+                "--env-file",
+                str(env_file),
+                "--skip-runtime-checks",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_text = (out_dir / "reports/promotion-manager/capability/final-capability-audit.json").read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertTrue(report["credentials"]["youtube_oauth_flow"]["ready"])
+        self.assertIn("YOUTUBE_CLIENT_SECRET", report["envLoad"]["loadedKeys"])
+        self.assertEqual(report["credentials"]["youtube_oauth_flow"]["blankEnv"], [])
+        self.assertNotIn(secret_value, report_text)
 
     def test_final_capability_readiness_builds_requirement_matrix_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="final-readiness-test-"))
@@ -7705,7 +8491,10 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "id": "all_platform_auto_publish",
                             "status": "blocked_by_authorization_or_platform_limits",
                             "evidence": [],
-                            "missing": [],
+                            "missing": [
+                                "GITHUB_TOKEN or GH_TOKEN for GitHub writes",
+                                "YouTube OAuth access token or OAuth client credentials",
+                            ],
                         },
                         {"id": "real_metrics_orders_revenue_recovery", "status": "partial_ready", "evidence": [], "missing": []},
                         {"id": "retrospective_next_round_optimization", "status": "partial_ready", "evidence": [], "missing": []},
@@ -7743,6 +8532,17 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "status": "partial_ready",
                     "records": [
                         {"platform": "github", "readiness": "dry_run_ready"},
+                        {
+                            "platform": "youtube",
+                            "readiness": "missing_credentials",
+                            "credentialStatus": {
+                                "missingEnv": [
+                                    "YOUTUBE_OAUTH_ACCESS_TOKEN",
+                                    "GOOGLE_OAUTH_CLIENT_ID",
+                                    "GOOGLE_OAUTH_CLIENT_SECRET",
+                                ]
+                            },
+                        },
                     ],
                 }
             )
@@ -7785,8 +8585,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(len(report["sourceReports"]["publishReadiness"]), 1)
         self.assertEqual(report["sourceReports"]["publishReadiness"][0]["path"], str(explicit_readiness))
         publish_row = {item["id"]: item for item in report["requirements"]}["official_or_browser_assisted_publish"]
-        self.assertEqual(publish_row["metrics"]["readinessRecords"], 1)
+        self.assertEqual(publish_row["metrics"]["readinessRecords"], 2)
         self.assertEqual(publish_row["metrics"]["setupRecords"], 1)
+        self.assertNotIn("GITHUB_TOKEN or GH_TOKEN for GitHub writes", publish_row["missing"])
+        self.assertIn("YouTube OAuth access token or OAuth client credentials", publish_row["missing"])
         metrics_row = {item["id"]: item for item in report["requirements"]}["real_metrics_comments_orders_revenue"]
         self.assertEqual(metrics_row["metrics"]["realEvidenceSetupTargets"], 1)
 
@@ -7797,9 +8599,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         secret_value = "super-secret-platform-token"
         for name in [
             "YOUTUBE_API_KEY",
+            "YOUTUBE_ACCESS_TOKEN",
             "YOUTUBE_OAUTH_ACCESS_TOKEN",
             "GOOGLE_OAUTH_CLIENT_ID",
             "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
             "GITHUB_TOKEN",
             "GH_TOKEN",
             "DOUYIN_CLIENT_KEY",
@@ -7836,8 +8641,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["github"]["publish"]["access"], "implemented_official_api")
         self.assertEqual(by_platform["xiaohongshu"]["publish"]["access"], "no_verified_public_creator_publish_endpoint")
         self.assertEqual(by_platform["zhihu"]["publish"]["mode"], "manual_or_browser_assisted_until_verified")
-        self.assertEqual(by_platform["douyin"]["publish"]["access"], "implemented_official_api")
-        self.assertIn("publish_executor.py", by_platform["douyin"]["publish"]["implementedBy"])
+        self.assertEqual(by_platform["douyin"]["publish"]["access"], "manual_or_browser_assisted_required")
+        self.assertIn("browser_publish_session.py", by_platform["douyin"]["publish"]["implementedBy"])
         self.assertFalse(by_platform["douyin"]["publish"]["readyForAutomation"])
         self.assertEqual(by_platform["tiktok"]["automationLevel"], "official_app_integration_required")
         self.assertEqual(report["learningFreshness"]["status"], "stale_not_live_checked")
@@ -7852,6 +8657,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(zhihu_research[0]["docEvidenceStatus"], "configured_not_live_checked")
         self.assertEqual(zhihu_research[0]["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertTrue(zhihu_research[0]["searchedOfficialSources"])
+        douyin_research = [
+            item for item in gap_research["records"] if item["platform"] == "douyin" and item["area"] == "publish"
+        ]
+        self.assertTrue(douyin_research)
+        self.assertEqual(douyin_research[0]["safeFallback"], "manual_or_browser_assisted_publish")
         self.assertTrue((out_dir / "reports/promotion-manager/platform-access/platform-access-audit.md").exists())
 
     def test_platform_access_audit_summarizes_live_official_doc_evidence(self) -> None:
@@ -8228,6 +9038,48 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertIn("--browser-search-wait-until", command)
             self.assertEqual(command[command.index("--browser-search-wait-until") + 1], "domcontentloaded")
         self.assertTrue((out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-discovery.md").exists())
+
+    def test_multi_query_viral_discovery_loads_env_file_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="multi-query-discovery-env-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env_file = out_dir / ".env"
+        secret_value = "firecrawl-secret-must-not-be-stored"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "WEB_DATA_PROVIDER=firecrawl",
+                    f"FIRECRAWL_API_KEY={secret_value}",
+                    "FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v2",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(MULTI_QUERY_VIRAL_DISCOVERY),
+                "--env-file",
+                str(env_file),
+                "--product-name",
+                "AI Prompt Kit",
+                "--query-count",
+                "1",
+                "--dry-run",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        report_path = out_dir / "output/reports/promotion-manager/competitors/multi-query-viral-discovery.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertIn("FIRECRAWL_API_KEY", report["envLoad"]["loadedKeys"])
+        self.assertFalse(report["envLoad"]["valuesStored"])
+        self.assertNotIn(secret_value, report_text)
 
     def test_multi_query_viral_discovery_merges_existing_runs_and_creators(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="multi-query-discovery-merge-test-"))
@@ -8818,6 +9670,93 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["request"]["method"], "PUT")
         self.assertNotIn("GITHUB_TOKEN", json.dumps(report))
 
+    def test_publish_executor_github_dry_run_can_plan_pull_request_from_env(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-github-pr-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        body_path = out_dir / "README-promo.md"
+        body_path.write_text("# Launch draft\n\nPromotion copy for PR.", encoding="utf-8")
+        env = os.environ.copy()
+        env["GITHUB_OWNER"] = "hqwzhu"
+        env["GITHUB_REPO"] = "Viral-Product-Copy-Video-Generator"
+        env["GITHUB_CREATE_PR"] = "true"
+        env["GITHUB_PR_BASE"] = "main"
+        env["GITHUB_PR_BRANCH_PREFIX"] = "auto-publish"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "github",
+                "--github-action",
+                "pull_request",
+                "--path",
+                "PROMOTION.md",
+                "--content-file",
+                str(body_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["repository"], "hqwzhu/Viral-Product-Copy-Video-Generator")
+        self.assertTrue(report["request"]["createPullRequest"])
+        self.assertEqual(report["request"]["baseBranch"], "main")
+        self.assertTrue(report["request"]["branch"].startswith("auto-publish/"))
+        self.assertEqual(report["publishPreview"]["platform"], "github")
+        audit_path = out_dir / "reports/promotion-manager/publish-results/publish-audit-log.jsonl"
+        audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(audit[-1]["platform"], "github")
+        self.assertEqual(audit[-1]["status"], "dry_run")
+        self.assertNotIn("GITHUB_TOKEN", report_path.read_text(encoding="utf-8"))
+
+    def test_publish_executor_execute_requires_environment_publish_gate(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-env-gate-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        body_path = out_dir / "README-promo.md"
+        body_path.write_text("# Launch draft\n\nPromotion copy.", encoding="utf-8")
+        env = os.environ.copy()
+        env["GITHUB_TOKEN"] = "unit-test-github-token-secret"
+        env.pop("I_APPROVE_PUBLISH", None)
+        env["PUBLISH_DRY_RUN"] = "false"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "github",
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--github-action",
+                "file",
+                "--github-repo",
+                "hqwzhu/Viral-Product-Copy-Video-Generator",
+                "--path",
+                "PROMOTION.md",
+                "--content-file",
+                str(body_path),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("I_APPROVE_PUBLISH=true", report["reason"])
+        self.assertNotIn("unit-test-github-token-secret", report_text)
+        audit_path = out_dir / "reports/promotion-manager/publish-results/publish-audit-log.jsonl"
+        audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(audit[-1]["status"], "blocked")
+
     def test_publish_executor_youtube_dry_run_uses_oauth_boundary(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -8846,8 +9785,195 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["status"], "dry_run")
         self.assertEqual(report["platform"], "youtube")
         self.assertEqual(report["officialApi"], "YouTube Data API videos.insert")
-        self.assertIn("upload/youtube/v3/videos", report["request"]["endpoint"])
+        self.assertEqual(report["request"]["endpoint"], "youtube.videos.insert(part=snippet,status)")
+        self.assertEqual(report["request"]["clientLibrary"], "google-api-python-client")
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", json.dumps(report))
+        self.assertEqual(report["publishPreview"]["privacyStatus"], "private")
+
+    def test_publish_executor_youtube_loads_env_file_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-env-file-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for dry-run")
+        env_file = out_dir / ".env"
+        secret_value = "youtube-env-file-secret"
+        env_file.write_text(
+            "\n".join(
+                [
+                    f"YOUTUBE_OAUTH_ACCESS_TOKEN={secret_value}",
+                    "YOUTUBE_CATEGORY_ID=28",
+                    "YOUTUBE_CHANNEL_ID=channel-from-env-file",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env.pop("YOUTUBE_ACCESS_TOKEN", None)
+        env.pop("YOUTUBE_OAUTH_ACCESS_TOKEN", None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--env-file",
+                str(env_file),
+                "--platform",
+                "youtube",
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_text = (out_dir / "reports/promotion-manager/publish-results/publish-execution.json").read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "dry_run")
+        self.assertEqual(report["credentialStatus"], "present")
+        self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN", report["envLoad"]["loadedKeys"])
+        self.assertEqual(report["publishPreview"]["expectedAccount"], "channel-from-env-file")
+        self.assertNotIn(secret_value, report_text)
+
+    def test_youtube_credential_check_reports_blank_aliases_without_secret_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="youtube-credential-check-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env_file = out_dir / ".env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "YOUTUBE_CLIENT_ID=",
+                    "YOUTUBE_CLIENT_SECRET=",
+                    "YOUTUBE_ACCESS_TOKEN=",
+                    "YOUTUBE_REFRESH_TOKEN=",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        for name in [
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
+            "YOUTUBE_ACCESS_TOKEN",
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "YOUTUBE_REFRESH_TOKEN",
+        ]:
+            env.pop(name, None)
+        subprocess.run(
+            [
+                sys.executable,
+                str(YOUTUBE_CREDENTIAL_CHECK),
+                "--env-file",
+                str(env_file),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_text = (out_dir / "reports/promotion-manager/capability/youtube-credential-check.json").read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "blocked_missing_or_blank_youtube_credentials")
+        self.assertEqual(report["credentialGroups"]["oauthClientId"]["state"], "blank")
+        self.assertEqual(report["credentialGroups"]["oauthClientSecret"]["state"], "blank")
+        self.assertEqual(report["credentialGroups"]["uploadAccessToken"]["state"], "blank")
+        self.assertIn("YOUTUBE_CLIENT_ID", report["credentialGroups"]["oauthClientId"]["blankEnv"])
+        self.assertFalse(report["readiness"]["dryRunUploadPortReady"])
+
+    def test_youtube_credential_check_env_file_overrides_blank_process_values(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="youtube-credential-check-blank-env-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        env_file = out_dir / ".env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "YOUTUBE_CLIENT_ID=client-id-test.apps.googleusercontent.com",
+                    "YOUTUBE_CLIENT_SECRET=client-secret-test",
+                    "YOUTUBE_ACCESS_TOKEN=access-token-test",
+                    "YOUTUBE_REFRESH_TOKEN=refresh-token-test",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        for name in [
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "YOUTUBE_OAUTH_REFRESH_TOKEN",
+        ]:
+            env.pop(name, None)
+        env["YOUTUBE_CLIENT_ID"] = ""
+        env["YOUTUBE_CLIENT_SECRET"] = ""
+        env["YOUTUBE_ACCESS_TOKEN"] = ""
+        env["YOUTUBE_REFRESH_TOKEN"] = ""
+        subprocess.run(
+            [
+                sys.executable,
+                str(YOUTUBE_CREDENTIAL_CHECK),
+                "--env-file",
+                str(env_file),
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_text = (out_dir / "reports/promotion-manager/capability/youtube-credential-check.json").read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["status"], "ready_oauth_flow_and_access_token_present")
+        self.assertEqual(report["credentialGroups"]["oauthClientId"]["state"], "ready")
+        self.assertEqual(report["credentialGroups"]["oauthClientSecret"]["state"], "ready")
+        self.assertEqual(report["credentialGroups"]["uploadAccessToken"]["state"], "ready")
+        self.assertTrue(report["readiness"]["dryRunUploadPortReady"])
+        self.assertNotIn("client-secret-test", report_text)
+        self.assertNotIn("access-token-test", report_text)
+
+    def test_publish_executor_youtube_accepts_access_token_alias_before_gate(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-youtube-env-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"not a real video but enough for blocked execute")
+        env = os.environ.copy()
+        env["YOUTUBE_ACCESS_TOKEN"] = "oauth-unit-test-secret"
+        env.pop("I_APPROVE_PUBLISH", None)
+        env["PUBLISH_DRY_RUN"] = "false"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PUBLISH_EXECUTOR),
+                "--platform",
+                "youtube",
+                "--execute",
+                "--approval",
+                "I_APPROVE_PUBLISH",
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/publish-execution.json"
+        report_text = report_path.read_text(encoding="utf-8")
+        report = json.loads(report_text)
+        self.assertEqual(report["credentialStatus"], "present")
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("I_APPROVE_PUBLISH=true", report["reason"])
+        self.assertNotIn("oauth-unit-test-secret", report_text)
 
     def test_publish_executor_douyin_dry_run_uses_official_upload_and_create_boundary(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-executor-douyin-test-"))
@@ -9000,6 +10126,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         draft_text = Path(by_platform["xiaohongshu"]["contentDraft"]).read_text(encoding="utf-8")
         self.assertIn("## Tracking Plan", draft_text)
         self.assertIn("utm_content", draft_text)
+        self.assertIn("## Media Assets", draft_text)
+        self.assertIn("## First Batch", draft_text)
+        self.assertTrue(by_platform["xiaohongshu"]["assets"])
+        self.assertTrue(Path(by_platform["xiaohongshu"]["cover"]["path"]).exists())
+        self.assertTrue(by_platform["xiaohongshu"]["detailImages"])
         self.assertTrue(Path(by_platform["github"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["youtube"]["officialExecution"]["report"]).exists())
         self.assertTrue(Path(by_platform["xiaohongshu"]["contentDraft"]).exists())
@@ -9012,7 +10143,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("GITHUB_TOKEN", serialized)
         self.assertNotIn("YOUTUBE_OAUTH_ACCESS_TOKEN", serialized)
 
-    def test_publish_queue_can_build_douyin_official_dry_run_when_video_file_supplied(self) -> None:
+    def test_publish_queue_keeps_douyin_browser_assisted_when_video_file_supplied(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-queue-douyin-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
         snapshot_path = out_dir / "snapshot.json"
@@ -9068,10 +10199,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         queue = json.loads(queue_text)
         record = queue["records"][0]
         self.assertEqual(record["platform"], "douyin")
-        self.assertEqual(record["status"], "dry_run")
-        self.assertEqual(record["publishMode"], "official_api_publish")
-        self.assertIn("publish_executor.py", " ".join(record["officialExecution"]["command"]))
-        self.assertTrue(Path(record["officialExecution"]["report"]).exists())
+        self.assertEqual(record["status"], "queued_browser_assisted")
+        self.assertEqual(record["publishMode"], "browser_assisted_publish")
+        self.assertEqual(record["video"]["path"], str(video_path))
+        self.assertEqual(record["video"]["status"], "ready")
+        self.assertNotIn("officialExecution", record)
         self.assertNotIn("DOUYIN_ACCESS_TOKEN", queue_text)
         self.assertNotIn("DOUYIN_OPEN_ID", queue_text)
 
@@ -9184,6 +10316,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
         clipboard = Path(by_platform["xiaohongshu"]["payloadFiles"]["clipboard"]).read_text(encoding="utf-8")
         self.assertIn("Tracked URL:", clipboard)
+        self.assertIn("First batch:", clipboard)
+        self.assertIn("Media assets:", clipboard)
         self.assertTrue(Path(by_platform["douyin"]["payloadFiles"]["formFillScript"]).exists())
         self.assertIn("browser_publish_form_fill.py", by_platform["douyin"]["browserFormFill"]["command"])
         self.assertTrue(Path(by_platform["douyin"]["browserFormFill"]["payloadJson"]).exists())
@@ -9445,9 +10579,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         env = os.environ.copy()
         secret_value = "fake-gh-token-for-readiness-test"
         for name in [
+            "YOUTUBE_ACCESS_TOKEN",
             "YOUTUBE_OAUTH_ACCESS_TOKEN",
             "GOOGLE_OAUTH_CLIENT_ID",
             "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
             "GITHUB_TOKEN",
             "GH_TOKEN",
             "DOUYIN_CLIENT_KEY",
@@ -9487,7 +10624,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(by_platform["youtube"]["readiness"], "missing_credentials")
         self.assertEqual(by_platform["zhihu"]["readiness"], "manual_publish_required")
         self.assertEqual(by_platform["xiaohongshu"]["readiness"], "manual_publish_required")
-        self.assertEqual(by_platform["douyin"]["readiness"], "browser_assisted_or_official_app_required")
+        self.assertEqual(by_platform["douyin"]["readiness"], "browser_assisted_publish_ready")
         self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
         self.assertTrue((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.md").exists())
 
@@ -9518,9 +10655,18 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "publishMode": "official_api_publish",
                             "readiness": "missing_credentials",
                             "credentialStatus": {
-                                "requiredAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+                                "requiredAny": ["YOUTUBE_ACCESS_TOKEN", "YOUTUBE_OAUTH_ACCESS_TOKEN"],
                                 "alternativeAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
-                                "missingEnv": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "alternativeGroups": [
+                                    ["GOOGLE_OAUTH_CLIENT_ID", "YOUTUBE_CLIENT_ID"],
+                                    ["GOOGLE_OAUTH_CLIENT_SECRET", "YOUTUBE_CLIENT_SECRET"],
+                                ],
+                                "missingEnv": [
+                                    "YOUTUBE_ACCESS_TOKEN",
+                                    "YOUTUBE_OAUTH_ACCESS_TOKEN",
+                                    "GOOGLE_OAUTH_CLIENT_ID or YOUTUBE_CLIENT_ID",
+                                    "GOOGLE_OAUTH_CLIENT_SECRET or YOUTUBE_CLIENT_SECRET",
+                                ],
                                 "presentEnv": [],
                                 "valuesStored": False,
                             },
@@ -9563,7 +10709,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn(secret_value, report_text)
         report = json.loads(report_text)
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["summary"]["credentialEnvNames"], 3)
+        self.assertEqual(report["summary"]["credentialEnvNames"], 6)
         by_platform = {item["platform"]: item for item in report["records"]}
         self.assertEqual(by_platform["youtube"]["setupCategory"], "credential_setup_required")
         self.assertEqual(by_platform["xiaohongshu"]["setupCategory"], "browser_or_manual_publish")
@@ -9573,6 +10719,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         env_text = env_template.read_text(encoding="utf-8")
         self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN=", env_text)
         self.assertIn("GOOGLE_OAUTH_CLIENT_ID=", env_text)
+        self.assertIn("YOUTUBE_CLIENT_ID=", env_text)
+        self.assertIn("YOUTUBE_CLIENT_SECRET=", env_text)
         self.assertNotIn(secret_value, env_text)
         self.assertTrue(Path(report["artifacts"]["checklist"]).exists())
         platform_guide_json = Path(report["artifacts"]["platformSetupGuideJson"])
@@ -9583,6 +10731,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(guide_by_platform["youtube"]["automationStatus"], "official_executor_integrated")
         self.assertIn("YouTube videos.insert", json.dumps(guide_by_platform["youtube"], ensure_ascii=False))
         self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN", guide_by_platform["youtube"]["credentialEnvNames"])
+        self.assertIn("YOUTUBE_CLIENT_ID", guide_by_platform["youtube"]["credentialEnvNames"])
         self.assertEqual(
             guide_by_platform["xiaohongshu"]["automationStatus"],
             "browser_or_manual_until_official_publish_access_verified",
@@ -9850,9 +10999,18 @@ Prompt templates for product copy, SEO content, and video scripts.
                             "publishMode": "official_api_publish",
                             "readiness": "missing_credentials",
                             "credentialStatus": {
-                                "requiredAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+                                "requiredAny": ["YOUTUBE_ACCESS_TOKEN", "YOUTUBE_OAUTH_ACCESS_TOKEN"],
                                 "alternativeAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
-                                "missingEnv": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+                                "alternativeGroups": [
+                                    ["GOOGLE_OAUTH_CLIENT_ID", "YOUTUBE_CLIENT_ID"],
+                                    ["GOOGLE_OAUTH_CLIENT_SECRET", "YOUTUBE_CLIENT_SECRET"],
+                                ],
+                                "missingEnv": [
+                                    "YOUTUBE_ACCESS_TOKEN",
+                                    "YOUTUBE_OAUTH_ACCESS_TOKEN",
+                                    "GOOGLE_OAUTH_CLIENT_ID or YOUTUBE_CLIENT_ID",
+                                    "GOOGLE_OAUTH_CLIENT_SECRET or YOUTUBE_CLIENT_SECRET",
+                                ],
                                 "presentEnv": [],
                                 "valuesStored": False,
                             },
@@ -9921,7 +11079,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue((out_dir / "reports/promotion-manager/launch-unlock/launch-unlock.md").exists())
         self.assertIn("YOUTUBE_OAUTH_ACCESS_TOKEN=", (out_dir / "reports/promotion-manager/publish-setup/publish-credentials.example.env").read_text(encoding="utf-8"))
 
-    def test_publish_readiness_runner_audits_douyin_official_dry_run_target(self) -> None:
+    def test_publish_readiness_runner_audits_douyin_browser_assisted_target(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="publish-readiness-douyin-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
         snapshot_path = out_dir / "snapshot.json"
@@ -9978,10 +11136,11 @@ Prompt templates for product copy, SEO content, and video scripts.
         report = json.loads((workflow_out / "reports/promotion-manager/publish-readiness/publish-readiness.json").read_text(encoding="utf-8"))
         record = report["records"][0]
         self.assertEqual(record["platform"], "douyin")
-        self.assertEqual(record["publishMode"], "official_api_publish")
-        self.assertEqual(record["readiness"], "missing_credentials")
+        self.assertEqual(record["publishMode"], "browser_assisted_publish")
+        self.assertEqual(record["readiness"], "browser_assisted_publish_ready")
         self.assertTrue(record["targetStatus"]["ready"])
-        self.assertIn("DOUYIN_ACCESS_TOKEN", record["credentialStatus"]["missingEnv"])
+        self.assertEqual(record["credentialStatus"]["missingEnv"], [])
+        self.assertEqual(record["credentialStatus"]["requiredAll"], [])
         self.assertTrue(Path(report["inputs"]["publishQueue"]).exists())
 
     def test_youtube_oauth_publish_dry_run_generates_auth_url_without_tokens(self) -> None:
@@ -10019,6 +11178,38 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertFalse(report["credentialStatus"]["tokensSaved"])
         self.assertNotIn("access_token", json.dumps(report))
         self.assertNotIn("GOOGLE_OAUTH_CLIENT_SECRET", json.dumps(report))
+
+    def test_youtube_oauth_publish_accepts_youtube_client_id_alias(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-alias-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        video_path = out_dir / "draft.mp4"
+        video_path.write_bytes(b"dry-run only")
+        env = os.environ.copy()
+        env.pop("GOOGLE_OAUTH_CLIENT_ID", None)
+        env.pop("GOOGLE_OAUTH_CLIENT_SECRET", None)
+        env["YOUTUBE_CLIENT_ID"] = "client-id.apps.googleusercontent.com"
+        subprocess.run(
+            [
+                sys.executable,
+                str(YOUTUBE_OAUTH_PUBLISH),
+                "--video-file",
+                str(video_path),
+                "--title",
+                "Launch draft",
+                "--state",
+                "test-state",
+                "--out-dir",
+                str(out_dir),
+            ],
+            check=True,
+            cwd=ROOT,
+            env=env,
+        )
+        report_path = out_dir / "reports/promotion-manager/publish-results/youtube-oauth-publish.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "dry_run")
+        self.assertIn("accounts.google.com/o/oauth2/v2/auth", report["authUrl"])
+        self.assertEqual(report["credentialStatus"]["clientId"], "present")
 
     def test_youtube_oauth_publish_execute_requires_client_secret(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="youtube-oauth-publish-blocked-test-"))

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
-VIDEO_PLATFORMS = {"youtube", "douyin", "tiktok"}
+VIDEO_PLATFORMS = {"youtube", "xiaohongshu", "douyin", "tiktok"}
 
 
 def main() -> None:
@@ -39,9 +39,10 @@ def main() -> None:
     follow_up_captures = run_follow_up_captures(args, out_dir, steps, viral_library)
     competitor_informed = run_competitor_content_enhancer(args, product, out_dir, steps, viral_library, follow_up_captures, creator_follow_up)
     videos = render_video_artifacts(args, product, out_dir, steps)
+    media_assets = run_media_asset_pack(args, product, out_dir, steps, videos)
     metrics = run_metrics_import(args, out_dir, steps)
 
-    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, creator_leaderboard, creator_follow_up, follow_up_captures, competitor_informed, videos, metrics, steps, out_dir)
+    manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, creator_leaderboard, creator_follow_up, follow_up_captures, competitor_informed, videos, media_assets, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
@@ -634,6 +635,50 @@ def render_video_artifacts(args: argparse.Namespace, product: dict[str, Any], ou
     return results
 
 
+def run_media_asset_pack(
+    args: argparse.Namespace,
+    product: dict[str, Any],
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+    videos: list[dict[str, Any]],
+) -> dict[str, Any]:
+    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    if not content_json.exists() or not publish_pack.exists():
+        return {
+            "status": "blocked",
+            "reason": "Generated content JSON or publish pack was missing before media asset generation.",
+            "assetPack": "",
+        }
+    command = [
+        sys.executable,
+        str(SCRIPTS / "media_asset_pack.py"),
+        "--content-json",
+        str(content_json),
+        "--publish-pack",
+        str(publish_pack),
+        "--platforms",
+        ",".join(product["platforms"]),
+        "--out-dir",
+        str(out_dir),
+    ]
+    for item in videos:
+        platform = str(item.get("platform") or "").strip()
+        video = str(item.get("video") or "").strip()
+        if platform and video:
+            command.extend(["--video-file", f"{platform}={video}"])
+    step = run_command("media_asset_pack", command, check=False)
+    steps.append(step)
+    report_path = out_dir / "reports/promotion-manager/media-assets/media-asset-pack.json"
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    return {
+        "status": report.get("status") or ("ready" if step["exitCode"] == 0 else "error"),
+        "assetPack": str(report_path) if report_path.exists() else "",
+        "summary": report.get("summary", {}),
+        "exitCode": step["exitCode"],
+    }
+
+
 def run_metrics_import(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     source_args = metrics_source_args(args)
     if not source_args:
@@ -658,6 +703,7 @@ def build_manifest(
     follow_up_captures: dict[str, Any],
     competitor_informed: dict[str, Any],
     videos: list[dict[str, Any]],
+    media_assets: dict[str, Any],
     metrics: dict[str, Any] | None,
     steps: list[dict[str, Any]],
     out_dir: Path,
@@ -700,6 +746,7 @@ def build_manifest(
             "deepCompetitorLibrary": follow_up_captures.get("deepCompetitorLibrary", ""),
             "competitorInformedContent": competitor_informed.get("content", ""),
             "competitorInformedStrategy": competitor_informed.get("strategy", ""),
+            "mediaAssetPack": media_assets.get("assetPack", ""),
             "metricsReport": str(out_dir / "reports/promotion-manager/metrics/imported-metrics.json"),
         },
         "competitorDiscovery": {
@@ -716,6 +763,7 @@ def build_manifest(
             "competitorInformedContent": competitor_informed,
         },
         "videoGeneration": videos,
+        "mediaAssets": media_assets,
         "publishAutomation": publish_queue,
         "metricsRecovery": {
             "status": metrics.get("retrospective", {}).get("status") if metrics else "waiting_real_data",
@@ -784,6 +832,12 @@ def render_manifest(manifest: dict[str, Any]) -> str:
     ]
     for item in manifest["videoGeneration"]:
         lines.append(f"- {item.get('platform', 'workflow')}: `{item.get('status')}` {item.get('video') or item.get('reason', '')}")
+    media_assets = manifest.get("mediaAssets") if isinstance(manifest.get("mediaAssets"), dict) else {}
+    lines.extend(["", "## Media Assets"])
+    lines.append(f"- Status: `{media_assets.get('status', 'missing')}`")
+    lines.append(f"- Asset pack: {media_assets.get('assetPack', '')}")
+    for key, value in (media_assets.get("summary") or {}).items():
+        lines.append(f"- {key}: {value}")
     lines.extend(["", "## Publish Automation"])
     for item in manifest["publishAutomation"]:
         lines.append(f"- {item['platform']}: `{item['publishMode']}` / `{item['automationStatus']}`")

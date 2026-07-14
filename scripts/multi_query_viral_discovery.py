@@ -14,6 +14,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from env_loader import load_project_env, preparse_env_file
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -46,6 +48,7 @@ NON_CONTENT_TITLE_TERMS = {
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -54,7 +57,7 @@ def main() -> None:
     runs = run_or_plan_discovery(args, out_dir, query_plan)
     materials = merge_materials(runs, args.top_n)
     creators = build_creator_leaderboard(materials, args.top_n)
-    report = build_report(args, out_dir, product, query_plan, runs, materials, creators)
+    report = build_report(args, out_dir, product, query_plan, runs, materials, creators, env_load)
     write_outputs(out_dir, report, materials, creators)
     print(f"Multi-query viral discovery written to: {(report_dir(out_dir) / 'multi-query-viral-discovery.json').resolve()}")
 
@@ -75,6 +78,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platforms", default=DEFAULT_PLATFORMS)
     parser.add_argument("--top-n", type=int, default=20)
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before running discovery. Values are never written to reports.")
     parser.add_argument("--dry-run", action="store_true", help="Write query plan and commands without running platform search.")
     parser.add_argument("--existing-run-dir", action="append", default=[], help="Existing viral_discovery_runner output directory to merge. Can be repeated.")
     parser.add_argument("--html-snapshot-root", default="", help="Optional root containing saved search HTML fixtures. Uses <root>/<query-slug> when present, otherwise <root>.")
@@ -385,6 +389,7 @@ def build_report(
     runs: list[dict[str, Any]],
     materials: list[dict[str, Any]],
     creators: list[dict[str, Any]],
+    env_load: dict[str, object],
 ) -> dict[str, Any]:
     coverage = aggregate_run_coverage(runs)
     return {
@@ -393,6 +398,7 @@ def build_report(
         "product": product,
         "queryPlan": query_plan,
         "runs": runs,
+        "envLoad": env_load,
         "summary": {
             "queries": len(query_plan),
             "runs": len(runs),

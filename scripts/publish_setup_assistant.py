@@ -13,7 +13,11 @@ from typing import Any
 TODAY = date.today().isoformat()
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
 OFFICIAL_READINESS = {"missing_credentials", "missing_target", "missing_approval", "dry_run_ready", "ready_to_execute"}
-BROWSER_OR_MANUAL_READINESS = {"manual_publish_required", "browser_assisted_or_official_app_required"}
+BROWSER_OR_MANUAL_READINESS = {
+    "manual_publish_required",
+    "browser_assisted_or_official_app_required",
+    "browser_assisted_publish_ready",
+}
 PLATFORM_SETUP_GUIDES = {
     "github": {
         "automationStatus": "official_executor_integrated",
@@ -47,14 +51,22 @@ PLATFORM_SETUP_GUIDES = {
             "A real MP4 video file and reviewed title, description, tags, and privacy status.",
         ],
         "targetInputs": ["--youtube-video-file ./promotion-output/videos/product-youtube.mp4"],
-        "credentialEnvNames": ["YOUTUBE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        "credentialEnvNames": [
+            "YOUTUBE_ACCESS_TOKEN",
+            "YOUTUBE_OAUTH_ACCESS_TOKEN",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
+            "YOUTUBE_REFRESH_TOKEN",
+        ],
         "constraints": [
             "Unverified API projects may be restricted to private visibility until audit requirements are satisfied.",
             "Uploads consume YouTube quota and require the channel owner's authorization.",
         ],
     },
     "douyin": {
-        "automationStatus": "official_executor_integrated_with_platform_review",
+        "automationStatus": "browser_or_manual_current_official_port_reserved",
         "developerConsole": "https://open.douyin.com/",
         "officialDocs": [
             {"label": "Douyin publish solution", "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution"},
@@ -62,15 +74,16 @@ PLATFORM_SETUP_GUIDES = {
             {"label": "Douyin create video", "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/create-video"},
         ],
         "requiredCapabilities": [
-            "Approved Douyin Open Platform app with video.create permission.",
-            "User OAuth authorization and an access token/open_id for the publishing account.",
-            "A real MP4/WebM video file that satisfies Douyin size, duration, review, and watermark constraints.",
+            "Use the generated title, copy, hashtags, cover/detail images, and MP4 in a user-visible Douyin creator workflow.",
+            "Stop before the final publish action; the account owner completes login, captcha, account verification, and final submit.",
+            "A real MP4/WebM video file should satisfy Douyin size, duration, review, and watermark constraints.",
         ],
         "targetInputs": ["--douyin-video-file ./promotion-output/videos/product-douyin.mp4"],
-        "credentialEnvNames": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
+        "credentialEnvNames": [],
         "constraints": [
-            "Created videos are subject to platform review and must not be treated as published until real evidence exists.",
-            "User-visible consent is required before creating content on behalf of a user.",
+            "Official API publishing is reserved for a future verified open-platform authorization path.",
+            "Do not use cookies, simulated login, private endpoints, captcha bypass, or scripted final publish clicks.",
+            "Published status requires the real Douyin URL or user-provided evidence after manual/browser-assisted publishing.",
         ],
     },
     "tiktok": {
@@ -175,6 +188,7 @@ def build_setup_record(record: dict[str, Any], readiness_report: dict[str, Any])
         list(credential.get("requiredAny") or [])
         + list(credential.get("requiredAll") or [])
         + list(credential.get("alternativeAll") or [])
+        + flatten_groups(credential.get("alternativeGroups") or [])
     )
     missing_env = ordered_unique(list(credential.get("missingEnv") or []))
     commands = setup_commands(platform, readiness, readiness_report)
@@ -596,6 +610,16 @@ def ordered_unique(values: list[Any]) -> list[str]:
         if text and text not in seen:
             result.append(text)
             seen.add(text)
+    return result
+
+
+def flatten_groups(groups: Any) -> list[str]:
+    result: list[str] = []
+    if not isinstance(groups, list):
+        return result
+    for group in groups:
+        if isinstance(group, list):
+            result.extend(str(item) for item in group)
     return result
 
 

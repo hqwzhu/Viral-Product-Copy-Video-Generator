@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import urllib.parse
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -14,6 +15,7 @@ from typing import Any
 
 
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github"]
+VIDEO_REQUIRED_PLATFORMS = {"youtube", "xiaohongshu", "douyin", "tiktok"}
 TODAY = date.today().isoformat()
 
 
@@ -146,14 +148,14 @@ CAPABILITIES: list[dict[str, Any]] = [
     {
         "platform": "douyin",
         "supportsOfficialApi": True,
-        "supportsDirectPublish": True,
+        "supportsDirectPublish": False,
         "supportsScheduledPublish": False,
         "recommendedMode": "browser_assisted_publish",
         "approvalRequired": True,
-        "requiredCredentials": ["Douyin Open Platform app", "video.create scope", "permission approval", "user authorization"],
+        "requiredCredentials": [],
         "riskLevel": "high",
         "notes": [
-            "Official API exists, but first-version Skill defaults to browser-assisted/manual publishing until app permissions are verified.",
+            "Official API code is reserved for future verified authorization; the current Skill defaults to browser-assisted/manual publishing.",
             "Do not bypass review, captcha, risk controls, or user-visible authorization.",
         ],
         "officialDocs": [
@@ -246,6 +248,11 @@ REFERENCE_PROJECTS: list[dict[str, Any]] = [
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "platform-data":
+        from platform_data_manager import main as platform_data_main
+
+        platform_data_main(sys.argv[2:])
+        return
     args = parse_args()
     product = Product(
         name=args.product_name,
@@ -493,7 +500,7 @@ def build_self_learning_notes() -> dict[str, Any]:
         "generatedAt": TODAY,
         "currentConclusion": [
             "First version should remain a Codex-local Skill pipeline, not a SaaS UI or browser plugin.",
-            "YouTube, GitHub, TikTok, and Douyin have official API paths, but all require app/user authorization and human approval.",
+            "YouTube and GitHub have active official publishing ports. Douyin stays browser-assisted/manual because authorization is unavailable; its official path is reserved for future verified access.",
             "Zhihu and Xiaohongshu should default to manual publish packs unless official creator publishing access is verified.",
             "Reference projects are useful for patterns; none should be integrated without a separate security and compliance review.",
         ],
@@ -614,21 +621,29 @@ def generate_platform_content(product: Product, plan: dict[str, Any]) -> dict[st
     content: dict[str, Any] = {}
     for item in plan["platformPlans"]:
         platform = item["platform"]
+        title = title_for(platform, product.name)
+        article = article_for(platform, product)
+        short_video_script = short_video_script_for(platform, product)
+        voiceover = voiceover_for(platform, product)
+        formats = format_payload(platform, product)
         content[platform] = {
             "platform": platform,
             "contentType": content_type_for(platform),
-            "title": title_for(platform, product.name),
+            "title": title,
+            "viralTitle": title,
             "description": f"{product.name}: {product.value_proposition}",
-            "article": article_for(platform, product),
-            "shortVideoScript": short_video_script_for(platform, product),
-            "voiceover": voiceover_for(platform, product),
+            "article": article,
+            "shortVideoScript": short_video_script,
+            "voiceover": voiceover,
             "storyboard": storyboard_for(platform, product),
             "coverText": cover_text_for(platform, product.name),
             "tags": tags_for(platform),
             "cta": item["cta"],
+            "copy": publication_copy_for(platform, product, article, short_video_script, voiceover, formats),
+            "firstBatch": first_batch_for(platform, product, formats),
             "complianceNotice": "Human approval required. Verify facts, price, links, and platform rules before publishing.",
             "sourceProduct": asdict(product),
-            "formats": format_payload(platform, product),
+            "formats": formats,
             "generatedAt": TODAY,
         }
     return content
@@ -776,6 +791,72 @@ def format_payload(platform: str, product: Product) -> dict[str, Any]:
             ],
         }
     return {"draft": f"{product.name} promotion draft"}
+
+
+def publication_copy_for(
+    platform: str,
+    product: Product,
+    article: str | None,
+    short_video_script: str | None,
+    voiceover: str | None,
+    formats: dict[str, Any],
+) -> str:
+    candidates: list[Any] = [
+        article,
+        short_video_script,
+        voiceover,
+        formats.get("readmePromotion"),
+        first_list_item(formats.get("notes")),
+        first_list_item(formats.get("thirtySecondScripts")),
+        first_list_item(formats.get("videoScripts")),
+        f"{product.name}: {product.value_proposition}",
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return f"{product.name} promotion copy for {platform}."
+
+
+def first_batch_for(platform: str, product: Product, formats: dict[str, Any]) -> dict[str, Any]:
+    comment_prompts = clean_list(formats.get("commentPrompts"))
+    if platform == "github":
+        first_comments = [
+            "Open a launch Discussion with the generated README positioning.",
+            "Pin the release note and ask users which integration or template they need next.",
+        ]
+    else:
+        first_comments = comment_prompts or [
+            "Which platform is hardest for you to promote on right now?",
+            "Drop your product URL and rewrite the first hook with this structure.",
+        ]
+    return {
+        "pinnedComment": f"Try {product.name}: {product.url}" if product.url else f"Try {product.name}",
+        "firstComments": first_comments,
+        "replyPrompts": [
+            "Ask the user which product category they are promoting.",
+            "Ask which platform they want to publish on first.",
+            "Offer one concrete title, hook, or CTA rewrite.",
+        ],
+        "launchActions": [
+            "Publish only after human review.",
+            "Pin the strongest CTA or resource comment.",
+            "Save the real published URL for metrics recovery.",
+        ],
+    }
+
+
+def first_list_item(value: Any) -> str:
+    if isinstance(value, list) and value:
+        return str(value[0])
+    return ""
+
+
+def clean_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
 
 
 def review_content(content: dict[str, Any]) -> list[dict[str, Any]]:
@@ -935,11 +1016,32 @@ def build_publish_pack(content: dict[str, Any]) -> list[dict[str, Any]]:
     capability_by_platform = {item["platform"]: item for item in CAPABILITIES}
     for platform, item in content.items():
         capability = capability_by_platform.get(platform, {"recommendedMode": "manual_publish_required", "riskLevel": "high"})
+        viral_title = str(item.get("viralTitle") or item.get("title") or item.get("description") or "").strip()
+        tags = clean_list(item.get("tags"))
+        first_batch = item.get("firstBatch") if isinstance(item.get("firstBatch"), dict) else {}
         packs.append(
             {
                 "platform": platform,
                 "publishMode": capability["recommendedMode"],
                 "approvalRequired": True,
+                "viralTitle": viral_title,
+                "copy": str(item.get("copy") or item.get("article") or item.get("shortVideoScript") or item.get("description") or "").strip(),
+                "tags": tags,
+                "firstBatch": first_batch,
+                "video": {
+                    "type": "video",
+                    "required": platform in VIDEO_REQUIRED_PLATFORMS,
+                    "status": "pending_media_asset_pack" if platform in VIDEO_REQUIRED_PLATFORMS else "not_required",
+                    "path": "",
+                },
+                "cover": {
+                    "type": "cover_image",
+                    "required": True,
+                    "status": "pending_media_asset_pack",
+                    "path": "",
+                    "coverText": item.get("coverText", ""),
+                },
+                "detailImages": [],
                 "content": item,
                 "assets": [],
                 "publishSteps": publish_steps_for(platform, capability["recommendedMode"]),
@@ -1040,7 +1142,7 @@ def publish_steps_for(platform: str, mode: str) -> list[str]:
     if mode == "official_api_publish":
         return [
             "Verify official API access, app approval, and user authorization.",
-            "Open the generated content pack and inspect title, body, tags, assets, and CTA.",
+            "Open the generated content pack and inspect viral title, copy, tags, first-batch comments, video, cover, detail images, and CTA.",
             "Confirm the target account/repository/channel.",
             "User explicitly approves the API write action.",
             "Only then call the official API or save as draft when the platform supports drafts.",
@@ -1048,14 +1150,14 @@ def publish_steps_for(platform: str, mode: str) -> list[str]:
     if mode == "browser_assisted_publish":
         return [
             "Open the platform publishing page manually or with browser assistance.",
-            "Copy title, body, tags, cover text, and CTA from the publish pack.",
-            "User verifies account, rules, assets, and preview.",
+            "Copy viral title, copy, tags, first-batch comments, cover text, media assets, and CTA from the publish pack.",
+            "User verifies account, rules, video, cover, detail images, and preview.",
             "User clicks final publish or saves draft.",
             "Record published URL and time only after real publication evidence exists.",
         ]
     return [
         "Open the platform manually.",
-        "Copy the generated title, body, tags, cover text, and CTA.",
+        "Copy the generated viral title, copy, tags, first-batch comments, cover text, media assets, and CTA.",
         "Verify facts, links, product claims, and platform rules.",
         "User publishes manually or saves a draft.",
         "Fill result template with real data only.",
@@ -1296,6 +1398,11 @@ def render_publish_pack(packs: list[dict[str, Any]]) -> str:
                 f"## {pack['platform']}",
                 f"- Mode: `{pack['publishMode']}`",
                 f"- Approval required: {pack['approvalRequired']}",
+                f"- Viral title: {pack.get('viralTitle', '')}",
+                f"- Tags: {', '.join(str(tag) for tag in pack.get('tags', []))}",
+                f"- Video: `{pack.get('video', {}).get('status', '')}` {pack.get('video', {}).get('path', '')}",
+                f"- Cover: `{pack.get('cover', {}).get('status', '')}` {pack.get('cover', {}).get('path', '')}",
+                f"- Detail images: {len(pack.get('detailImages', []))}",
                 f"- Schedule: {pack['scheduleSuggestion']}",
                 f"- Tracked URL: {pack.get('trackingPlan', {}).get('trackedUrl', '')}",
                 f"- UTM content: {pack.get('trackingPlan', {}).get('utm', {}).get('utm_content', '')}",

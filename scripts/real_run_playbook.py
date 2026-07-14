@@ -246,7 +246,7 @@ def build_phases(args: argparse.Namespace, out_dir: Path, run_root: Path) -> lis
         ),
         phase(
             "authorized_publish",
-            "Execute official publishing only where credentials, target, account authorization, and approval are ready.",
+            "Execute official publishing only where credentials, target, account authorization, and approval are ready; keep Douyin on browser-assisted/manual publishing in the current setup.",
             [
                 command(
                     "execute_queue_when_approved",
@@ -775,7 +775,7 @@ def platform_gates() -> list[dict[str, str]]:
         {"platform": "github", "gate": "GITHUB_TOKEN or GH_TOKEN with target repository write permission and approval are required for repository writes."},
         {"platform": "zhihu", "gate": "Manual/browser-assisted creator workflow remains required unless verified official publishing access exists."},
         {"platform": "xiaohongshu", "gate": "Manual/browser-assisted creator workflow remains required unless verified official publishing access exists."},
-        {"platform": "douyin", "gate": "Approved Open Platform app, user OAuth authorization, video file, platform review, and approval are required."},
+        {"platform": "douyin", "gate": "Current Douyin publishing uses browser-assisted/manual payloads; attach the video file as an asset and let the account owner complete final publish."},
         {"platform": "metrics_revenue", "gate": "Orders and revenue require business exports or analytics evidence matched to specific content."},
     ]
 

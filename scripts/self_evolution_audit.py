@@ -302,22 +302,33 @@ def installed_skill_dir() -> Path:
 
 def managed_skill_files(root: Path) -> list[Path]:
     files = [Path("SKILL.md")]
-    for standalone in ["README.md", "README.zh-CN.md", "LICENSE", ".gitignore"]:
+    for standalone in ["README.md", "README.en.md", "README.zh-CN.md", "LICENSE", ".gitignore"]:
         if (root / standalone).exists():
             files.append(Path(standalone))
     directory_patterns = {
         "references": ["*.md"],
         "scripts": ["*.py"],
         "docs": ["*.md"],
+        "deploy": ["*.md", "*.conf", "*.service", "*.example"],
         "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt", "*.png"],
+        "backend/license-service": ["*.json", "*.js", "*.md", "*.sql", "*.example", ".gitignore"],
     }
     for folder, patterns in directory_patterns.items():
         directory = root / folder
         if not directory.exists():
             continue
         for pattern in patterns:
-            files.extend(Path(folder) / item.relative_to(directory) for item in sorted(directory.rglob(pattern)))
+            for item in sorted(directory.rglob(pattern)):
+                relative = item.relative_to(directory)
+                if generated_or_dependency_path(relative):
+                    continue
+                files.append(Path(folder) / relative)
     return sorted(dict.fromkeys(files), key=lambda item: item.as_posix())
+
+
+def generated_or_dependency_path(relative: Path) -> bool:
+    ignored_parts = {"node_modules", "var", "__pycache__", ".pytest_cache"}
+    return any(part in ignored_parts for part in relative.parts)
 
 
 def file_hash(path: Path) -> str:

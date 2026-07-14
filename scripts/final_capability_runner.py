@@ -782,6 +782,8 @@ def collect_cycle_evidence(batch: dict[str, Any]) -> list[dict[str, Any]]:
         manifest = read_json(manifest_path) if manifest_path else {}
         artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
         videos = manifest.get("videoGeneration") if isinstance(manifest.get("videoGeneration"), list) else []
+        media_asset_pack_path = existing_path(artifacts.get("mediaAssetPack", ""))
+        media_asset_pack = read_json(media_asset_pack_path) if media_asset_pack_path else {}
         item = {
             "productRunId": run.get("id", ""),
             "url": run.get("url", ""),
@@ -805,6 +807,7 @@ def collect_cycle_evidence(batch: dict[str, Any]) -> list[dict[str, Any]]:
                 "multiQueryViralDiscovery": run.get("multiQueryViralDiscovery", {}),
             },
             "videoGeneration": summarize_videos(videos),
+            "mediaAssets": summarize_media_assets(media_asset_pack_path, media_asset_pack),
             "publishQueue": summarize_section(cycle.get("publishQueue"), "queue"),
             "publishedItems": summarize_section(cycle.get("publishedItems"), "publishedItems"),
             "postPublishMetricsCapture": summarize_section(cycle.get("postPublishMetricsCapture"), "report", ["metricExport"]),
@@ -829,6 +832,17 @@ def summarize_videos(videos: list[dict[str, Any]]) -> dict[str, Any]:
         "generatedFiles": generated,
         "generatedCount": len(generated),
         "statusCounts": count_statuses(videos),
+    }
+
+
+def summarize_media_assets(path: Path | None, report: dict[str, Any]) -> dict[str, Any]:
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    return {
+        "status": report.get("status", "missing" if not report else ""),
+        "report": str(path) if path and path.exists() else "",
+        "exists": bool(path and path.exists()),
+        "summary": summary,
+        "platforms": len(report.get("platforms", [])) if isinstance(report.get("platforms"), list) else 0,
     }
 
 
@@ -868,6 +882,7 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
         .get("multiQueryViralDiscovery", {})
         .get("summary", {})
     )
+    media_summary = item.get("mediaAssets", {}).get("summary", {})
     recovered_metric_records = max(
         int_value(post_metrics.get("capturedMetricRecords")),
         int_value(metrics.get("recordsWithMetrics")),
@@ -903,6 +918,10 @@ def evidence_counts(item: dict[str, Any]) -> dict[str, int]:
         "multiQueryVideoSampleRuns": int_value(multi_query.get("videoSampleRuns")),
         "multiQueryVideoSampleReady": int_value(multi_query.get("videoSampleReady")),
         "multiQueryVideoSampleFrames": int_value(multi_query.get("videoSampleFrames")),
+        "mediaAssetPlatforms": int_value(media_summary.get("platforms")),
+        "mediaAssetVideosReady": int_value(media_summary.get("videosReady")),
+        "mediaAssetCoversReady": int_value(media_summary.get("coversReady")),
+        "mediaAssetDetailImagesReady": int_value(media_summary.get("detailImagesReady")),
     }
 
 
@@ -911,6 +930,10 @@ def cycle_evidence_summary(cycle_evidence: list[dict[str, Any]]) -> dict[str, in
     return {
         "contentArtifacts": sum(1 for item in cycle_evidence if item.get("content", {}).get("contentJson")),
         "videoFilesGenerated": sum(int_value(item.get("videoGeneration", {}).get("generatedCount")) for item in cycle_evidence),
+        "mediaAssetPacks": sum(1 for item in cycle_evidence if item.get("mediaAssets", {}).get("exists")),
+        "mediaAssetVideosReady": sum(int_value(item.get("mediaAssetVideosReady")) for item in counts),
+        "mediaAssetCoversReady": sum(int_value(item.get("mediaAssetCoversReady")) for item in counts),
+        "mediaAssetDetailImagesReady": sum(int_value(item.get("mediaAssetDetailImagesReady")) for item in counts),
         "publishQueues": sum(1 for item in cycle_evidence if item.get("publishQueue", {}).get("exists")),
         "publishedItemsReports": sum(1 for item in cycle_evidence if item.get("publishedItems", {}).get("exists")),
         "postPublishMetricsCaptureRuns": sum(1 for item in cycle_evidence if item.get("postPublishMetricsCapture", {}).get("status") == "ready"),
@@ -1029,7 +1052,7 @@ def external_gates() -> list[dict[str, str]]:
         {"area": "official_publish", "gate": "I_APPROVE_PUBLISH plus platform credentials are required for writes."},
         {"area": "youtube", "gate": "OAuth client credentials or a temporary OAuth access token are required for upload."},
         {"area": "github", "gate": "GITHUB_TOKEN or GH_TOKEN is required for repository writes."},
-        {"area": "douyin", "gate": "Approved open-platform app credentials, user authorization, and review are required."},
+        {"area": "douyin", "gate": "Current Douyin publishing is browser-assisted/manual; the official API port is reserved until verified authorization is available."},
         {"area": "zhihu_xiaohongshu", "gate": "Manual/browser-assisted publishing remains required unless official creator publishing access is verified."},
         {"area": "metrics_revenue", "gate": "Private analytics, orders, and revenue require official APIs, screenshots, or business exports."},
         {"area": "self_evolution", "gate": "Installed Skill sync and dependency changes require explicit reviewed approval."},
@@ -1107,6 +1130,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- {item.get('productRunId', '')}: {product.get('productName') or product.get('name') or 'unknown'}")
         lines.append(f"  Content: {item.get('content', {}).get('contentJson', '')}")
         lines.append(f"  Videos: {item.get('videoGeneration', {}).get('generatedCount', 0)} generated")
+        lines.append(f"  Media assets: `{item.get('mediaAssets', {}).get('status', '')}` {item.get('mediaAssets', {}).get('report', '')}")
         lines.append(f"  Publish queue: `{item.get('publishQueue', {}).get('status', '')}` {item.get('publishQueue', {}).get('report', '')}")
         lines.append(
             "  Evidence: "

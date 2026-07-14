@@ -15,6 +15,45 @@ The entry script builds a real-run playbook, runs the final capability runner, a
 
 For direct URL reading, `product_url_reader.py` tries browser structured capture first, then static HTML, then public web-text fallback for public pages that time out locally. Disable the third-party text fallback with `--disable-web-text-fallback`, or use `--web-text-fallback-file` when Codex has already saved page text.
 
+Optional Firecrawl-style public web data backend:
+
+```env
+WEB_DATA_PROVIDER=auto
+FIRECRAWL_API_KEY=
+FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v2
+```
+
+When `FIRECRAWL_API_KEY` is present, `product_url_reader.py` can use Firecrawl scrape before the public web-text fallback, `product_url_discovery.py` can use Firecrawl map for site URL discovery, and `platform_search_browser.py` can use Firecrawl search before browser capture. Without the key, the existing local/browser/static paths continue.
+
+```powershell
+python scripts\web_data_provider.py --provider firecrawl --out-dir ".\promotion-output" scrape --url "https://example.com/product"
+python scripts\web_data_provider.py --provider firecrawl --out-dir ".\promotion-output" search --query "site:youtube.com AI product launch" --limit 5
+python scripts\web_data_provider.py --provider firecrawl --out-dir ".\promotion-output" map --url "https://example.com"
+python scripts\platform_capabilities.py --out-dir ".\promotion-output"
+```
+
+See [Open Source Integration Plan](open-source-integration.md) for the Firecrawl and AiToEarn integration boundary.
+
+YouTube official API credential check:
+
+```powershell
+python scripts\youtube_credential_check.py --env-file "C:\path\to\.env" --out-dir ".\promotion-output"
+```
+
+The checker accepts `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` or `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`, plus `YOUTUBE_ACCESS_TOKEN` or `YOUTUBE_OAUTH_ACCESS_TOKEN`. It reports only `ready`, `blank`, or `missing` states and never writes credential values.
+
+For the current gap-to-100% plan across every major module, read [100% Completion Roadmap](100-percent-completion-roadmap.md) or the Chinese beginner guide [100% 完成指南](zh-CN/100-percent-completion-guide.md). Generate the machine-readable roadmap with:
+
+```powershell
+python scripts\completion_roadmap.py --out-dir ".\promotion-output"
+```
+
+Generate a Chinese operator checklist with copy-ready commands and per-step checks:
+
+```powershell
+python scripts\operator_action_checklist.py --out-dir ".\promotion-output"
+```
+
 ## Website URL With Product Discovery
 
 ```powershell
@@ -79,6 +118,19 @@ python scripts\render_video.py `
   --out ".\promotion-output\videos\product-youtube.mp4"
 ```
 
+Generate covers, detail images, and a media asset manifest, then write those paths back into the publish pack:
+
+```powershell
+python scripts\media_asset_pack.py `
+  --content-json ".\promotion-output\reports\promotion-manager\generated-content\product-platform-content.json" `
+  --publish-pack ".\promotion-output\reports\promotion-manager\publish-packs\product-publish-pack.json" `
+  --video-file "youtube=.\promotion-output\videos\product-youtube.mp4" `
+  --video-file "douyin=.\promotion-output\videos\product-douyin.mp4" `
+  --out-dir ".\promotion-output"
+```
+
+The full workflow runs this step automatically after video rendering. The publish pack must contain viral title, copy, tags, first-batch comments/replies, video, cover image, detail images, and an `assets` list. If `--skip-video` is used, cover and detail images are still generated and missing videos are marked instead of fabricated.
+
 Review packs:
 
 ```powershell
@@ -93,6 +145,8 @@ python scripts\promotion_manager.py review `
 The review step writes `reports\promotion-manager\cheat-review\*-cheat-review-pack.json` and one draft per platform for Codex `cheat-score`. These are review inputs only; prediction logs are created only when you explicitly start a cheat-on-content prediction cycle.
 
 ## Publishing
+
+Current publishing policy: manual publish packages are the primary path; auto-publish ports are reserved for later official API-only upgrades. The default operating flow is to build the publish queue, browser/manual payloads, launch unlock pack, and real-evidence templates, then let the operator publish manually or in a visible browser session. GitHub and YouTube executor ports remain available as dry-run-first official API interfaces. Douyin is currently browser-assisted/manual because operator authorization is unavailable; `--douyin-video-file` attaches the MP4 asset to that payload rather than enabling official API publishing.
 
 Build the guarded queue:
 
@@ -149,6 +203,14 @@ python scripts\publish_executor.py `
   --approval I_APPROVE_PUBLISH `
   --out-dir ".\promotion-output"
 ```
+
+For YouTube official publishing dry-runs or OAuth upload attempts, install the official Google API Python client dependencies first:
+
+```powershell
+python -m pip install -r requirements-youtube.txt
+```
+
+The YouTube path uses `google-api-python-client` with `youtube.videos.insert(part=snippet,status)`. It remains blocked unless Google OAuth credentials, YouTube upload authorization, a video file, and the publish approval gate are all present.
 
 ## Periodic Automation
 

@@ -11,6 +11,7 @@ This project is a local Codex Skill plus scripts. It can run without a SaaS back
 - Git.
 - Optional: Playwright Chromium for rendered page reading and platform search snapshots.
 - Optional: ffmpeg for MP4 rendering.
+- Optional: Pillow for PNG cover and detail image generation.
 
 ## Clone
 
@@ -55,6 +56,32 @@ Verify:
 ffmpeg -version
 ```
 
+## Optional Image Runtime
+
+Use this when you want `media_asset_pack.py` to generate PNG covers and detail images:
+
+```powershell
+python -m pip install pillow
+```
+
+## Optional YouTube Official API Client
+
+Use this when you want to run the dry-run-first YouTube official publishing port or the same-process YouTube OAuth upload helper:
+
+```powershell
+python -m pip install -r requirements-youtube.txt
+```
+
+This installs `google-api-python-client`, `google-auth-httplib2`, and `google-auth-oauthlib`. Real YouTube upload still requires Google OAuth credentials, the `https://www.googleapis.com/auth/youtube.upload` scope, a valid video file, `I_APPROVE_PUBLISH=true`, and `PUBLISH_DRY_RUN=false`.
+
+Verify YouTube credential readiness without uploading or printing secret values:
+
+```powershell
+python scripts\youtube_credential_check.py --env-file "C:\path\to\.env" --out-dir ".\promotion-output"
+```
+
+Accepted OAuth client variable names: `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` or `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`.
+
 ## Install As A Codex Skill
 
 Copy or sync the reviewed files into the installed Skill directory only after verification:
@@ -66,7 +93,7 @@ python scripts\self_evolution_audit.py `
   --out-dir ".\promotion-output"
 ```
 
-This copies only managed files such as `SKILL.md`, `references`, `scripts`, `docs`, `README.md`, and `browser-extension`.
+This copies only managed files such as `SKILL.md`, `references`, `scripts`, `docs`, `README.md`, `README.en.md`, `README.zh-CN.md`, and `browser-extension`.
 
 ## Verify
 

@@ -1,9 +1,9 @@
 # Browser Extension Package Report
 
-- Generated: 2026-07-10
+- Generated: 2026-07-15
 - Status: `ready`
-- Package: dist\enhe-promotion-manager-0.5.0.zip
-- Version: 0.5.0
+- Package: dist\enhe-promotion-manager-0.5.2.zip
+- Version: 0.5.2
 
 ## Checks
 - requiredFiles: `True`
@@ -18,7 +18,7 @@
 ## Store Submission
 - chrome: https://developer.chrome.com/docs/webstore/publish
 - edge: https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension
-- privacyPolicyUrl: https://www.enhe-tech.com.cn/privacy
+- privacyPolicyUrl: https://www.enhe-tech.com.cn/promotion-manager/privacy
 - supportUrl: https://www.enhe-tech.com.cn/
 
 ## Guardrails

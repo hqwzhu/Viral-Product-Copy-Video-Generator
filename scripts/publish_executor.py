@@ -12,19 +12,28 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from env_loader import (
+    YOUTUBE_ACCESS_TOKEN_ENVS,
+    first_env,
+    load_project_env,
+    preparse_env_file,
+)
 
 
 TODAY = date.today().isoformat()
 APPROVAL_PHRASE = "I_APPROVE_PUBLISH"
-GITHUB_API_VERSION = "2026-03-10"
+GITHUB_API_VERSION = "2022-11-28"
+YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
-    execution = build_execution(args)
+    execution = build_execution(args, env_load)
     if args.platform == "github":
         result = execute_github(args, execution)
     elif args.platform == "youtube":
@@ -34,6 +43,7 @@ def main() -> None:
     else:
         raise SystemExit(f"Unsupported platform: {args.platform}")
     write_result(args.out_dir, result)
+    write_audit_log(args.out_dir, result)
     print(f"Publish execution report written to: {Path(args.out_dir).resolve() / 'reports/promotion-manager/publish-results/publish-execution.json'}")
 
 
@@ -42,12 +52,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", required=True, choices=["github", "youtube", "douyin"])
     parser.add_argument("--execute", action="store_true", help="Perform the write action. Default is dry run.")
     parser.add_argument("--approval", default="", help=f"Must equal {APPROVAL_PHRASE} when --execute is used.")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before reading credentials. Values are never written to reports.")
     parser.add_argument("--out-dir", default="./promotion-output")
 
     github = parser.add_argument_group("GitHub")
-    github.add_argument("--github-action", choices=["file", "issue", "release"], default="file")
+    github.add_argument("--github-action", choices=["file", "pull_request", "issue", "release"], default="file")
     github.add_argument("--github-repo", help="owner/repo")
     github.add_argument("--branch", default="")
+    github.add_argument("--base-branch", default="")
+    github.add_argument("--pr-branch", default="")
+    github.add_argument("--pr-branch-prefix", default="")
+    github.add_argument("--pr-title", default="")
+    github.add_argument("--pr-body", default="")
     github.add_argument("--path", help="Repository path for --github-action file.")
     github.add_argument("--commit-message", default="Publish promotion content")
     github.add_argument("--title", default="")
@@ -64,7 +80,7 @@ def parse_args() -> argparse.Namespace:
     youtube.add_argument("--description", default="")
     youtube.add_argument("--description-file")
     youtube.add_argument("--tags", default="", help="Comma-separated YouTube tags.")
-    youtube.add_argument("--category-id", default="22")
+    youtube.add_argument("--category-id", default=os.environ.get("YOUTUBE_CATEGORY_ID") or "28")
     youtube.add_argument("--privacy-status", default="private", choices=["private", "public", "unlisted"])
 
     douyin = parser.add_argument_group("Douyin")
@@ -74,17 +90,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_execution(args: argparse.Namespace) -> dict[str, Any]:
+def build_execution(args: argparse.Namespace, env_load: dict[str, object]) -> dict[str, Any]:
     return {
         "generatedAt": TODAY,
+        "generatedAtUtc": utc_now(),
         "platform": args.platform,
-        "mode": "execute" if args.execute else "dry_run",
+        "envLoad": env_load,
+        "mode": "execute_requested" if args.execute else "dry_run",
         "approvalRequired": True,
         "approvalPhrase": APPROVAL_PHRASE,
         "approvalProvided": args.approval == APPROVAL_PHRASE,
+        "environmentGate": publish_environment_gate(),
         "guardrails": [
             "Default mode is dry-run.",
-            "Writes require --execute and the exact approval phrase.",
+            "Writes require --execute, I_APPROVE_PUBLISH=true, PUBLISH_DRY_RUN=false, and explicit approval when manual approval is required.",
             "Credentials are read from environment variables only and are never written to reports.",
             "Do not bypass captcha, login, risk controls, or platform review.",
         ],
@@ -92,6 +111,12 @@ def build_execution(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def execute_github(args: argparse.Namespace, execution: dict[str, Any]) -> dict[str, Any]:
+    args.github_repo = args.github_repo or github_repo_from_env()
+    args.branch = args.branch or os.environ.get("GITHUB_BRANCH", "")
+    args.base_branch = args.base_branch or os.environ.get("GITHUB_PR_BASE", "") or args.branch or "main"
+    args.pr_branch_prefix = args.pr_branch_prefix or os.environ.get("GITHUB_PR_BRANCH_PREFIX", "") or "auto-publish"
+    if github_should_create_pr(args) and not args.pr_branch:
+        args.pr_branch = github_target_branch(args)
     if not args.github_repo:
         return blocked(execution, "missing_github_repo", "Provide --github-repo owner/repo.")
     token_status = "present" if github_token() else "missing"
@@ -102,11 +127,13 @@ def execute_github(args: argparse.Namespace, execution: dict[str, Any]) -> dict[
         "repository": args.github_repo,
         "credentialStatus": token_status,
         "request": github_request_preview(args),
+        "publishPreview": github_publish_preview(args),
     }
+    print_preview(plan)
     validation = validate_write_gate(args, token_status, "GITHUB_TOKEN or GH_TOKEN")
     if validation:
         return {**plan, **validation}
-    if args.github_action == "file":
+    if args.github_action in {"file", "pull_request"}:
         return {**plan, **github_put_file(args)}
     if args.github_action == "issue":
         return {**plan, **github_create_issue(args)}
@@ -114,11 +141,14 @@ def execute_github(args: argparse.Namespace, execution: dict[str, Any]) -> dict[
 
 
 def github_request_preview(args: argparse.Namespace) -> dict[str, Any]:
-    if args.github_action == "file":
+    if args.github_action in {"file", "pull_request"}:
+        create_pr = github_should_create_pr(args)
         return {
             "method": "PUT",
             "endpoint": f"/repos/{args.github_repo}/contents/{args.path or ''}",
-            "branch": args.branch,
+            "branch": args.pr_branch if create_pr else args.branch,
+            "baseBranch": args.base_branch,
+            "createPullRequest": create_pr,
             "message": args.commit_message,
         }
     if args.github_action == "issue":
@@ -137,7 +167,13 @@ def github_put_file(args: argparse.Namespace) -> dict[str, Any]:
         return {"status": "blocked", "reason": "Provide --path for GitHub file publishing."}
     content = read_text_argument(args.content, args.content_file, "--content or --content-file")
     repo_path = urllib.parse.quote(args.path.strip("/"), safe="/")
-    get_result = github_api("GET", f"/repos/{args.github_repo}/contents/{repo_path}", query={"ref": args.branch} if args.branch else None)
+    create_pr = github_should_create_pr(args)
+    target_branch = args.pr_branch if create_pr else args.branch
+    if create_pr:
+        branch_result = github_prepare_branch(args, target_branch)
+        if branch_result["status"] != "ready":
+            return branch_result
+    get_result = github_api("GET", f"/repos/{args.github_repo}/contents/{repo_path}", query={"ref": target_branch} if target_branch else None)
     sha = ""
     if get_result["status"] == "ready":
         sha = get_result["data"].get("sha", "")
@@ -149,18 +185,65 @@ def github_put_file(args: argparse.Namespace) -> dict[str, Any]:
     }
     if sha:
         body["sha"] = sha
-    if args.branch:
-        body["branch"] = args.branch
+    if target_branch:
+        body["branch"] = target_branch
     result = github_api("PUT", f"/repos/{args.github_repo}/contents/{repo_path}", body=body)
     if result["status"] != "ready":
         return result
     data = result["data"]
+    if create_pr:
+        pr = github_create_pull_request(args, target_branch)
+        if pr["status"] != "ready":
+            return pr
+        return {
+            "status": "published",
+            "publishMode": "pull_request_created",
+            "publishedUrl": pr.get("publishedUrl", ""),
+            "contentId": pr.get("contentId", ""),
+            "commitSha": data.get("commit", {}).get("sha", ""),
+            "evidence": [pr.get("publishedUrl", ""), data.get("content", {}).get("html_url", "")],
+        }
     return {
         "status": "published",
+        "publishMode": "direct_commit",
         "publishedUrl": data.get("content", {}).get("html_url", ""),
         "commitSha": data.get("commit", {}).get("sha", ""),
         "evidence": [data.get("content", {}).get("html_url", "")],
     }
+
+
+def github_prepare_branch(args: argparse.Namespace, target_branch: str) -> dict[str, Any]:
+    base_branch = args.base_branch or args.branch or "main"
+    existing = github_api("GET", f"/repos/{args.github_repo}/git/ref/heads/{urllib.parse.quote(target_branch, safe='')}")
+    if existing["status"] == "ready":
+        return existing
+    if existing.get("httpStatus") not in (404, None):
+        return existing
+    base_ref = github_api("GET", f"/repos/{args.github_repo}/git/ref/heads/{urllib.parse.quote(base_branch, safe='')}")
+    if base_ref["status"] != "ready":
+        return {
+            "status": "error",
+            "reason": f"Cannot read GitHub base branch '{base_branch}'. Check repository access and branch name.",
+            "details": base_ref.get("reason", ""),
+        }
+    sha = nested_value(base_ref.get("data", {}), "sha")
+    if not sha:
+        return {"status": "error", "reason": f"GitHub base branch '{base_branch}' did not return an object SHA."}
+    return github_api("POST", f"/repos/{args.github_repo}/git/refs", body={"ref": f"refs/heads/{target_branch}", "sha": sha})
+
+
+def github_create_pull_request(args: argparse.Namespace, target_branch: str) -> dict[str, Any]:
+    title = args.pr_title or args.title or args.commit_message or "Publish promotion content"
+    body = args.pr_body or "Automated promotion content update generated by ENHE Promotion Manager."
+    result = github_api(
+        "POST",
+        f"/repos/{args.github_repo}/pulls",
+        body={"title": title, "head": target_branch, "base": args.base_branch or "main", "body": body},
+    )
+    if result["status"] != "ready":
+        return result
+    data = result["data"]
+    return {"status": "ready", "publishedUrl": data.get("html_url", ""), "contentId": str(data.get("number", ""))}
 
 
 def github_create_issue(args: argparse.Namespace) -> dict[str, Any]:
@@ -230,23 +313,29 @@ def execute_youtube(args: argparse.Namespace, execution: dict[str, Any]) -> dict
         "credentialStatus": token_status,
         "request": {
             "method": "POST",
-            "endpoint": "/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
+            "endpoint": "youtube.videos.insert(part=snippet,status)",
+            "clientLibrary": "google-api-python-client",
             "videoFile": args.video_file or "",
             "privacyStatus": args.privacy_status,
             "title": args.title,
         },
+        "publishPreview": youtube_publish_preview(args),
     }
+    print_preview(plan)
     if not args.video_file:
         return blocked(plan, "missing_video_file", "Provide --video-file for YouTube upload.")
     if not args.title:
         return blocked(plan, "missing_title", "Provide --title for YouTube upload.")
-    validation = validate_write_gate(args, token_status, "YOUTUBE_OAUTH_ACCESS_TOKEN")
+    validation = validate_write_gate(args, token_status, "YOUTUBE_ACCESS_TOKEN or YOUTUBE_OAUTH_ACCESS_TOKEN")
     if validation:
         return {**plan, **validation}
     return {**plan, **youtube_upload(args)}
 
 
 def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
+    client_error = google_api_client_dependency_error()
+    if client_error:
+        return client_error
     video_path = Path(args.video_file)
     if not video_path.exists():
         return {"status": "blocked", "reason": f"Video file not found: {video_path}"}
@@ -260,26 +349,19 @@ def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "status": {"privacyStatus": args.privacy_status},
     }
-    boundary = "===============%s==" % uuid.uuid4().hex
-    media_type = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
-    body = build_multipart_body(boundary, metadata, video_path, media_type)
-    request = urllib.request.Request(
-        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": "Bearer " + youtube_token(),
-            "Content-Type": f"multipart/related; boundary={boundary}",
-            "Content-Length": str(len(body)),
-            "User-Agent": "ViralProductPromotionSkill/1.0",
-        },
-    )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        message = exc.read().decode("utf-8", errors="replace")
-        return {"status": "error", "httpStatus": exc.code, "reason": message[:500]}
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
+
+        credentials = Credentials(token=youtube_token(), scopes=[YOUTUBE_UPLOAD_SCOPE])
+        youtube = build("youtube", "v3", credentials=credentials)
+        media = MediaFileUpload(str(video_path), mimetype=mimetypes.guess_type(str(video_path))[0] or "video/mp4", resumable=True)
+        data = youtube.videos().insert(part="snippet,status", body=metadata, media_body=media).execute()
+    except HttpError as exc:
+        content = exc.content.decode("utf-8", errors="replace") if getattr(exc, "content", None) else str(exc)
+        return {"status": "error", "httpStatus": getattr(getattr(exc, "resp", None), "status", 0), "reason": content[:500]}
     except Exception as exc:  # noqa: BLE001 - CLI reports connector errors compactly.
         return {"status": "error", "reason": str(exc)}
     video_id = data.get("id", "")
@@ -288,6 +370,7 @@ def youtube_upload(args: argparse.Namespace) -> dict[str, Any]:
         "publishedUrl": f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
         "contentId": video_id,
         "evidence": [f"https://www.youtube.com/watch?v={video_id}" if video_id else ""],
+        "clientLibrary": "google-api-python-client",
     }
 
 
@@ -301,8 +384,11 @@ def execute_douyin(args: argparse.Namespace, execution: dict[str, Any]) -> dict[
         "action": "video_upload_create",
         "credentialStatus": token_status,
         "request": douyin_request_preview(video_file, text),
+        "publishPreview": douyin_publish_preview(video_file, text),
+        "userConfirmationRequired": True,
         "platformReview": "created Douyin videos are subject to platform review before they should be treated as published.",
     }
+    print_preview(plan)
     if not video_file:
         return blocked(plan, "missing_video_file", "Provide --douyin-video-file for Douyin upload.")
     if not text:
@@ -446,20 +532,6 @@ def nested_value(value: Any, key: str) -> Any:
     return ""
 
 
-def build_multipart_body(boundary: str, metadata: dict[str, Any], video_path: Path, media_type: str) -> bytes:
-    metadata_part = (
-        f"--{boundary}\r\n"
-        "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-        f"{json.dumps(metadata, ensure_ascii=False)}\r\n"
-    ).encode("utf-8")
-    media_header = (
-        f"--{boundary}\r\n"
-        f"Content-Type: {media_type}\r\n\r\n"
-    ).encode("utf-8")
-    closing = f"\r\n--{boundary}--\r\n".encode("utf-8")
-    return metadata_part + media_header + video_path.read_bytes() + closing
-
-
 def build_form_multipart_body(boundary: str, field_name: str, file_path: Path, media_type: str) -> bytes:
     header = (
         f"--{boundary}\r\n"
@@ -476,17 +548,55 @@ def validate_write_gate(args: argparse.Namespace, token_status: str, credential_
             "status": "dry_run",
             "reason": "No write performed. Add --execute with explicit approval after reviewing the request.",
         }
-    if args.approval != APPROVAL_PHRASE:
-        return {
-            "status": "blocked",
-            "reason": f"Execution requires --approval {APPROVAL_PHRASE}.",
-        }
     if token_status != "present":
         return {
             "status": "blocked",
             "reason": f"Execution requires {credential_name} in the environment.",
         }
+    gate = publish_environment_gate()
+    if not gate["publishApproved"]:
+        return {
+            "status": "blocked",
+            "reason": "Execution requires I_APPROVE_PUBLISH=true in the environment.",
+            "missing": ["I_APPROVE_PUBLISH=true"],
+        }
+    if gate["dryRun"]:
+        return {
+            "status": "blocked",
+            "reason": "Execution requires PUBLISH_DRY_RUN=false in the environment.",
+            "missing": ["PUBLISH_DRY_RUN=false"],
+        }
+    if gate["manualApprovalRequired"] and not explicit_manual_approval(args):
+        return {
+            "status": "blocked",
+            "reason": f"Execution requires explicit manual approval via --approval {APPROVAL_PHRASE} or PUBLISH_APPROVAL_CODE={APPROVAL_PHRASE}.",
+            "missing": ["explicit manual approval"],
+        }
     return None
+
+
+def publish_environment_gate() -> dict[str, Any]:
+    return {
+        "publishApproved": env_bool("I_APPROVE_PUBLISH", False),
+        "dryRun": env_bool("PUBLISH_DRY_RUN", True),
+        "manualApprovalRequired": env_bool("REQUIRE_MANUAL_APPROVAL", True),
+        "approvalCodeProvided": bool(os.environ.get("PUBLISH_APPROVAL_CODE")),
+    }
+
+
+def explicit_manual_approval(args: argparse.Namespace) -> bool:
+    return args.approval == APPROVAL_PHRASE or os.environ.get("PUBLISH_APPROVAL_CODE") == APPROVAL_PHRASE
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def blocked(execution: dict[str, Any], code: str, reason: str) -> dict[str, Any]:
@@ -513,6 +623,22 @@ def write_result(out_dir: str, result: dict[str, Any]) -> None:
     (report_dir / "publish-execution.md").write_text(render_markdown(result) + "\n", encoding="utf-8")
 
 
+def write_audit_log(out_dir: str, result: dict[str, Any]) -> None:
+    report_dir = Path(out_dir) / "reports/promotion-manager/publish-results"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    audit = {
+        "time": utc_now(),
+        "platform": result.get("platform"),
+        "status": result.get("status"),
+        "mode": result.get("mode"),
+        "contentId": result.get("contentId", ""),
+        "url": result.get("publishedUrl", ""),
+        "error": result.get("reason") or result.get("error") or "",
+    }
+    with (report_dir / "publish-audit-log.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(audit, ensure_ascii=False) + "\n")
+
+
 def sanitize_result(result: dict[str, Any]) -> dict[str, Any]:
     if "data" in result:
         result = {key: value for key, value in result.items() if key != "data"}
@@ -530,8 +656,14 @@ def render_markdown(result: dict[str, Any]) -> str:
         f"- Credential status: {result.get('credentialStatus', 'n/a')}",
         f"- Published URL: {result.get('publishedUrl', '') or 'not published'}",
         "",
-        "## Request",
+        "## Preview",
     ]
+    for key, value in (result.get("publishPreview") or {}).items():
+        lines.append(f"- {key}: {value}")
+    lines.extend([
+        "",
+        "## Request",
+    ])
     for key, value in (result.get("request") or {}).items():
         lines.append(f"- {key}: {value}")
     if result.get("reason"):
@@ -546,7 +678,24 @@ def github_token() -> str:
 
 
 def youtube_token() -> str:
-    return os.environ.get("YOUTUBE_OAUTH_ACCESS_TOKEN") or ""
+    return first_env(YOUTUBE_ACCESS_TOKEN_ENVS)
+
+
+def google_api_client_dependency_error() -> dict[str, Any] | None:
+    try:
+        import google.oauth2.credentials  # noqa: F401
+        import googleapiclient.discovery  # noqa: F401
+        import googleapiclient.http  # noqa: F401
+    except ImportError as exc:
+        return {
+            "status": "blocked",
+            "reason": (
+                "YouTube upload requires google-api-python-client and Google auth helpers. "
+                "Install with: python -m pip install -r requirements-youtube.txt"
+            ),
+            "missingDependency": str(exc),
+        }
+    return None
 
 
 def douyin_token() -> str:
@@ -559,6 +708,76 @@ def douyin_open_id() -> str:
 
 def split_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def github_repo_from_env() -> str:
+    if os.environ.get("GITHUB_OWNER") and os.environ.get("GITHUB_REPO"):
+        return f"{os.environ['GITHUB_OWNER']}/{os.environ['GITHUB_REPO']}"
+    return ""
+
+
+def github_should_create_pr(args: argparse.Namespace) -> bool:
+    return args.github_action == "pull_request" or env_bool("GITHUB_CREATE_PR", False)
+
+
+def github_target_branch(args: argparse.Namespace) -> str:
+    if args.pr_branch:
+        return args.pr_branch
+    prefix = args.pr_branch_prefix or "auto-publish"
+    return f"{prefix}/{TODAY}-{uuid.uuid4().hex[:8]}"
+
+
+def summarize_text(value: str, limit: int = 180) -> str:
+    clean = " ".join((value or "").split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 3] + "..."
+
+
+def github_publish_preview(args: argparse.Namespace) -> dict[str, Any]:
+    content = read_optional_text_argument(args.content, args.content_file)
+    body = read_optional_text_argument(args.body, args.body_file)
+    expected_account = os.environ.get("GITHUB_OWNER") or (args.github_repo.split("/", 1)[0] if "/" in args.github_repo else args.github_repo)
+    return {
+        "platform": "github",
+        "title": args.pr_title or args.title or args.commit_message,
+        "bodySummary": summarize_text(content or body),
+        "filePath": args.content_file or args.body_file or args.path or "",
+        "privacyStatus": "repository_visibility",
+        "expectedAccount": expected_account,
+    }
+
+
+def youtube_publish_preview(args: argparse.Namespace) -> dict[str, Any]:
+    description = read_optional_text_argument(args.description, args.description_file)
+    return {
+        "platform": "youtube",
+        "title": args.title,
+        "bodySummary": summarize_text(description),
+        "filePath": args.video_file or "",
+        "privacyStatus": args.privacy_status,
+        "expectedAccount": os.environ.get("YOUTUBE_CHANNEL_ID") or os.environ.get("YOUTUBE_ACCOUNT") or "oauth_authorized_channel",
+    }
+
+
+def douyin_publish_preview(video_file: str, text: str) -> dict[str, Any]:
+    return {
+        "platform": "douyin",
+        "title": summarize_text(text, 80),
+        "bodySummary": summarize_text(text),
+        "filePath": video_file,
+        "privacyStatus": "platform_default_review_required",
+        "expectedAccount": os.environ.get("DOUYIN_OPEN_ID") or "oauth_authorized_open_id",
+    }
+
+
+def print_preview(result: dict[str, Any]) -> None:
+    preview = result.get("publishPreview") or {}
+    if not preview:
+        return
+    print("Publish preview:")
+    for key in ("platform", "title", "bodySummary", "filePath", "privacyStatus", "expectedAccount"):
+        print(f"- {key}: {preview.get(key, '')}")
 
 
 if __name__ == "__main__":

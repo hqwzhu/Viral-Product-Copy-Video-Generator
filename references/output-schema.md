@@ -401,7 +401,7 @@ Discovered URLs are not treated as product facts. They must still pass through `
 - `records[].status`: `dry_run`, `published`, `blocked`, `queued_manual`, `queued_browser_assisted`, `unsupported`, or `error`
 - `records[].contentDraft`: copy-ready Markdown draft path
 - `records[].trackingPlan`: attribution plan copied from the publish pack; platform drafts include the tracked URL and UTM fields so business exports can later match `utm_content`, campaign, referrer, or landing page
-- `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube/Douyin official tasks
+- `records[].officialExecution`: sanitized command, exit code, executor report path, published URL, and reason for GitHub/YouTube official tasks. Douyin is represented as `queued_browser_assisted` by default, with video assets in `records[].video` and `records[].assets`.
 - `summary`: counts for official dry-runs, published records, blocked records, manual queued records, browser queued records, and errors
 - `guardrails`: publishing safety rules used for the queue run
 
@@ -536,7 +536,7 @@ All metrics default to `null`. The user must fill real values and evidence. Retr
 - `records[]`: normalized real metric records with platform, published URL, content id, title, metrics, evidence, source, confidence, and derived rates
 - `records[].source.type`: `user_export`, `user_text`, `structured_snapshot`, or `official_api`
 - `aggregates`: totals, records with metrics, records with evidence, best by views, best by revenue, and platforms
-- `connectorStatus[]`: official connector status for GitHub/YouTube/Douyin where implemented, or unsupported/manual platform reasons
+- `connectorStatus[]`: official connector status for GitHub/YouTube where implemented, reserved future Douyin connector status when explicitly audited, or unsupported/manual platform reasons
 - `retrospective`: `ready` only when real metric evidence exists, otherwise `waiting_real_data`
 - `guardrails`: no fabricated metrics, no secret values, no cookies, and no browser tokens
 

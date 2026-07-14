@@ -25,11 +25,11 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "copy_and_real_video_generation",
-        "label": "Generate platform-native copy, scripts, storyboards, and real MP4 video files.",
+        "label": "Generate platform-native viral titles, copy, tags, first-batch comments, MP4 videos, covers, and detail images.",
     },
     {
         "id": "official_or_browser_assisted_publish",
-        "label": "Publish through official APIs where authorized, or browser/manual payloads where direct APIs are unavailable.",
+        "label": "manual publish packages are the primary path; auto-publish ports are reserved for official API-only upgrades.",
     },
     {
         "id": "real_metrics_comments_orders_revenue",
@@ -49,7 +49,7 @@ OBJECTIVE_REQUIREMENTS = [
     },
     {
         "id": "browser_extension_operator_ui_subscription",
-        "label": "Provide a Chrome extension operator UI with multi-command workflow launcher, periodic automation launcher, subscription estimate, license hook, usage reservation hook, billing contract simulator, developer info, and ENHE website traffic links.",
+        "label": "Provide a Chrome extension operator UI with subscription hooks, production license-service reference, store package, developer info, and ENHE website traffic links.",
     },
     {
         "id": "phase_progress_reporting",
@@ -356,6 +356,8 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     content_count = int_value(summary.get("contentArtifacts"))
     video_count = int_value(summary.get("videoFilesGenerated"))
+    cover_count = int_value(summary.get("mediaAssetCoversReady"))
+    detail_count = int_value(summary.get("mediaAssetDetailImagesReady"))
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
     if final_run and content_count == 0:
@@ -364,7 +366,19 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
     if final_run and video_count == 0:
         status = "partial_ready"
         missing.append("no MP4 generated in the final run")
-    return row("copy_and_real_video_generation", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], [])
+    if final_run and cover_count == 0:
+        status = "partial_ready"
+        missing.append("no cover images generated in the final run")
+    if final_run and detail_count == 0:
+        status = "partial_ready"
+        missing.append("no detail images generated in the final run")
+    metrics = {
+        "contentArtifacts": content_count,
+        "videoFilesGenerated": video_count,
+        "coverImagesGenerated": cover_count,
+        "detailImagesGenerated": detail_count,
+    }
+    return row("copy_and_real_video_generation", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], [], metrics)
 
 
 def publish_row(
@@ -381,9 +395,12 @@ def publish_row(
     manual_required = sum(
         1
         for item in readiness_records
-        if item.get("readiness") in {"manual_publish_required", "browser_assisted_or_official_app_required"}
+        if item.get("readiness")
+        in {"manual_publish_required", "browser_assisted_or_official_app_required", "browser_assisted_publish_ready"}
     )
-    missing: list[str] = list(audit_item.get("missing") or [])
+    missing: list[str] = publish_missing_from_readiness(readiness_records)
+    if not readiness_records:
+        missing.extend(audit_item.get("missing") or [])
     if not readiness_records and final_run:
         missing.append("no publish readiness records generated")
     if not setup_records and final_run:
@@ -393,6 +410,8 @@ def publish_row(
         status = "partial_ready_external_approval_required"
     if manual_required:
         status = "partial_ready_browser_or_manual_required"
+    if readiness_records:
+        status = "manual_package_ready_auto_ports_reserved"
     return row(
         "official_or_browser_assisted_publish",
         status,
@@ -405,8 +424,42 @@ def publish_row(
             "readyToExecute": ready_to_execute,
             "dryRunReady": dry_run_ready,
             "manualOrBrowserRequired": manual_required,
+            "manualPublishPackagesPrimary": True,
+            "autoPublishPortsReserved": True,
+            "officialApiOnly": True,
         },
     )
+
+
+def publish_missing_from_readiness(readiness_records: list[dict[str, Any]]) -> list[str]:
+    missing: list[str] = []
+    for item in readiness_records:
+        platform = str(item.get("platform") or "").strip().lower()
+        readiness = str(item.get("readiness") or "")
+        if readiness == "missing_credentials":
+            missing.append(platform_credential_missing_message(platform, item.get("credentialStatus")))
+        target = item.get("targetStatus") if isinstance(item.get("targetStatus"), dict) else {}
+        if target and not target.get("ready", False):
+            detail = str(target.get("missing") or target.get("field") or "publish target").strip()
+            missing.append(f"{platform or 'platform'} target missing: {detail}")
+    return ordered_unique(missing)
+
+
+def platform_credential_missing_message(platform: str, credential_status: Any) -> str:
+    if platform == "github":
+        return "GITHUB_TOKEN or GH_TOKEN for GitHub writes"
+    if platform == "youtube":
+        return "YouTube OAuth access token or OAuth client credentials"
+    if platform == "douyin":
+        return "Douyin is currently configured for browser-assisted publishing; no DOUYIN_* credential is required unless the future official port is re-enabled"
+    if platform == "tiktok":
+        return "TikTok open-platform app credentials and user authorization"
+    missing_env: list[str] = []
+    if isinstance(credential_status, dict):
+        missing_env = [str(item) for item in credential_status.get("missingEnv", []) if str(item).strip()]
+    if missing_env:
+        return f"{platform or 'platform'} credentials missing: {', '.join(missing_env)}"
+    return f"{platform or 'platform'} credentials missing"
 
 
 def metrics_row(
@@ -647,6 +700,7 @@ def row(
             "ready_with_video_evidence",
             "ready_with_full_funnel_evidence",
             "ready_review_gated_autonomy",
+            "manual_package_ready_auto_ports_reserved",
         },
         "blocked": blocked,
         "evidence": [str(item) for item in evidence if item],
@@ -735,7 +789,7 @@ def build_action_queue(
     if "no MP4 generated" in " ".join(by_id["copy_and_real_video_generation"]["missing"]):
         actions.append(action(30, "render_video", "Run without --skip-video or provide a voiceover file for MP4 rendering.", final_runner_command(out_dir, product_url)))
     publish_status = by_id["official_or_browser_assisted_publish"]["status"]
-    if publish_status.startswith("partial_ready"):
+    if publish_status.startswith("partial_ready") or publish_status == "manual_package_ready_auto_ports_reserved":
         actions.extend(publish_actions(out_dir, readiness_reports, setup_reports))
         actions.append(
             action(

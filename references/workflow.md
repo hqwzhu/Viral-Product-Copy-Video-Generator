@@ -213,7 +213,7 @@ python scripts/final_capability_runner.py \
 
 This writes `reports/promotion-manager/final-run/final-capability-run.{json,md}` and then generates `reports/promotion-manager/final-readiness/final-capability-readiness.{json,md}`. It calls the batch runner, publish readiness auditor, publish setup assistant, browser publish assistant, platform access audit, final capability audit, self-evolution audit, and final readiness matrix builder. The final report includes `cycleEvidence[]`, which rolls up each product's generated content, video files, publish queue, published item registration, public metric capture, comment evidence, business attribution, metrics recovery, and next-round optimization. It also includes `publishSetup[]` entries pointing to credential/target setup kits and `finalReadinessMatrix` pointing to the end-state acceptance matrix. Use `--sample-video-frames` for product-cycle follow-up video evidence and `--multi-query-sample-video-frames` for the separate multi-query discovery stage. It runs only safe automation; official writes, final publish clicks, credentials, and installed Skill sync remain explicit external gates.
 
-When GitHub, YouTube, or Douyin official publishing should be executed from the final runner after a reviewed dry-run, pass the same explicit execution gate used by the lower-level queue:
+When GitHub or YouTube official publishing should be executed from the final runner after a reviewed dry-run, pass the same explicit execution gate used by the lower-level queue. Douyin currently stays browser-assisted/manual; `--douyin-video-file` only attaches the MP4 asset to the prepared payload:
 
 ```bash
 python scripts/final_capability_runner.py \
@@ -227,7 +227,7 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This request is still blocked unless required environment credentials, target files, account authorization, and platform review requirements are satisfied. Zhihu and Xiaohongshu stay browser-assisted/manual.
+This request is still blocked for official GitHub/YouTube writes unless required environment credentials, target files, account authorization, and platform review requirements are satisfied. Douyin, Zhihu, and Xiaohongshu stay browser-assisted/manual in the current setup.
 
 Generate a live-run command pack before executing a real product cycle:
 
@@ -563,7 +563,7 @@ python scripts/publish_queue.py \
   --out-dir "./promotion-output"
 ```
 
-The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, calls the Douyin official upload/create executor in dry-run mode when `--douyin-video-file` is supplied, and keeps Zhihu, Xiaohongshu, unconfigured Douyin, and similar platforms as manual/browser-assisted queue items.
+The queue writes platform drafts, calls GitHub/YouTube official executors in dry-run mode when enough target information exists, attaches `--douyin-video-file` to the Douyin browser-assisted payload, and keeps Zhihu, Xiaohongshu, Douyin, and similar platforms as manual/browser-assisted queue items.
 It also writes `reports/promotion-manager/published-items/published-items.{json,md}`. Official dry-runs, queued manual tasks, blocked writes, and browser-assisted tasks remain pending until a real published URL exists.
 
 Before execution, audit publish readiness:
@@ -653,8 +653,8 @@ python scripts/publish_executor.py ... --execute --approval I_APPROVE_PUBLISH
 
 The same approval gate can also be passed through `scripts/publish_readiness_runner.py`, `scripts/final_capability_runner.py`, or `scripts/skill_entry.py` as `--execute-publish --approval I_APPROVE_PUBLISH`; those commands route into the same guarded queue/executor path.
 
-Supported official write paths are GitHub file writes, GitHub issues, GitHub releases, YouTube `videos.insert` upload, and Douyin Open Platform upload/create. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Douyin requires official app permissions plus user-authorized `DOUYIN_ACCESS_TOKEN` and `DOUYIN_OPEN_ID`. Zhihu and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is configured and verified.
-Douyin official upload/create is available through:
+Supported official write paths in the default queue are GitHub file writes, GitHub issues, GitHub releases, and YouTube `videos.insert` upload. GitHub requires `GITHUB_TOKEN` or `GH_TOKEN`. YouTube requires `YOUTUBE_OAUTH_ACCESS_TOKEN`, not a plain API key. Douyin, Zhihu, and Xiaohongshu remain manual/browser-assisted unless official creator publishing access is configured and verified.
+The reserved Douyin official upload/create port is available only for future reviewed authorization work:
 
 ```bash
 python scripts/publish_executor.py \
@@ -664,7 +664,7 @@ python scripts/publish_executor.py \
   --out-dir "./promotion-output"
 ```
 
-Execution requires `DOUYIN_ACCESS_TOKEN`, `DOUYIN_OPEN_ID`, official app permissions, user authorization, and `--execute --approval I_APPROVE_PUBLISH`. A successful create response is still subject to platform review; register the real published URL before metrics recovery.
+This low-level Douyin executor is not called by the default queue. Re-enable it only after verified official authorization exists; a successful create response is still subject to platform review, and the real published URL must be registered before metrics recovery.
 
 Before claiming a platform can be fully automated, generate the official access boundary report:
 
@@ -745,7 +745,7 @@ python scripts/promotion_cycle_runner.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube/Douyin execution through `--execute-publish --approval I_APPROVE_PUBLISH` when targets and credentials are supplied, but queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
+This writes `reports/promotion-manager/cycle/promotion-cycle.{json,md}`. The cycle runner calls the existing workflow, publish queue, published-items registrar, and metrics recovery scripts. It can pass official GitHub/YouTube execution through `--execute-publish --approval I_APPROVE_PUBLISH` when targets and credentials are supplied. Douyin stays browser-assisted/manual in the current setup, and queued manual/browser-assisted tasks remain pending until a real published URL or export is registered.
 
 The same cycle can also capture public/browser-visible post-publish metrics, public comment evidence, and matched business attribution before recovery:
 
@@ -898,7 +898,7 @@ The scheduler writes `promotion-automation-state.json` next to the config unless
 Scheduled runs can generate new content, videos, publish packs, and metrics import reports. They still must not perform final publishing unless an official executor path has credentials and explicit approval. Browser-assisted and manual platforms remain queued for user-visible action.
 
 To enable queue generation after a scheduled workflow, set `jobs[].publish.enabled` to `true`. The scheduler then runs `scripts/publish_queue.py` and records `lastPublishQueue` in the state file. Keep `jobs[].publish.execute` false unless the environment has official credentials and the user has explicitly approved `I_APPROVE_PUBLISH`.
-Set `jobs[].publish.douyin.videoFile` to pass a rendered MP4 into the Douyin official dry-run queue.
+Set `jobs[].publish.douyin.videoFile` to attach a rendered MP4 to the Douyin browser-assisted/manual publish payload.
 Set `jobs[].browserPublishAssistant.enabled` to `true` to run `scripts/browser_publish_assistant.py` after publish queue generation. This prepares browser/manual payloads for queued platforms and records `lastBrowserPublishAssistant` in state. Use `browserPublishAssistant.platformPublishUrls`, `publishedUrls`, and `evidence` to override creator entry URLs or register real URLs after user-visible publishing.
 Set `jobs[].browserFormFill.enabled` to `true` to run `scripts/browser_publish_form_fill.py` for each prepared browser publish payload after the assistant runs. Use `browserFormFill.allowLocalhost` for local fixtures, `headed` for visible browser review, `installBrowserIfMissing` for the official Chromium runtime installer, `timeoutMs` for navigation timeout, and `waitUntil` for Playwright load state. The scheduler records `lastBrowserFormFill` in state, and the helper still stops before final publish.
 Set `jobs[].postPublishMetricsCapture.enabled` to `true` to run `scripts/post_publish_metrics_capture.py` after published URL registration and before metrics recovery. Use `publishedItemsJson`, `publishedUrls`, `captureBrowserAssisted`, and `allowLocalhost` for explicit evidence sources and tests. Captured metrics are passed to metrics recovery as a JSON metrics source when `metricsRecovery.enabled` is also true.

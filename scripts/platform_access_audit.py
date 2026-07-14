@@ -13,6 +13,16 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from env_loader import (
+    YOUTUBE_ACCESS_TOKEN_ENVS,
+    YOUTUBE_CLIENT_ID_ENVS,
+    YOUTUBE_CLIENT_SECRET_ENVS,
+    blank_env_names,
+    load_project_env,
+    preparse_env_file,
+    present_env_names,
+)
+
 
 TODAY = date.today().isoformat()
 DEFAULT_PLATFORMS = ["youtube", "zhihu", "xiaohongshu", "douyin", "github", "tiktok"]
@@ -30,8 +40,9 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
             "access": "implemented_official_api",
             "mode": "official_api_publish",
             "implementedBy": ["publish_executor.py", "youtube_oauth_publish.py"],
-            "requiredEnvAny": ["YOUTUBE_OAUTH_ACCESS_TOKEN"],
+            "requiredEnvAny": list(YOUTUBE_ACCESS_TOKEN_ENVS),
             "alternativeEnvAll": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+            "alternativeEnvGroups": [list(YOUTUBE_CLIENT_ID_ENVS), list(YOUTUBE_CLIENT_SECRET_ENVS)],
             "approvalRequired": True,
             "notes": "Uploads use the official YouTube Data API videos.insert endpoint and require channel OAuth authorization.",
             "officialDocs": [
@@ -96,12 +107,12 @@ PLATFORM_ACCESS: dict[str, dict[str, Any]] = {
     "douyin": {
         "label": "Douyin",
         "publish": {
-            "access": "implemented_official_api",
-            "mode": "official_api_publish",
-            "implementedBy": ["publish_executor.py"],
-            "requiredEnvAll": ["DOUYIN_CLIENT_KEY", "DOUYIN_CLIENT_SECRET", "DOUYIN_ACCESS_TOKEN", "DOUYIN_OPEN_ID"],
+            "access": "manual_or_browser_assisted_required",
+            "mode": "browser_assisted_publish",
+            "implementedBy": ["browser_publish_session.py", "browser_publish_assistant.py"],
+            "requiredEnvAll": [],
             "approvalRequired": True,
-            "notes": "Official video upload/create is implemented through publish_executor.py, but execution still requires approved open-platform app permissions, scopes, user authorization, and platform review.",
+            "notes": "Douyin official authorization is not available in the current operator setup. Publish through user-visible browser-assisted/manual payloads; publish_executor.py remains a reserved future official port only.",
             "officialDocs": [
                 {
                     "title": "Douyin Open Platform publishing solution",
@@ -310,6 +321,26 @@ OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
         },
     },
     "douyin": {
+        "publish": {
+            "searchedOfficialSources": [
+                {
+                    "title": "Douyin Open Platform publishing solution",
+                    "url": "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/video-management/douyin/create-video/ability-introduction",
+                    "purpose": "Official publishing documentation; current operator authorization is unavailable, so this remains a future reserved port.",
+                },
+                {
+                    "title": "Douyin creator entry",
+                    "url": "https://creator.douyin.com/",
+                    "purpose": "User-visible creator entry for browser-assisted/manual publishing.",
+                },
+            ],
+            "searchedTerms": [
+                "Douyin Open Platform video.create authorization",
+                "Douyin creator publishing workflow",
+            ],
+            "finding": "The current operator cannot obtain Douyin publishing authorization, so direct API publishing is disabled and browser-assisted/manual publishing is selected.",
+            "safeFallback": "manual_or_browser_assisted_publish",
+        },
         "metrics": {
             "searchedOfficialSources": [
                 {
@@ -322,7 +353,7 @@ OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
                 "Douyin Open Platform video data API",
                 "Douyin creator analytics export",
             ],
-            "finding": "Publishing has an official executor path, but metrics recovery still requires approved official access, export, or visible evidence.",
+            "finding": "Publishing is browser-assisted/manual in the current operator setup; metrics recovery still requires approved official access, export, or visible evidence.",
             "safeFallback": "official_export_or_structured_snapshot",
         }
     },
@@ -362,6 +393,7 @@ OFFICIAL_GAP_RESEARCH: dict[str, dict[str, dict[str, Any]]] = {
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -370,6 +402,7 @@ def main() -> None:
     doc_summary = official_doc_summary(records)
     report = {
         "generatedAt": TODAY,
+        "envLoad": env_load,
         "status": overall_status(records),
         "checkLive": bool(args.check_live),
         "platforms": records,
@@ -393,6 +426,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit official platform publishing and metrics access paths.")
     parser.add_argument("--platforms", default="", help="Comma-separated platform filter. Defaults to all supported platforms.")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before auditing credential presence. Values are never written to reports.")
     parser.add_argument("--out-dir", default="./promotion-output")
     parser.add_argument(
         "--check-live",
@@ -463,24 +497,50 @@ def env_status(config: dict[str, Any]) -> dict[str, Any]:
     any_names = list(config.get("requiredEnvAny") or [])
     all_names = list(config.get("requiredEnvAll") or [])
     alternative_all = list(config.get("alternativeEnvAll") or [])
-    present_any = [name for name in any_names if os.environ.get(name)]
-    present_all = [name for name in all_names if os.environ.get(name)]
-    present_alternative = [name for name in alternative_all if os.environ.get(name)]
+    alternative_groups = [list(group) for group in config.get("alternativeEnvGroups") or []]
+    grouped_names = [name for group in alternative_groups for name in group]
+    present_any = present_env_names(any_names)
+    present_all = present_env_names(all_names)
+    present_alternative = present_env_names(alternative_all + grouped_names)
+    alternative_all_ready = bool(alternative_all) and len(present_env_names(alternative_all)) == len(alternative_all)
+    alternative_group_ready = bool(alternative_groups) and all(any(os.environ.get(name) for name in group) for group in alternative_groups)
     if any_names:
-        ready = bool(present_any) or (bool(alternative_all) and len(present_alternative) == len(alternative_all))
+        ready = bool(present_any) or alternative_all_ready or alternative_group_ready
     elif all_names:
         ready = len(present_all) == len(all_names)
     else:
         ready = True
+    all_known_names = any_names + all_names + alternative_all + grouped_names
     return {
         "requiredAny": any_names,
         "requiredAll": all_names,
         "alternativeAll": alternative_all,
+        "alternativeGroups": alternative_groups,
         "presentEnv": sorted(set(present_any + present_all + present_alternative)),
-        "missingEnv": [name for name in any_names + all_names + alternative_all if not os.environ.get(name)],
+        "missingEnv": missing_env_names(any_names, all_names, alternative_all, alternative_groups),
+        "blankEnv": blank_env_names(all_known_names),
         "ready": ready,
         "valuesStored": False,
     }
+
+
+def missing_env_names(
+    any_names: list[str],
+    all_names: list[str],
+    alternative_all: list[str],
+    alternative_groups: list[list[str]],
+) -> list[str]:
+    missing: list[str] = []
+    if any_names and not any(os.environ.get(name) for name in any_names):
+        missing.extend(any_names)
+    missing.extend(name for name in all_names if not os.environ.get(name))
+    if alternative_groups:
+        for group in alternative_groups:
+            if not any(os.environ.get(name) for name in group):
+                missing.append(" or ".join(group))
+    elif alternative_all and not all(os.environ.get(name) for name in alternative_all):
+        missing.extend(name for name in alternative_all if not os.environ.get(name))
+    return missing
 
 
 def ready_for_automation(config: dict[str, Any], env: dict[str, Any]) -> bool:
@@ -494,6 +554,8 @@ def automation_level(publish: dict[str, Any], metrics: dict[str, Any]) -> str:
         return "official_publish_ready_when_credentials_present"
     if publish["access"] == "official_candidate_not_integrated":
         return "official_app_integration_required"
+    if publish["access"] == "manual_or_browser_assisted_required":
+        return "manual_or_browser_assisted_required"
     return "manual_or_browser_assisted_required"
 
 
@@ -503,11 +565,13 @@ def next_actions(platform: str, publish: dict[str, Any], metrics: dict[str, Any]
         actions.append("Set the required publish environment variables only when execution is approved.")
     if publish["access"] == "official_candidate_not_integrated":
         actions.append("Complete official developer-app approval and implement a reviewed executor before direct publishing.")
-    if publish["access"] == "no_verified_public_creator_publish_endpoint":
+    if publish["access"] in {"no_verified_public_creator_publish_endpoint", "manual_or_browser_assisted_required"}:
         actions.append("Keep publishing manual/browser-assisted until official creator publishing access is verified.")
     if metrics["access"] in {"manual_export_or_structured_snapshot_required", "official_or_manual_export_required"}:
         actions.append("Recover metrics from official exports, screenshots, public pages, or structured browser snapshots.")
-    if platform in {"douyin", "tiktok"}:
+    if platform == "douyin":
+        actions.append("Use Douyin browser-assisted publishing now; keep the official API executor as a future reserved port only.")
+    if platform == "tiktok":
         actions.append("Do not treat app credentials alone as publish readiness; user authorization and platform review are still required.")
     return actions
 
@@ -646,6 +710,8 @@ def implementation_gaps(records: list[dict[str, Any]]) -> list[dict[str, str]]:
             gaps.append({"platform": record["platform"], "area": "publish", "gap": "official_app_executor_not_integrated"})
         if publish["access"] == "no_verified_public_creator_publish_endpoint":
             gaps.append({"platform": record["platform"], "area": "publish", "gap": "verified_official_creator_publish_api_missing"})
+        if publish["access"] == "manual_or_browser_assisted_required":
+            gaps.append({"platform": record["platform"], "area": "publish", "gap": "manual_browser_assisted_publish_required"})
         if metrics["access"] in {"manual_export_or_structured_snapshot_required", "official_or_manual_export_required"}:
             gaps.append({"platform": record["platform"], "area": "metrics", "gap": "official_or_user_export_evidence_required"})
         for area in ["publish", "metrics"]:
@@ -709,6 +775,7 @@ def needs_gap_research(capability: dict[str, Any]) -> bool:
         or access
         in {
             "no_verified_public_creator_publish_endpoint",
+            "manual_or_browser_assisted_required",
             "official_candidate_not_integrated",
             "manual_export_or_structured_snapshot_required",
             "official_or_manual_export_required",

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -21,6 +22,8 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from product_intake import decode_html_bytes, text_looks_mojibake
+from env_loader import load_project_env, preparse_env_file
+from web_data_provider import DEFAULT_FIRECRAWL_BASE_URL, WebDataProviderError, scrape_url
 
 BROWSER_SNAPSHOT = SCRIPTS / "browser_snapshot.py"
 PRODUCT_INTAKE = SCRIPTS / "product_intake.py"
@@ -30,6 +33,7 @@ DEFAULT_WEB_TEXT_FALLBACK_TEMPLATE = "https://r.jina.ai/{url}"
 
 
 def main() -> None:
+    env_load = load_project_env(preparse_env_file())
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +42,7 @@ def main() -> None:
         raise SystemExit("No URLs were supplied.")
     records = [read_product_url(args, out_dir, url, index) for index, url in enumerate(urls, start=1)]
     report = build_report(args, out_dir, records)
+    report["envLoad"] = env_load
     write_report(out_dir, report)
     print(f"Product URL reader report written to: {(report_dir(out_dir) / 'product-url-reader.json').resolve()}")
 
@@ -47,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", action="append", default=[], help="Product URL. Can be repeated.")
     parser.add_argument("--urls-file", default="", help="Text file with one product URL per line.")
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--env-file", default="", help="Optional .env file to load before reading provider credentials. Values are never written to reports.")
     parser.add_argument("--skip-browser", action="store_true", help="Skip browser rendering and use static URL intake only.")
     parser.add_argument("--no-static-fallback", action="store_true", help="Do not fall back to static URL intake when browser capture fails.")
     parser.add_argument("--install-browser-if-missing", action="store_true")
@@ -56,6 +62,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-web-text-fallback", action="store_true", help="Disable public web-reader text fallback after browser/static intake failures.")
     parser.add_argument("--web-text-fallback-url-template", default=DEFAULT_WEB_TEXT_FALLBACK_TEMPLATE, help="Fallback text reader URL template. Supports {url} and {encoded_url}.")
     parser.add_argument("--web-text-fallback-file", default="", help="Local text/Markdown fallback file, mainly for Codex-provided page text or tests.")
+    parser.add_argument("--web-data-provider", default=os.environ.get("WEB_DATA_PROVIDER", "auto"), choices=["auto", "local", "firecrawl"], help="Optional public web data provider used before web-text fallback.")
+    parser.add_argument("--firecrawl-base-url", default=os.environ.get("FIRECRAWL_BASE_URL", DEFAULT_FIRECRAWL_BASE_URL), help="Firecrawl API base URL. API key is read only from FIRECRAWL_API_KEY.")
+    parser.add_argument("--web-data-fixture-json", default="", help="Local web data fixture for tests/offline review.")
     return parser.parse_args()
 
 
@@ -84,6 +93,7 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
     intake_dir = item_dir / "intake"
 
     browser_status: dict[str, Any] = {"status": "skipped", "reason": "--skip-browser was supplied."}
+    web_data_status: dict[str, Any] = {"status": "skipped", "reason": "No provider fallback was needed."}
     web_text_status: dict[str, Any] = {"status": "skipped", "reason": "No fallback was needed."}
     profile_status: dict[str, Any] = {"status": "blocked", "profile": "", "markdown": ""}
     source_mode = "unavailable"
@@ -142,6 +152,22 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
         if usable_profile_status(profile_status):
             source_mode = "static_url_fallback"
 
+    if not usable_profile_status(profile_status):
+        web_data_status = fetch_web_data_provider(args, item_dir, url)
+        steps.append(web_data_status.get("_step", {}))
+        if web_data_status.get("status") == "ready":
+            intake_command = [
+                sys.executable,
+                str(PRODUCT_INTAKE),
+                "--text-file",
+                str(web_data_status["textFile"]),
+                "--out-dir",
+                str(intake_dir),
+            ]
+            profile_status = run_intake_command(steps, intake_dir, intake_command, url)
+            if usable_profile_status(profile_status):
+                source_mode = "firecrawl_scrape"
+
     if not usable_profile_status(profile_status) and not args.disable_web_text_fallback:
         web_text_status = fetch_web_text_fallback(args, item_dir, url)
         steps.append(web_text_status.get("_step", {}))
@@ -175,6 +201,7 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
             "bytes": cached_text_path.stat().st_size,
         }
         source_mode = "cached_profile_fallback"
+    workflow_text_path = Path(str(web_data_status.get("textFile") or web_text_status.get("textFile", "")))
     return {
         "id": f"product-url-{index:03d}",
         "url": url,
@@ -182,10 +209,11 @@ def read_product_url(args: argparse.Namespace, out_dir: Path, url: str, index: i
         "sourceMode": source_mode if usable_profile_status(profile_status) else "unavailable",
         "workspace": str(item_dir),
         "browser": browser_status,
+        "webData": public_web_text_status(web_data_status),
         "webText": public_web_text_status(web_text_status),
         "intake": profile_status,
         "product": summarize_profile(profile),
-        "nextWorkflowCommand": next_workflow_command(url, source_mode, snapshot_path, Path(str(web_text_status.get("textFile", ""))), out_dir, profile_status),
+        "nextWorkflowCommand": next_workflow_command(url, source_mode, snapshot_path, workflow_text_path, out_dir, profile_status),
         "steps": steps,
     }
 
@@ -217,6 +245,69 @@ def run_intake_command(
         "markdown": str(intake_dir / "product-profile.md") if (intake_dir / "product-profile.md").exists() else "",
         "exitCode": intake_step["exitCode"],
         **({"reason": reason} if reason else {}),
+    }
+
+
+def fetch_web_data_provider(args: argparse.Namespace, item_dir: Path, url: str) -> dict[str, Any]:
+    text_path = item_dir / "firecrawl-page.md"
+    html_path = item_dir / "firecrawl-page.html"
+    step = {
+        "name": "web_data_provider",
+        "command": [
+            "python",
+            "scripts/web_data_provider.py",
+            "--provider",
+            args.web_data_provider,
+            "scrape",
+            "--url",
+            url,
+        ],
+        "exitCode": 0,
+        "stdoutTail": "",
+        "stderrTail": "",
+    }
+    try:
+        result = scrape_url(
+            url,
+            provider=args.web_data_provider,
+            base_url=args.firecrawl_base_url,
+            fixture_json=args.web_data_fixture_json,
+        )
+    except WebDataProviderError as exc:
+        step["exitCode"] = 1
+        step["stderrTail"] = str(exc)
+        return {"status": "error", "provider": "firecrawl", "textFile": "", "reason": str(exc), "_step": step}
+
+    status = str(result.get("status") or "")
+    markdown = str(result.get("markdown") or "")
+    html = str(result.get("html") or "")
+    if markdown:
+        text_path.write_text(markdown, encoding="utf-8")
+    if html:
+        html_path.write_text(html, encoding="utf-8")
+    if status == "ready" and text_path.exists():
+        step["stdoutTail"] = f"Web data provider markdown written to: {text_path}"
+        return {
+            "status": "ready",
+            "provider": result.get("provider", ""),
+            "captureMode": result.get("captureMode", ""),
+            "textFile": str(text_path),
+            "htmlFile": str(html_path) if html_path.exists() else "",
+            "apiKeyPresent": bool(result.get("apiKeyPresent")),
+            "credentialValuesStored": False,
+            "_step": step,
+        }
+    step["exitCode"] = 1 if status in {"blocked", "error"} else 0
+    step["stderrTail"] = str(result.get("reason") or "")
+    return {
+        "status": status or "skipped",
+        "provider": result.get("provider", ""),
+        "captureMode": result.get("captureMode", ""),
+        "textFile": "",
+        "apiKeyPresent": bool(result.get("apiKeyPresent")),
+        "credentialValuesStored": False,
+        "reason": result.get("reason", ""),
+        "_step": step,
     }
 
 
@@ -324,6 +415,7 @@ def build_report(args: argparse.Namespace, out_dir: Path, records: list[dict[str
             "blocked": sum(1 for item in records if item["status"] == "blocked"),
             "browserStructuredProfiles": sum(1 for item in records if item["sourceMode"] == "browser_structured_snapshot"),
             "staticFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "static_url_fallback"),
+            "firecrawlScrapeProfiles": sum(1 for item in records if item["sourceMode"] == "firecrawl_scrape"),
             "webTextFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "web_text_fallback"),
             "cachedProfileFallbackProfiles": sum(1 for item in records if item["sourceMode"] == "cached_profile_fallback"),
         },
@@ -331,6 +423,7 @@ def build_report(args: argparse.Namespace, out_dir: Path, records: list[dict[str
         "guardrails": [
             "Read browser-visible product page evidence before product intake whenever Chromium is available.",
             "Static URL intake is only a fallback and may miss dynamic page content.",
+            "Optional Firecrawl scrape is used only as a public web data fallback and reads FIRECRAWL_API_KEY from the environment.",
             "Public web-reader text fallback is used only after browser/static intake fails and records its source.",
             "Cached profile fallback is used only when a previously written profile matches the requested URL.",
             "Do not extract cookies, passwords, hidden tokens, private endpoints, or bypass login/captcha/risk controls.",
@@ -355,6 +448,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Requested URLs: {report['summary']['requestedUrls']}",
         f"- Browser structured profiles: {report['summary']['browserStructuredProfiles']}",
         f"- Static fallback profiles: {report['summary']['staticFallbackProfiles']}",
+        f"- Firecrawl scrape profiles: {report['summary']['firecrawlScrapeProfiles']}",
         f"- Web text fallback profiles: {report['summary']['webTextFallbackProfiles']}",
         "",
         "## Records",
@@ -371,6 +465,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Product: {product.get('productName', 'unknown')}",
                 f"- Profile: {record['intake'].get('profile', '')}",
                 f"- Snapshot: {record['browser'].get('snapshot', '')}",
+                f"- Web data: {record.get('webData', {}).get('textFile', '')}",
                 f"- Web text: {record.get('webText', {}).get('textFile', '')}",
                 f"- Next workflow: `{record.get('nextWorkflowCommand', '')}`",
             ]
@@ -430,7 +525,7 @@ def next_workflow_command(url: str, source_mode: str, snapshot_path: Path, text_
             f"python scripts/run_promotion_workflow.py --structured-json \"{snapshot_path}\" "
             f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""
         )
-    if source_mode in {"web_text_fallback", "cached_profile_fallback"} and text_path.exists():
+    if source_mode in {"firecrawl_scrape", "web_text_fallback", "cached_profile_fallback"} and text_path.exists():
         return (
             f"python scripts/run_promotion_workflow.py --text-file \"{text_path}\" "
             f"--platforms youtube,zhihu,xiaohongshu,douyin,github --out-dir \"{out_dir}\""

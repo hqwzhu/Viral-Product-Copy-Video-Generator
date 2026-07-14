@@ -175,10 +175,19 @@ Response:
   "runId": "run_123",
   "status": "queued",
   "dashboardUrl": "https://www.enhe-tech.com.cn/promotion-manager/runs/run_123",
+  "statusUrl": "https://www.enhe-tech.com.cn/api/promotion-manager/run/run_123",
   "reportUrl": "",
   "reason": "ok"
 }
 ```
+
+### Hosted Run Status
+
+```http
+GET https://www.enhe-tech.com.cn/api/promotion-manager/run/{runId}
+```
+
+The status endpoint returns `queued`, `running`, `succeeded`, `failed`, or `blocked` plus safe metadata. It must not expose license keys, Stripe IDs, server secrets, or raw environment variables.
 
 ### Usage Commit
 
@@ -241,6 +250,45 @@ python scripts\billing_contract_simulator.py hosted-run `
 
 The simulator rejects hosted runs when the license is inactive, the `usageId` is missing, the reserved workflow does not match the hosted request, reserved credits are too low, required product/platform fields are missing, or safety flags are absent.
 
+## Production Reference Service
+
+The repository now includes a deployable reference backend at `backend/license-service/`. It is the bridge between the packaged extension and real commercialization infrastructure:
+
+- Stripe Checkout subscription session creation with `mode: "subscription"`.
+- Stripe Customer Portal session creation.
+- Stripe webhook signature verification with `stripe.webhooks.constructEvent` and the raw request body.
+- Hashed license-key records using `LICENSE_PEPPER`.
+- Usage reservation, usage commit, and hosted-run queue intake.
+- Server-side storage of Stripe secrets, webhook secrets, price IDs, quota state, hosted-run queue state, and worker audit events.
+- Optional PostgreSQL state backend through `DATABASE_URL`; JSON file state is local-development fallback.
+- Hosted worker process that consumes queued runs only after license, quota, usage reservation, and safety flag checks.
+
+Local run:
+
+```powershell
+cd backend\license-service
+npm install
+copy .env.example .env
+npm run migrate
+npm run start
+```
+
+Hosted worker:
+
+```powershell
+npm run worker
+```
+
+Webhook test:
+
+```powershell
+stripe listen --forward-to localhost:3000/api/promotion-manager/webhooks/stripe
+```
+
+Copy the Stripe CLI webhook signing secret into `STRIPE_WEBHOOK_SECRET`, then restart the service.
+
+The reference service stores state in PostgreSQL when `DATABASE_URL` is configured and falls back to a local JSON file only for development. Store approval remains external: after the backend is deployed, submit the extension through the official Chrome Web Store and Microsoft Edge Add-ons dashboards.
+
 ## Webhooks
 
 Backend endpoint:
@@ -273,6 +321,10 @@ Minimum tables:
 | `licenses` | `id`, `account_id`, `license_key_hash`, `status`, `plan`, `credits_remaining`, `renews_at` |
 | `subscriptions` | `id`, `account_id`, `provider`, `provider_customer_id`, `provider_subscription_id`, `status`, `price_id` |
 | `usage_ledger` | `id`, `license_id`, `workflow_type`, `credits_reserved`, `credits_used`, `input_tokens`, `output_tokens`, `status`, `idempotency_key` |
+| `hosted_runs` | `id`, `usage_id`, `license_id`, `workflow_type`, `command_type`, `status`, `artifact_directory`, `report_path` |
+| `audit_log` | `id`, `action`, `details`, `created_at` |
+
+Current deployable implementation uses a transactional PostgreSQL JSONB state row guarded by an advisory lock. This keeps the first production deployment simple while still moving away from a local JSON file. If hosted volume grows, split the JSONB state into the normalized tables above.
 
 ## Loss-Control Rules
 
@@ -282,6 +334,8 @@ Minimum tables:
 - A hosted run must reserve credits before model calls and commit actual usage after completion.
 - Refunds, chargebacks, canceled subscriptions, and payment failures must stop hosted runs.
 - Local command generation can remain free because it does not consume ENHE-hosted model tokens.
+- The backend must not execute the extension-submitted `localCommand` directly. Hosted workers must rebuild commands from whitelisted structured payload fields.
+- Worker child processes must keep publish guards enabled by default: `I_APPROVE_PUBLISH=false`, `PUBLISH_DRY_RUN=true`, and `REQUIRE_MANUAL_APPROVAL=true`.
 
 ## Extension Responsibilities
 
