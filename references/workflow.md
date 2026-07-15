@@ -889,7 +889,7 @@ Generate a Windows Task Scheduler registration script:
 python scripts/automation_scheduler.py windows-task \
   --config "./promotion-automation.json" \
   --out-file "./register-promotion-task.ps1" \
-  --task-name "ENHE Promotion Manager" \
+  --task-name "ENHE Product Promo Maker" \
   --time "09:00"
 ```
 

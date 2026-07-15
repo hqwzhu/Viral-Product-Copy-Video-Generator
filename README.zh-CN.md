@@ -1,6 +1,6 @@
-# ENHE Promotion Manager
+# ENHE 产品推广素材生成器
 
-ENHE Promotion Manager 是一个 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库转成可重复执行的产品推广闭环。
+ENHE 产品推广素材生成器是一个 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库转成可重复执行的产品推广闭环。把产品网页变成推广文案、视频脚本和发布素材。
 
 [English README](README.en.md)
 

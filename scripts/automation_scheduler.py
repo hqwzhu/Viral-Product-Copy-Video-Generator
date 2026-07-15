@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     task = subparsers.add_parser("windows-task", help="Write a PowerShell script that registers this scheduler with Windows Task Scheduler.")
     task.add_argument("--config", required=True)
     task.add_argument("--out-file", required=True)
-    task.add_argument("--task-name", default="ENHE Promotion Manager")
+    task.add_argument("--task-name", default="ENHE Product Promo Maker")
     task.add_argument("--time", default="09:00", help="Daily run time in HH:MM.")
     task.add_argument("--state-file", default="")
     return parser.parse_args()
@@ -1100,7 +1100,7 @@ def write_windows_task_script(args: argparse.Namespace) -> None:
     script = f"""$Action = New-ScheduledTaskAction -Execute "python" -Argument {ps_quote(argument)} -WorkingDirectory {ps_quote(str(ROOT))}
 $Trigger = New-ScheduledTaskTrigger -Daily -At {ps_quote(args.time)}
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-Register-ScheduledTask -TaskName {ps_quote(args.task_name)} -Action $Action -Trigger $Trigger -Settings $Settings -Description "Runs the Codex Viral Product Promotion Manager scheduler." -Force
+Register-ScheduledTask -TaskName {ps_quote(args.task_name)} -Action $Action -Trigger $Trigger -Settings $Settings -Description "Runs the ENHE Product Promo Maker scheduler." -Force
 """
     out_path.write_text(script, encoding="utf-8")
     print(f"Windows scheduled task script written to: {out_path.resolve()}")

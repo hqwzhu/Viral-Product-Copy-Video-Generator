@@ -1,5 +1,5 @@
 [Unit]
-Description=ENHE Promotion Manager Hosted Worker
+Description=ENHE Product Promo Maker Hosted Worker
 After=network.target postgresql.service enhe-promotion-manager-api.service
 
 [Service]

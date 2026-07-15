@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize and redact MediaCrawler JSONL records for Promotion Manager."""
+"""Normalize and redact MediaCrawler JSONL records for ENHE Product Promo Maker."""
 
 from __future__ import annotations
 

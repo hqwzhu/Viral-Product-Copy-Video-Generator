@@ -1,6 +1,6 @@
 # Browser Extension
 
-The `browser-extension` folder contains a Chrome Manifest V3 operator popup for ENHE Promotion Manager.
+The `browser-extension` folder contains a Chrome Manifest V3 operator popup for ENHE Product Promo Maker.
 
 Version 0.5.2 provides a complete Chinese/English popup. On first launch it follows Chrome's UI language, then remembers the operator's explicit `中文 / EN` selection in local extension storage. Store metadata is also localized through Chrome `_locales` resources.
 
@@ -36,7 +36,7 @@ Version 0.5.2 provides a complete Chinese/English popup. On first launch it foll
 2. Enable Developer mode.
 3. Click Load unpacked.
 4. Select the repository folder `browser-extension`.
-5. Pin ENHE Promotion Manager in the toolbar.
+5. Pin ENHE Product Promo Maker in the toolbar.
 
 ## Build Store Submission Package
 

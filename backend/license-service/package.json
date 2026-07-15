@@ -2,7 +2,7 @@
   "name": "enhe-promotion-manager-license-service",
   "version": "0.1.0",
   "private": true,
-  "description": "Reference Stripe and license service for ENHE Promotion Manager browser extension commercialization.",
+  "description": "Reference Stripe and license service for ENHE Product Promo Maker browser extension commercialization.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

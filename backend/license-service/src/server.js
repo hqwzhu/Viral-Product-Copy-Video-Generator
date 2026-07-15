@@ -1363,16 +1363,16 @@ app.use((error, _req, res, _next) => {
 if (require.main === module) {
   store.init().then(() => {
     app.listen(port, () => {
-      console.log(`ENHE Promotion Manager license service listening on ${port}`);
+      console.log(`ENHE Product Promo Maker license service listening on ${port}`);
     });
     startRetentionCleanup(store).then(() => {
-      console.log("ENHE Promotion Manager retention cleanup enabled");
+      console.log("ENHE Product Promo Maker retention cleanup enabled");
     }).catch((error) => {
       console.error(`retention cleanup failed: ${error.stack || error.message}`);
     });
     if (process.env.HOSTED_WORKER_ENABLED === "true") {
       startHostedWorker(store).then(() => {
-        console.log("ENHE Promotion Manager hosted worker enabled in API process");
+        console.log("ENHE Product Promo Maker hosted worker enabled in API process");
       });
     }
   }).catch((error) => {

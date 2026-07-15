@@ -13,7 +13,7 @@ async function main() {
   if (store.close) {
     await store.close();
   }
-  console.log("Promotion Manager database migration completed.");
+  console.log("ENHE Product Promo Maker database migration completed.");
 }
 
 main().catch((error) => {

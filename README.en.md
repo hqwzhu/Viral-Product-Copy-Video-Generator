@@ -1,9 +1,9 @@
-# ENHE Promotion Manager
+# ENHE Product Promo Maker
 
 [![ZH](https://img.shields.io/badge/README-ZH-blue)](README.md)
 [![English](https://img.shields.io/badge/README-English-gray)](README.en.md)
 
-ENHE Promotion Manager is a local Codex Skill that turns any product URL, website URL, app page, or GitHub repository into a repeatable product promotion system.
+ENHE Product Promo Maker is a local Codex Skill that turns any product URL, website URL, app page, or GitHub repository into a repeatable product promotion system. Turn product pages into promotional copy, video scripts, and publishing assets.
 
 It is built for founders, indie hackers, AI tool operators, and marketing teams who want Codex to act like a practical website and product promotion manager:
 

@@ -10,7 +10,7 @@ const store = createStateStore({ stateFile, databaseUrl: process.env.DATABASE_UR
 
 store.init().then(async () => {
   await startHostedWorker(store);
-  console.log("ENHE Promotion Manager hosted worker started");
+  console.log("ENHE Product Promo Maker hosted worker started");
 }).catch((error) => {
   console.error(error.stack || error.message);
   process.exitCode = 1;

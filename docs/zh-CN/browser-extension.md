@@ -1,6 +1,6 @@
 # 浏览器插件
 
-`browser-extension/` 是 ENHE Promotion Manager 的 Chrome Manifest V3 插件成品目录。它用于从当前产品页面生成 Codex Skill 命令、浏览器辅助发布命令、证据回收命令、定期自动化命令，也可以对接 ENHE 托管运行、license 和 usage credits。
+`browser-extension/` 是 ENHE 产品推广素材生成器的 Chrome Manifest V3 插件成品目录。它用于从当前产品页面生成 Codex Skill 命令、浏览器辅助发布命令、证据回收命令、定期自动化命令，也可以对接 ENHE 托管运行、license 和 usage credits。
 
 ## 能力
 
@@ -29,7 +29,7 @@
 2. 打开 Developer mode。
 3. 点击 Load unpacked。
 4. 选择仓库内的 `browser-extension` 目录。
-5. 固定 ENHE Promotion Manager 到浏览器工具栏。
+5. 固定 ENHE 产品推广素材生成器到浏览器工具栏。
 
 ## 打包成上架包
 

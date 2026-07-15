@@ -801,7 +801,7 @@ def github_docs_status() -> dict[str, Any]:
     evidence = [str(ROOT / path) for path in GITHUB_DOC_FILES if (ROOT / path).exists()]
     required_markers = {
         "README.md": [
-            "ENHE Promotion Manager",
+            "ENHE Product Promo Maker",
             "Quick Start",
             "Browser Extension",
             "Subscription Model",

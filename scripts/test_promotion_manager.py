@@ -5008,7 +5008,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--out-file",
                 str(script_path),
                 "--task-name",
-                "ENHE Promotion Manager Test",
+                "ENHE Product Promo Maker Test",
                 "--time",
                 "09:30",
             ],
@@ -5018,7 +5018,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         script = script_path.read_text(encoding="utf-8")
         self.assertIn("Register-ScheduledTask", script)
         self.assertIn("automation_scheduler.py", script)
-        self.assertIn("ENHE Promotion Manager Test", script)
+        self.assertIn("ENHE Product Promo Maker Test", script)
 
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
@@ -6735,11 +6735,82 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(cycle["commentEvidenceCapture"]["commentEvidenceExport"]).exists())
         self.assertTrue(Path(cycle["businessAttribution"]["businessAttributionExport"]).exists())
 
+    def test_current_user_facing_files_do_not_use_retired_product_name(self) -> None:
+        approved_legal_aliases = [
+            "ENHE Product Promo Maker (formerly ENHE Promotion Manager)",
+            "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）",
+        ]
+        retired_names = [
+            "ENHE Promotion Manager",
+            "ENHE 推广管理器",
+            "Promotion Manager",
+            "推广管理器",
+        ]
+        current_files = [
+            "README.md",
+            "README.en.md",
+            "README.zh-CN.md",
+            "browser-extension/popup.js",
+            "backend/license-service/README.md",
+            "backend/license-service/package.json",
+            "backend/license-service/src/migrate.js",
+            "backend/license-service/src/server.js",
+            "backend/license-service/src/worker.js",
+            "deploy/promotion-manager/README.md",
+            "deploy/promotion-manager/enhe-promotion-manager-api.service",
+            "deploy/promotion-manager/enhe-promotion-manager-worker.service",
+            "docs/100-percent-completion-roadmap.md",
+            "docs/browser-extension.md",
+            "docs/mediacrawler-sidecar.md",
+            "docs/open-source-integration.md",
+            "docs/zh-CN/browser-extension.md",
+            "references/workflow.md",
+            "scripts/automation_scheduler.py",
+            "scripts/billing_contract_simulator.py",
+            "scripts/completion_roadmap.py",
+            "scripts/final_capability_audit.py",
+            "scripts/mediacrawler_contract.py",
+            "scripts/mediacrawler_downstream.py",
+            "scripts/package_browser_extension.py",
+            "scripts/platform_capabilities.py",
+            "scripts/platform_data_manager.py",
+            "scripts/publish_executor.py",
+        ]
+
+        for relative_path in current_files:
+            path = ROOT / relative_path
+            text = path.read_text(encoding="utf-8")
+            for approved_alias in approved_legal_aliases:
+                text = text.replace(approved_alias, "")
+            for retired_name in retired_names:
+                self.assertNotIn(retired_name, text, str(path))
+
+    def test_rebrand_preserves_internal_compatibility_identifiers(self) -> None:
+        popup = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+        self.assertIn("/api/promotion-manager/license", popup)
+        self.assertIn("/promotion-manager/checkout", popup)
+
+        package_json = json.loads((LICENSE_SERVICE / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(package_json["name"], "enhe-promotion-manager-license-service")
+
+        package_script = PACKAGE_BROWSER_EXTENSION.read_text(encoding="utf-8")
+        self.assertIn('return f"enhe-promotion-manager-{version}.zip"', package_script)
+
+        state_store = (LICENSE_SERVICE / "src" / "state-store.js").read_text(encoding="utf-8")
+        self.assertIn("promotion_manager_state", state_store)
+
+        deploy_readme = (ROOT / "deploy" / "promotion-manager" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("/opt/enhe/promotion-manager/current", deploy_readme)
+        self.assertIn("/var/lib/enhe-promotion-manager", deploy_readme)
+
+        self.assertTrue((ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service").exists())
+        self.assertTrue((ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service").exists())
+
     def test_github_docs_include_intro_usage_install_extension_and_pricing(self) -> None:
         self.assertTrue(README.exists())
         readme = README.read_text(encoding="utf-8")
         for marker in [
-            "ENHE Promotion Manager",
+            "ENHE Product Promo Maker",
             "README.zh-CN.md",
             "Quick Start",
             "Install",

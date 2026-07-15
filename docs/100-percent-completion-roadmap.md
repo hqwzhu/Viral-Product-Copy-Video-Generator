@@ -1,6 +1,6 @@
 # 100% Completion Roadmap
 
-This document is the operator-facing roadmap for turning ENHE Promotion Manager from a strong local Skill into a production-ready promotion business. It separates local work Codex can finish from external gates that require the operator's real accounts, platform approvals, payment setup, server deployment, and business evidence.
+This document is the operator-facing roadmap for turning ENHE Product Promo Maker from a strong local Skill into a production-ready promotion business. It separates local work Codex can finish from external gates that require the operator's real accounts, platform approvals, payment setup, server deployment, and business evidence.
 
 ## Ground Rules
 

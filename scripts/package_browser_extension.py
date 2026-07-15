@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and package the ENHE Promotion Manager browser extension."""
+"""Validate and package the ENHE Product Promo Maker browser extension."""
 
 from __future__ import annotations
 
