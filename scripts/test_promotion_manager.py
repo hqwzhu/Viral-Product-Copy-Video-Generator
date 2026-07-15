@@ -7380,6 +7380,12 @@ Prompt templates for product copy, SEO content, and video scripts.
             flags=re.IGNORECASE,
         )
         negative_zh = re.compile(r"(?:无法|不能|不会|没有|不|未)[\u4e00-\u9fff]{0,4}\s*$")
+        emphatic_en = re.compile(
+            r"(?:\bnot\s+(?:only|just)|n't\s+(?:only|just))\s*$",
+            flags=re.IGNORECASE,
+        )
+        emphatic_zh = re.compile(r"(?:不仅|不只)\s*$")
+        negation_suffix_length = 128
         promotional_claim_patterns = [
             (
                 re.compile(
@@ -7424,6 +7430,13 @@ Prompt templates for product copy, SEO content, and video scripts.
                 negative_en,
             ),
             (
+                re.compile(
+                    rf"\b(?P<trigger>is|are|was|were)\s+{outcomes_en}\s+guaranteed\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
                 re.compile(rf"(?P<trigger>保证|确保)[^。！？；，\n]{{0,40}}{outcomes_zh}"),
                 negative_zh,
             ),
@@ -7438,6 +7451,14 @@ Prompt templates for product copy, SEO content, and video scripts.
             (re.compile(r"(?P<trigger>将|会|可)自动发布"), negative_zh),
         ]
 
+        def is_negated(clause: str, trigger_index: int, negative_pattern: re.Pattern[str]) -> bool:
+            suffix = clause[max(0, trigger_index - negation_suffix_length) : trigger_index]
+            if negative_pattern is negative_en and emphatic_en.search(suffix):
+                return False
+            if negative_pattern is negative_zh and emphatic_zh.search(suffix):
+                return False
+            return negative_pattern.search(suffix) is not None
+
         def has_promotional_claim(text: str) -> bool:
             clauses = re.split(
                 r"(?:[,.!?;\n。！？；，]+|\b(?:but|and|yet)\b|但是|但|并且|并|而且|而)",
@@ -7447,8 +7468,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             for clause in clauses:
                 for claim_pattern, negative_pattern in promotional_claim_patterns:
                     for match in claim_pattern.finditer(clause):
-                        trigger_prefix = clause[: match.start("trigger")]
-                        if negative_pattern.search(trigger_prefix) is None:
+                        if not is_negated(clause, match.start("trigger"), negative_pattern):
                             return True
             return False
 
@@ -7477,6 +7497,10 @@ Prompt templates for product copy, SEO content, and video scripts.
             "Sales are guaranteed",
             "无需设置即可保证销量",
             "我们不收集密码, 保证销量",
+            "We not only guarantee sales",
+            "It doesn't just guarantee revenue",
+            "Not only are sales guaranteed",
+            "我们不仅保证销量",
         ]:
             self.assertTrue(has_promotional_claim(sample), f"promotional claim was missed: {sample}")
         for label, text in documents.items():
