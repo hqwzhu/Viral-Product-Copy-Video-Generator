@@ -480,7 +480,7 @@ async function setLanguage(language, persist = true) {
 }
 
 function applyTranslations() {
-  document.title = `ENHE ${t("appTitle")}`;
+  document.title = t("appTitle");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });

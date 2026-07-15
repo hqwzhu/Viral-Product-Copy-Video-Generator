@@ -7003,6 +7003,11 @@ Prompt templates for product copy, SEO content, and video scripts.
             script,
         )
         self.assertIn("把产品网页变成推广文案、视频脚本和发布素材", script)
+        self.assertIn('appTitle: "ENHE Product Promo Maker"', script)
+        self.assertIn('appTitle: "ENHE 产品推广素材生成器"', script)
+        apply_translations = script.split("function applyTranslations() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn('document.title = t("appTitle");', apply_translations)
+        self.assertNotIn('document.title = `ENHE ${t("appTitle")}`;', apply_translations)
         self.assertEqual(contract["name"], "ENHE Product Promo Maker Billing Contract")
 
         display_text = "\n".join(
