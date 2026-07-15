@@ -7358,21 +7358,41 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertNotIn("ENHE 推广管理器", text)
             self.assertNotIn("0.5.2", text, f"{label} contains the superseded version")
 
-        forbidden_terms = {
-            "guarantee/guaranteed": r"\bguarantee(?:d)?\b",
-            "virality": r"\bvirality\b",
-            "conversion": r"\bconversion\b",
-            "traffic": r"\btraffic\b",
-            "sales": r"\bsales\b",
-            "revenue": r"\brevenue\b",
-            "automatic publishing": r"\bautomatic\s+publishing\b",
-        }
+        outcomes_en = r"(?:virality|conversion|traffic|sales|revenue)"
+        outcomes_zh = r"(?:爆款|转化|流量|销量|销售额|收入|收益)"
+        promotional_claim_patterns = [
+            rf"(?<!not )(?<!n't )\b(?:guarantee|ensure)s?\b[^.!?\n]{{0,80}}\b{outcomes_en}\b",
+            rf"(?<!not )(?<!n't )\b(?:increase|boost|drive|deliver)s?\b[^.!?\n]{{0,80}}\b{outcomes_en}\b",
+            r"(?<!not )(?<!n't )\b(?:support|enable|offer|provide)s?\b[^.!?\n]{0,40}"
+            r"\bautomatic publishing\b",
+            r"\b(?:will|can)\s+automatically\s+publish\b",
+            rf"(?<!不)(?:保证|确保)[^。！？\n]{{0,40}}{outcomes_zh}",
+            rf"(?<!不)(?:提升|增加|带来|实现)[^。！？\n]{{0,40}}{outcomes_zh}",
+            r"(?<!不)(?:支持|提供|实现)[^。！？\n]{0,12}自动发布",
+            r"(?<!不)(?:将|会|可)自动发布",
+        ]
+
+        def has_promotional_claim(text: str) -> bool:
+            return any(
+                re.search(pattern, text, flags=re.IGNORECASE)
+                for pattern in promotional_claim_patterns
+            )
+
+        for sample in [
+            "does not guarantee sales or revenue and does not support automatic publishing",
+            "不保证销量，也不支持自动发布",
+        ]:
+            self.assertFalse(has_promotional_claim(sample), f"legal disclaimer was rejected: {sample}")
+        for sample in [
+            "We guarantee sales and support automatic publishing.",
+            "我们保证销量并支持自动发布。",
+        ]:
+            self.assertTrue(has_promotional_claim(sample), f"promotional claim was missed: {sample}")
         for label, text in documents.items():
-            for term, pattern in forbidden_terms.items():
-                self.assertIsNone(
-                    re.search(pattern, text, flags=re.IGNORECASE),
-                    f"{label} contains forbidden promise term: {term}",
-                )
+            self.assertFalse(
+                has_promotional_claim(text),
+                f"{label} contains a positive promotional outcome claim",
+            )
 
         for text in [chrome, edge, submission_zh]:
             self.assertIn("ENHE 产品推广素材生成器", text)
@@ -7396,13 +7416,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn(f"```text\n{reviewer_sentence}\n", reviewer_notes)
 
         self.assertIn("ENHE Promo Maker", screenshot_plan)
+        screenshot_lines = screenshot_plan.splitlines()
         for asset_line in [
-            "`browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
+            "- `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
             "the label `ENHE Promo Maker`.",
-            "`dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
-            "`dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
+            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
+            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
         ]:
-            self.assertIn(asset_line, screenshot_plan)
+            self.assertIn(asset_line, screenshot_lines)
 
         submission_markers = [
             "https://developer.chrome.com/docs/webstore/publish",
@@ -7410,10 +7431,6 @@ Prompt templates for product copy, SEO content, and video scripts.
             "dloklkbnmoigemnfigbkibogmgbieppl",
             "https://www.enhe-tech.com.cn/promotion-manager/privacy",
             "https://www.enhe-tech.com.cn/promotion-manager/support",
-            "`activeTab`",
-            "`storage`",
-            "`clipboardWrite`",
-            "remote code",
             "enhe-promotion-manager-0.5.3.zip",
         ]
         for label, text in [
@@ -7423,10 +7440,33 @@ Prompt templates for product copy, SEO content, and video scripts.
             for marker in submission_markers:
                 self.assertIn(marker, text, f"{label} missing {marker}")
             self.assertIn("dist/v0.5.3", text.replace("\\", "/"))
-        self.assertIn("user approval", submission_en)
-        self.assertIn("submit for certification", submission_en)
+
+        submission_en_lines = submission_en.splitlines()
+        for line in [
+            "- `activeTab`: capture the current product URL only after the user acts on the extension.",
+            "- `storage`: store local license and endpoint settings.",
+            "- `clipboardWrite`: copy generated local commands and hosted-run payloads only when requested by the user.",
+            "- No remote code is loaded by `<script src=\"https://...\">`, dynamic imports, `importScripts`, `eval`, or `new Function`.",
+            "- Remote ENHE endpoints are used for data only: license validation, usage authorization, hosted run requests, checkout, and billing portal.",
+            "All extension logic stays inside the package. Remote services return data only and do not provide executable extension code.",
+            "9. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for review. If login, account verification, or captcha is required, pause for the account owner to complete it.",
+            "7. Confirm the generated publishing assets require user approval, then submit for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.",
+        ]:
+            self.assertIn(line, submission_en_lines)
+
+        submission_zh_lines = submission_zh.splitlines()
+        for line in [
+            "- `activeTab`：仅在用户操作扩展后读取当前产品页面 URL。",
+            "- `storage`：保存本地许可证和 endpoint 设置。",
+            "- `clipboardWrite`：仅按用户请求复制生成的本地命令和托管运行载荷。",
+            "- 不加载 remote code：没有远程 `<script src=\"https://...\">`、动态 import、`importScripts`、`eval` 或 `new Function`。",
+            "- ENHE 远程接口只返回许可证校验、使用授权、托管运行请求、结账和账单门户所需的数据。",
+            "所有扩展逻辑都在安装包内。远程服务仅返回数据，不向扩展提供可执行代码。",
+            "9. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。",
+            "7. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。",
+        ]:
+            self.assertIn(line, submission_zh_lines)
         self.assertIn("生成的发布素材需要用户批准", submission_zh)
-        self.assertIn("提交审核", submission_zh)
 
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
