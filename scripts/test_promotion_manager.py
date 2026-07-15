@@ -7337,6 +7337,33 @@ Prompt templates for product copy, SEO content, and video scripts.
         for marker in ["/api/promotion-manager/", "/promotion-manager/privacy", "/promotion-manager/runs/"]:
             self.assertIn(marker, nginx)
 
+    def test_store_copy_uses_approved_bilingual_product_identity(self) -> None:
+        chrome = (DOCS / "store" / "chrome-listing.md").read_text(encoding="utf-8")
+        edge = (DOCS / "store" / "edge-listing.md").read_text(encoding="utf-8")
+        reviewer_notes = (DOCS / "store" / "reviewer-notes.md").read_text(encoding="utf-8")
+        screenshot_plan = (DOCS / "store" / "screenshot-plan.md").read_text(encoding="utf-8")
+        submission_en = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
+        submission_zh = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
+
+        for text in [chrome, edge, reviewer_notes, screenshot_plan, submission_en, submission_zh]:
+            self.assertIn("ENHE Product Promo Maker", text)
+            self.assertNotIn("ENHE 推广管理器", text)
+
+        for text in [chrome, edge, submission_zh]:
+            self.assertIn("ENHE 产品推广素材生成器", text)
+
+        self.assertIn(
+            "Turn product pages into promotional copy, video scripts, publishing assets, and guarded local or hosted promotion tasks.",
+            chrome,
+        )
+        self.assertIn(
+            "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。",
+            chrome,
+        )
+        self.assertIn("ENHE Promo Maker", screenshot_plan)
+        for text in [submission_en, submission_zh]:
+            self.assertIn("dist/v0.5.3", text.replace("\\", "/"))
+
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
         chinese = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
