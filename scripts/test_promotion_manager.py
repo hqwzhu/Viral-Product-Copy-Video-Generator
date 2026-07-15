@@ -7397,45 +7397,43 @@ Prompt templates for product copy, SEO content, and video scripts.
         english_identity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)"
         english_legal_expectations = {
             DOCS / "legal/privacy-policy.md": {
-                "heading": "# ENHE Product Promo Maker Privacy Policy",
-                "opening": (
+                "prefix": (
+                    "# ENHE Product Promo Maker Privacy Policy\n\n"
+                    "Effective date: 2026-07-15\n\n"
                     "This policy explains how ENHE AI processes information for "
                     "ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser "
-                    "extension and optional hosted service."
+                    "extension and optional hosted service.\n\n"
                 ),
-                "date": "Effective date: 2026-07-15",
             },
             DOCS / "legal/terms-of-service.md": {
-                "heading": "# ENHE Product Promo Maker Terms Of Service",
-                "opening": (
+                "prefix": (
+                    "# ENHE Product Promo Maker Terms Of Service\n\n"
+                    "Effective date: 2026-07-10\n\n"
+                    "This is a launch draft. Review with counsel before public launch.\n\n"
+                    "## Service\n\n"
                     "ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser "
-                    "extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution."
+                    "extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.\n\n"
                 ),
-                "date": "Effective date: 2026-07-10",
             },
             DOCS / "legal/refund-policy.md": {
-                "heading": "# ENHE Product Promo Maker Refund Policy",
-                "opening": (
+                "prefix": (
+                    "# ENHE Product Promo Maker Refund Policy\n\n"
+                    "Effective date: 2026-07-10\n\n"
                     "This policy applies to purchases of "
-                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager)."
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager).\n\n"
                 ),
-                "date": "Effective date: 2026-07-10",
             },
             DOCS / "legal/support.md": {
-                "heading": "# ENHE Product Promo Maker Support",
-                "opening": (
+                "prefix": (
+                    "# ENHE Product Promo Maker Support\n\n"
                     "Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) "
-                    "is available through the public support URL below."
+                    "is available through the public support URL below.\n\n"
                 ),
             },
         }
         for path, expected in english_legal_expectations.items():
             text = path.read_text(encoding="utf-8")
-            lines = text.splitlines()
-            self.assertEqual(lines[0], expected["heading"], f"{path} has the wrong heading")
-            self.assertIn(expected["opening"], lines, f"{path} missing exact opening sentence")
-            if "date" in expected:
-                self.assertIn(expected["date"], lines, f"{path} missing effective date")
+            self.assertTrue(text.startswith(expected["prefix"]), f"{path} has the wrong opening block")
             self.assertEqual(
                 text.count(english_identity),
                 1,
@@ -7449,19 +7447,17 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         chinese_privacy_path = DOCS / "legal/privacy-policy.zh-CN.md"
         chinese_privacy = chinese_privacy_path.read_text(encoding="utf-8")
-        chinese_lines = chinese_privacy.splitlines()
         chinese_identity = "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
-        chinese_opening = (
+        chinese_prefix = (
+            "# ENHE 产品推广素材生成器隐私政策\n\n"
+            "生效日期：2026-07-15\n\n"
             "本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
-            "浏览器扩展程序及其可选托管服务中的信息。"
+            "浏览器扩展程序及其可选托管服务中的信息。\n\n"
         )
-        self.assertEqual(
-            chinese_lines[0],
-            "# ENHE 产品推广素材生成器隐私政策",
-            f"{chinese_privacy_path} has the wrong heading",
+        self.assertTrue(
+            chinese_privacy.startswith(chinese_prefix),
+            f"{chinese_privacy_path} has the wrong opening block",
         )
-        self.assertIn("生效日期：2026-07-15", chinese_lines, f"{chinese_privacy_path} missing effective date")
-        self.assertIn(chinese_opening, chinese_lines, f"{chinese_privacy_path} missing exact opening sentence")
         self.assertEqual(
             chinese_privacy.count(chinese_identity),
             1,
