@@ -7372,15 +7372,19 @@ Prompt templates for product copy, SEO content, and video scripts.
         outcomes_en = r"(?:virality|viral|conversions?|traffic|sales|revenue)"
         outcomes_zh = r"(?:爆款|转化|流量|销量|销售额|销售增长|收入|收益)"
         negative_en = re.compile(
-            r"(?:\b(?:no|not|never|cannot)\b|can't\b|doesn't\b|\bdo\s+not\b|"
-            r"\bdoes\s+not\b|\bwill\s+not\b|won't\b|\bunable\s+to\b)",
+            r"(?:\bno(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\b(?:do|does|did|is|are|was|were|will|can|could|should|would|have|has)"
+            r"(?:\s+not|n't)(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\b(?:not|never|cannot|can't|won't)(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\bunable\s+to(?:\s+[A-Za-z'-]+){0,3})\s*$",
             flags=re.IGNORECASE,
         )
-        negative_zh = re.compile(r"(?:无法|不能|不会|不|未|无)")
+        negative_zh = re.compile(r"(?:无法|不能|不会|没有|不|未)[\u4e00-\u9fff]{0,4}\s*$")
         promotional_claim_patterns = [
             (
                 re.compile(
-                    rf"\b(?:guarantee(?:d|s)?|ensure(?:d|s)?)\b[^.!?;\n]{{0,80}}"
+                    rf"\b(?P<trigger>guarantee(?:d|s)?|guaranteeing|"
+                    rf"ensure(?:d|s)?|ensuring)\b[^.!?;,\n]{{0,80}}"
                     rf"\b{outcomes_en}\b",
                     flags=re.IGNORECASE,
                 ),
@@ -7388,17 +7392,17 @@ Prompt templates for product copy, SEO content, and video scripts.
             ),
             (
                 re.compile(
-                    rf"\b(?:increas(?:e|es|ed|ing)|boost(?:s|ed|ing)?|"
+                    rf"\b(?P<trigger>increas(?:e|es|ed|ing)|boost(?:s|ed|ing)?|"
                     rf"driv(?:e|es|en|ing)|drove|deliver(?:s|ed|ing)?)\b"
-                    rf"[^.!?;\n]{{0,80}}\b{outcomes_en}\b",
+                    rf"[^.!?;,\n]{{0,80}}\b{outcomes_en}\b",
                     flags=re.IGNORECASE,
                 ),
                 negative_en,
             ),
             (
                 re.compile(
-                    r"\b(?:support(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|"
-                    r"offer(?:s|ed|ing)?|provid(?:e|es|ed|ing))\b[^.!?;\n]{0,40}"
+                    r"\b(?P<trigger>support(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|"
+                    r"offer(?:s|ed|ing)?|provid(?:e|es|ed|ing))\b[^.!?;,\n]{0,40}"
                     r"\b(?:automatic|automated) publishing\b",
                     flags=re.IGNORECASE,
                 ),
@@ -7406,27 +7410,45 @@ Prompt templates for product copy, SEO content, and video scripts.
             ),
             (
                 re.compile(
-                    r"\b(?:will|can)\s+(?:automatically\s+publish|auto-publish)\b",
+                    r"\b(?P<trigger>will|can)\s+(?:automatically\s+publish|auto-publish)\b",
                     flags=re.IGNORECASE,
                 ),
                 negative_en,
             ),
-            (re.compile(rf"(?:保证|确保)[^。！？；\n]{{0,40}}{outcomes_zh}"), negative_zh),
-            (re.compile(rf"(?:提升|增加|带来|实现)[^。！？；\n]{{0,40}}{outcomes_zh}"), negative_zh),
-            (re.compile(r"(?:支持|提供|实现)[^。！？；\n]{0,12}自动发布"), negative_zh),
-            (re.compile(r"(?:将|会|可)自动发布"), negative_zh),
+            (
+                re.compile(
+                    rf"\b{outcomes_en}\b[^.!?;,\n]{{0,30}}"
+                    r"\b(?P<trigger>(?:is|are|was|were)\s+guaranteed)\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(rf"(?P<trigger>保证|确保)[^。！？；，\n]{{0,40}}{outcomes_zh}"),
+                negative_zh,
+            ),
+            (
+                re.compile(rf"(?P<trigger>提升|增加|带来|实现)[^。！？；，\n]{{0,40}}{outcomes_zh}"),
+                negative_zh,
+            ),
+            (
+                re.compile(r"(?P<trigger>支持|提供|实现)[^。！？；，\n]{0,12}自动发布"),
+                negative_zh,
+            ),
+            (re.compile(r"(?P<trigger>将|会|可)自动发布"), negative_zh),
         ]
 
         def has_promotional_claim(text: str) -> bool:
             clauses = re.split(
-                r"(?:[.!?;\n。！？；，]+|\b(?:but|and)\b|但是|但|并且|并|而且|而)",
+                r"(?:[,.!?;\n。！？；，]+|\b(?:but|and|yet)\b|但是|但|并且|并|而且|而)",
                 text,
                 flags=re.IGNORECASE,
             )
             for clause in clauses:
                 for claim_pattern, negative_pattern in promotional_claim_patterns:
                     for match in claim_pattern.finditer(clause):
-                        if negative_pattern.search(clause[: match.start()]) is None:
+                        trigger_prefix = clause[: match.start("trigger")]
+                        if negative_pattern.search(trigger_prefix) is None:
                             return True
             return False
 
@@ -7437,6 +7459,9 @@ Prompt templates for product copy, SEO content, and video scripts.
             "We do not explicitly guarantee sales",
             "我们无法保证销量",
             "我们不会确保销售额",
+            "We don't guarantee sales",
+            "We don't support automatic publishing",
+            "This tool isn't designed to guarantee sales",
         ]:
             self.assertFalse(has_promotional_claim(sample), f"legal disclaimer was rejected: {sample}")
         for sample in [
@@ -7447,6 +7472,11 @@ Prompt templates for product copy, SEO content, and video scripts.
             "support automated publishing",
             "will auto-publish",
             "我们保证销售增长",
+            "No setup required, guaranteed sales",
+            "We do not collect credentials, yet guarantee sales",
+            "Sales are guaranteed",
+            "无需设置即可保证销量",
+            "我们不收集密码, 保证销量",
         ]:
             self.assertTrue(has_promotional_claim(sample), f"promotional claim was missed: {sample}")
         for label, text in documents.items():
@@ -7531,6 +7561,33 @@ Prompt templates for product copy, SEO content, and video scripts.
             "如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。",
             "如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。",
         ]
+        upload_step_en = "Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`."
+        screenshots_step_en = (
+            "Upload the v0.5.3 icon and both reviewed localized screenshots from "
+            "`dist\\v0.5.3\\store-assets`."
+        )
+        chrome_submit_step_en = (
+            "Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for "
+            "review. If login, account verification, or captcha is required, pause for the "
+            "account owner to complete it."
+        )
+        edge_submit_step_en = (
+            "Confirm the generated publishing assets require user approval, then submit for "
+            "certification. If login, account verification, or captcha is required, pause for "
+            "the account owner to complete it."
+        )
+        upload_step_zh = "上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`。"
+        screenshots_step_zh = (
+            "上传 v0.5.3 图标和 `dist\\v0.5.3\\store-assets` 中已审核的两张本地化截图。"
+        )
+        chrome_submit_step_zh = (
+            "粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、"
+            "账号验证或 captcha，由账号所有者完成后再继续。"
+        )
+        edge_submit_step_zh = (
+            "确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，"
+            "由账号所有者完成后再继续。"
+        )
         submission_sections = [
             (
                 "English Chrome steps",
@@ -7538,6 +7595,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "## Microsoft Edge Add-ons Steps", 1
                 )[0],
                 state_markers_en,
+                upload_step_en,
+                [upload_step_en, screenshots_step_en, chrome_submit_step_en],
             ),
             (
                 "English Edge steps",
@@ -7545,6 +7604,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "## Reviewer Notes Template", 1
                 )[0],
                 state_markers_en,
+                upload_step_en,
+                [upload_step_en, screenshots_step_en, edge_submit_step_en],
             ),
             (
                 "Chinese Chrome steps",
@@ -7552,6 +7613,8 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "## Microsoft Edge Add-ons 上架步骤", 1
                 )[0],
                 state_markers_zh,
+                upload_step_zh,
+                [upload_step_zh, screenshots_step_zh, chrome_submit_step_zh],
             ),
             (
                 "Chinese Edge steps",
@@ -7559,18 +7622,28 @@ Prompt templates for product copy, SEO content, and video scripts.
                     "## 审核备注模板", 1
                 )[0],
                 state_markers_zh,
+                upload_step_zh,
+                [upload_step_zh, screenshots_step_zh, edge_submit_step_zh],
             ),
         ]
-        for label, section, state_markers in submission_sections:
-            for marker in state_markers:
+        for label, section, state_markers, upload_step, required_steps in submission_sections:
+            ordered_markers = [*state_markers, upload_step]
+            for marker in ordered_markers:
                 self.assertIn(marker, section, f"{label} missing state gate: {marker}")
-            self.assertLess(
-                section.index(state_markers[0]),
-                section.index("enhe-promotion-manager-0.5.3.zip"),
-                f"{label} must check current submission state before upload",
+            marker_positions = [section.index(marker) for marker in ordered_markers]
+            self.assertTrue(
+                all(left < right for left, right in zip(marker_positions, marker_positions[1:])),
+                f"{label} must order check, pending, published, rejected, then upload",
             )
+            normalized_section_lines = [
+                re.sub(r"^\d+\.\s*", "", line) for line in section.splitlines()
+            ]
+            for required_step in required_steps:
+                self.assertIn(required_step, normalized_section_lines, f"{label} missing step")
 
-        submission_en_lines = submission_en.splitlines()
+        submission_en_lines = [
+            re.sub(r"^\d+\.\s*", "", line) for line in submission_en.splitlines()
+        ]
         for line in [
             "- `activeTab`: capture the current product URL only after the user acts on the extension.",
             "- `storage`: store local license and endpoint settings.",
@@ -7579,16 +7652,12 @@ Prompt templates for product copy, SEO content, and video scripts.
             "- No remote code is loaded by `<script src=\"https://...\">`, dynamic imports, `importScripts`, `eval`, or `new Function`.",
             "- Remote ENHE endpoints are used for data only: license validation, usage authorization, hosted run requests, checkout, and billing portal.",
             "All extension logic stays inside the package. Remote services return data only and do not provide executable extension code.",
-            "8. Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`.",
-            "9. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\\v0.5.3\\store-assets`.",
-            "13. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for review. If login, account verification, or captcha is required, pause for the account owner to complete it.",
-            "7. Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`.",
-            "8. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\\v0.5.3\\store-assets`.",
-            "11. Confirm the generated publishing assets require user approval, then submit for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.",
         ]:
             self.assertIn(line, submission_en_lines)
 
-        submission_zh_lines = submission_zh.splitlines()
+        submission_zh_lines = [
+            re.sub(r"^\d+\.\s*", "", line) for line in submission_zh.splitlines()
+        ]
         for line in [
             "- `activeTab`：仅在用户操作扩展后读取当前产品页面 URL。",
             "- `storage`：保存本地许可证和 endpoint 设置。",
@@ -7597,12 +7666,6 @@ Prompt templates for product copy, SEO content, and video scripts.
             "- 不加载 remote code：没有远程 `<script src=\"https://...\">`、动态 import、`importScripts`、`eval` 或 `new Function`。",
             "- ENHE 远程接口只返回许可证校验、使用授权、托管运行请求、结账和账单门户所需的数据。",
             "所有扩展逻辑都在安装包内。远程服务仅返回数据，不向扩展提供可执行代码。",
-            "8. 上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`。",
-            "9. 上传 v0.5.3 图标和 `dist\\v0.5.3\\store-assets` 中已审核的两张本地化截图。",
-            "13. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。",
-            "7. 上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`。",
-            "8. 上传 v0.5.3 图标和 `dist\\v0.5.3\\store-assets` 中已审核的两张本地化截图。",
-            "11. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。",
         ]:
             self.assertIn(line, submission_zh_lines)
         self.assertIn("生成的发布素材需要用户批准", submission_zh)
