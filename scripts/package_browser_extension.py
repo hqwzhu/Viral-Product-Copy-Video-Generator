@@ -41,8 +41,18 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the Chrome/Edge store submission zip for browser-extension/.")
-    parser.add_argument("--out-dir", default="./dist", help="Output directory for the zip and package report.")
+    parser.add_argument(
+        "--out-dir",
+        default=default_out_dir(),
+        help="Output directory for the zip and package report.",
+    )
     return parser.parse_args()
+
+
+def default_out_dir() -> str:
+    manifest = json.loads((EXTENSION_DIR / "manifest.json").read_text(encoding="utf-8"))
+    version = str(manifest.get("version") or "dev").strip() or "dev"
+    return str(Path(".") / "dist" / f"v{version}")
 
 
 def build_report(out_dir: Path) -> dict[str, Any]:

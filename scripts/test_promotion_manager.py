@@ -5020,6 +5020,43 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("automation_scheduler.py", script)
         self.assertIn("ENHE Product Promo Maker Test", script)
 
+    def test_automation_scheduler_windows_task_uses_compatibility_default_name(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-default-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        config_path = out_dir / "automation.json"
+        config_path.write_text(json.dumps({"version": 1, "jobs": []}), encoding="utf-8")
+        script_path = out_dir / "register-task.ps1"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "windows-task",
+                "--config",
+                str(config_path),
+                "--out-file",
+                str(script_path),
+                "--time",
+                "09:30",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        registration = next(
+            line
+            for line in script_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Register-ScheduledTask ")
+        )
+        self.assertEqual(
+            re.findall(r"-TaskName ('[^']*')", registration),
+            ["'ENHE Promotion Manager'"],
+        )
+        self.assertEqual(
+            re.findall(r'-Description ("[^"]*")', registration),
+            ['"Runs the ENHE Product Promo Maker scheduler."'],
+        )
+        self.assertNotIn("-TaskName 'ENHE Product Promo Maker'", registration)
+
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -6791,7 +6828,8 @@ Prompt templates for product copy, SEO content, and video scripts.
             for approved_alias in approved_legal_aliases:
                 text = text.replace(approved_alias, "")
             for approved_token in approved_compatibility_tokens.get(relative_path, []):
-                text = text.replace(approved_token, "")
+                self.assertEqual(text.count(approved_token), 1, str(path))
+                text = text.replace(approved_token, "", 1)
             for retired_name in retired_names:
                 self.assertNotIn(retired_name, text, str(path))
 
@@ -7303,6 +7341,54 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon128.png", names)
         self.assertIn("_locales/en/messages.json", names)
         self.assertIn("_locales/zh_CN/messages.json", names)
+
+    def test_browser_extension_package_defaults_to_versioned_dist_without_touching_v052_artifacts(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-default-package-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        historical_paths = [
+            ROOT / "dist" / "enhe-promotion-manager-0.5.2.zip",
+            ROOT / "dist" / "browser-extension-package-report.json",
+            ROOT / "dist" / "browser-extension-package-report.md",
+        ]
+        historical_contents = {path: path.read_bytes() for path in historical_paths}
+
+        subprocess.run(
+            [sys.executable, str(PACKAGE_BROWSER_EXTENSION)],
+            check=True,
+            cwd=out_dir,
+        )
+
+        versioned_dir = out_dir / "dist" / "v0.5.3"
+        report_path = versioned_dir / "browser-extension-package-report.json"
+        self.assertTrue(report_path.exists())
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["version"], "0.5.3")
+        self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.3.zip").exists())
+        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.json").exists())
+        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.md").exists())
+        for path, expected in historical_contents.items():
+            self.assertEqual(path.read_bytes(), expected, str(path))
+
+    def test_current_readmes_use_isolated_v053_package_command(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+        retired_tokens = [
+            'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
+            r"dist\enhe-promotion-manager-<version>.zip",
+            r"dist\browser-extension-package-report.json",
+            r"dist\browser-extension-package-report.md",
+        ]
+
+        for readme_path in [
+            README,
+            ROOT / "README.en.md",
+            ROOT / "README.zh-CN.md",
+        ]:
+            readme = readme_path.read_text(encoding="utf-8")
+            with self.subTest(readme=readme_path):
+                self.assertIn(expected_command, readme)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, readme)
 
     def test_browser_extension_guides_use_isolated_v053_package_outputs(self) -> None:
         expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'

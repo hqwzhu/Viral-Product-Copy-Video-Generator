@@ -260,7 +260,7 @@ Full guide: [docs/browser-extension.md](docs/browser-extension.md)
 Build the Chrome/Edge store submission package:
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 ```
 
 Store listing and submission guide: [docs/extension-store-submission.md](docs/extension-store-submission.md)

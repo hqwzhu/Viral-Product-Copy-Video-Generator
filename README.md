@@ -277,7 +277,7 @@ python scripts\real_evidence_inbox.py `
 打包：
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 ```
 
 商业化上线还需要部署后端 License 服务、配置 Stripe、准备隐私政策/截图/商店说明，并通过 Chrome Web Store 或 Microsoft Edge Add-ons 审核。
