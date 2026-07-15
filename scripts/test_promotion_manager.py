@@ -7418,6 +7418,16 @@ Prompt templates for product copy, SEO content, and video scripts.
                 for retired_token in retired_tokens:
                     self.assertNotIn(retired_token, guide)
 
+        for roadmap_path in [
+            DOCS / "100-percent-completion-roadmap.md",
+            DOCS / "zh-CN" / "100-percent-completion-guide.md",
+        ]:
+            roadmap = roadmap_path.read_text(encoding="utf-8")
+            with self.subTest(roadmap=roadmap_path):
+                self.assertIn(expected_command, roadmap)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, roadmap)
+
     def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
         package_json_path = LICENSE_SERVICE / "package.json"
         server_path = LICENSE_SERVICE / "src" / "server.js"
