@@ -7021,7 +7021,89 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("ENHE 推广管理器", display_text)
 
     def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
-        from PIL import Image
+        import zlib
+
+        def decode_rgba_png(data: bytes) -> tuple[int, int, list[tuple[int, int, int, int]]]:
+            if data[:8] != b"\x89PNG\r\n\x1a\n":
+                raise ValueError("invalid PNG signature")
+
+            ihdr = None
+            idat_parts = []
+            offset = 8
+            while offset < len(data):
+                if offset + 8 > len(data):
+                    raise ValueError("truncated PNG chunk header")
+                length = struct.unpack(">I", data[offset : offset + 4])[0]
+                chunk_type = data[offset + 4 : offset + 8]
+                chunk_start = offset + 8
+                chunk_end = chunk_start + length
+                if chunk_end + 4 > len(data):
+                    raise ValueError("truncated PNG chunk")
+                chunk_data = data[chunk_start:chunk_end]
+                offset = chunk_end + 4
+                if chunk_type == b"IHDR":
+                    ihdr = chunk_data
+                elif chunk_type == b"IDAT":
+                    idat_parts.append(chunk_data)
+                elif chunk_type == b"IEND":
+                    break
+
+            if ihdr is None or len(ihdr) != 13:
+                raise ValueError("missing or invalid PNG IHDR")
+            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
+                ">IIBBBBB", ihdr
+            )
+            if width <= 0 or height <= 0:
+                raise ValueError("invalid PNG dimensions")
+            if (bit_depth, color_type, compression, filter_method, interlace) != (8, 6, 0, 0, 0):
+                raise ValueError("only 8-bit non-interlaced RGBA PNGs are supported")
+            if not idat_parts:
+                raise ValueError("missing PNG IDAT")
+
+            bytes_per_pixel = 4
+            stride = width * bytes_per_pixel
+            raw = zlib.decompress(b"".join(idat_parts))
+            if len(raw) != height * (stride + 1):
+                raise ValueError("unexpected PNG scanline data length")
+
+            def paeth(left: int, up: int, upper_left: int) -> int:
+                estimate = left + up - upper_left
+                left_distance = abs(estimate - left)
+                up_distance = abs(estimate - up)
+                upper_left_distance = abs(estimate - upper_left)
+                if left_distance <= up_distance and left_distance <= upper_left_distance:
+                    return left
+                if up_distance <= upper_left_distance:
+                    return up
+                return upper_left
+
+            pixels = []
+            previous = bytearray(stride)
+            offset = 0
+            for _ in range(height):
+                filter_type = raw[offset]
+                scanline = bytearray(raw[offset + 1 : offset + stride + 1])
+                offset += stride + 1
+                if filter_type not in {0, 1, 2, 3, 4}:
+                    raise ValueError(f"unsupported PNG filter type {filter_type}")
+                for index in range(stride):
+                    left = scanline[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                    up = previous[index]
+                    upper_left = previous[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                    if filter_type == 0:
+                        predictor = 0
+                    elif filter_type == 1:
+                        predictor = left
+                    elif filter_type == 2:
+                        predictor = up
+                    elif filter_type == 3:
+                        predictor = (left + up) // 2
+                    else:
+                        predictor = paeth(left, up, upper_left)
+                    scanline[index] = (scanline[index] + predictor) & 0xFF
+                pixels.extend(tuple(scanline[index : index + 4]) for index in range(0, stride, 4))
+                previous = scanline
+            return width, height, pixels
 
         versions = {16: "v2", 48: "v2", 128: "v3"}
         for size, version in versions.items():
@@ -7034,26 +7116,37 @@ Prompt templates for product copy, SEO content, and video scripts.
             width, height, bit_depth, color_type = struct.unpack(">IIBB", data[16:26])
             self.assertEqual((width, height), (size, size))
             self.assertEqual(bit_depth, 8)
-            self.assertIn(color_type, {4, 6})
+            self.assertEqual(color_type, 6)
+            decoded_width, decoded_height, pixels = decode_rgba_png(data)
+            self.assertEqual((decoded_width, decoded_height), (size, size))
+            corner_indexes = (0, size - 1, (size - 1) * size, size * size - 1)
+            self.assertEqual([pixels[index][3] for index in corner_indexes], [0, 0, 0, 0])
 
-        self.assertNotEqual(
-            (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes(),
-            (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes(),
-        )
-
-        with Image.open(BROWSER_EXTENSION / "icons" / "icon128-v2.png") as image:
-            v2_image = image.convert("RGBA")
-        with Image.open(BROWSER_EXTENSION / "icons" / "icon128-v3.png") as image:
-            v3_image = image.convert("RGBA")
-        v2_pixels = v2_image.load()
-        v3_pixels = v3_image.load()
+        v2_data = (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes()
+        v3_data = (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes()
+        self.assertTrue(v2_data != v3_data, "icon128-v3.png must differ from icon128-v2.png")
+        v2_width, v2_height, v2_pixels = decode_rgba_png(v2_data)
+        v3_width, v3_height, v3_pixels = decode_rgba_png(v3_data)
+        self.assertEqual((v2_width, v2_height), (128, 128))
+        self.assertEqual((v3_width, v3_height), (128, 128))
+        differences = [
+            (index % 128, index // 128)
+            for index, (v2_pixel, v3_pixel) in enumerate(zip(v2_pixels, v3_pixels))
+            if v2_pixel != v3_pixel
+        ]
+        self.assertTrue(differences, "icon128-v3.png must contain decoded RGBA pixel changes")
         # Half-open union of the old/new label glyph bounds, padded 1px for antialiasing.
         label_rect = (26, 97, 104, 106)
-        for y in range(128):
-            for x in range(128):
-                inside_label = label_rect[0] <= x < label_rect[2] and label_rect[1] <= y < label_rect[3]
-                if not inside_label:
-                    self.assertEqual(v3_pixels[x, y], v2_pixels[x, y], (x, y))
+        outside_differences = [
+            (x, y)
+            for x, y in differences
+            if not (label_rect[0] <= x < label_rect[2] and label_rect[1] <= y < label_rect[3])
+        ]
+        self.assertFalse(
+            outside_differences,
+            f"{len(outside_differences)} pixel changes outside label rect; "
+            f"first={outside_differences[0] if outside_differences else None}",
+        )
 
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
