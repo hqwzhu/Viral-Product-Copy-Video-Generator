@@ -239,12 +239,14 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(checkoutHtml, /ENHE Product Promo Maker Checkout/);
     assert.match(checkoutHtml, /ENHE 产品推广素材生成器 国内支付/);
     assert.doesNotMatch(checkoutHtml, /ENHE 推广管理器/);
+    assert.doesNotMatch(checkoutHtml, /ENHE Promotion Manager/);
 
     const billingPage = await fetch(`${baseUrl}/promotion-manager/billing`);
     assert.equal(billingPage.status, 200);
     const billingHtml = await billingPage.text();
     assert.match(billingHtml, /ENHE Product Promo Maker billing/);
     assert.match(billingHtml, /ENHE 产品推广素材生成器 账单/);
+    assert.doesNotMatch(billingHtml, /ENHE Promotion Manager/);
 
     const checkout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
       method: "POST",
@@ -369,6 +371,7 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(successHtml, /enhe_pm_language/);
     assert.match(successHtml, /ENHE Product Promo Maker/);
     assert.match(successHtml, /ENHE 产品推广素材生成器/);
+    assert.doesNotMatch(successHtml, /ENHE Promotion Manager/);
 
     const stateBeforeQrPayment = await store.load();
     const qrPayment = Object.values(stateBeforeQrPayment.payments)
