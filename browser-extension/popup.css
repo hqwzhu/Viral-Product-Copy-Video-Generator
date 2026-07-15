@@ -77,6 +77,14 @@ h1 {
   line-height: 1.1;
 }
 
+.product-promise {
+  max-width: 260px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 h2 {
   font-size: 13px;
 }

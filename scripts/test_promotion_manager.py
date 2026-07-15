@@ -6925,7 +6925,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
 
-        self.assertEqual(manifest["version"], "0.5.2")
+        self.assertEqual(manifest["version"], "0.5.3")
         self.assertEqual(manifest["default_locale"], "en")
         self.assertEqual(manifest["name"], "__MSG_extensionName__")
         self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
@@ -6957,6 +6957,64 @@ Prompt templates for product copy, SEO content, and video scripts.
             for key in ["extensionName", "extensionShortName", "extensionDescription", "actionTitle"]:
                 self.assertTrue(messages[key]["message"].strip())
 
+    def test_browser_extension_uses_approved_product_identity(self) -> None:
+        manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+        locales = {
+            locale: json.loads(
+                (BROWSER_EXTENSION / "_locales" / locale / "messages.json").read_text(encoding="utf-8")
+            )
+            for locale in ["en", "zh_CN"]
+        }
+        popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
+        script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+        contract = json.loads((BROWSER_EXTENSION / "billing-contract.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["version"], "0.5.3")
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
+        self.assertEqual(manifest["host_permissions"], ["https://www.enhe-tech.com.cn/*"])
+
+        expected_messages = {
+            "en": {
+                "extensionName": "ENHE Product Promo Maker",
+                "extensionShortName": "ENHE Promo",
+                "actionTitle": "ENHE Product Promo Maker",
+                "extensionDescription": (
+                    "Turn product pages into promotional copy, video scripts, publishing assets, and guarded "
+                    "local or hosted promotion tasks."
+                ),
+            },
+            "zh_CN": {
+                "extensionName": "ENHE 产品推广素材生成器",
+                "extensionShortName": "ENHE 推广素材",
+                "actionTitle": "ENHE 产品推广素材生成器",
+                "extensionDescription": "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。",
+            },
+        }
+        for locale, expected in expected_messages.items():
+            actual = {key: locales[locale][key]["message"] for key in expected}
+            self.assertEqual(actual, expected)
+            self.assertLessEqual(len(actual["extensionShortName"]), 12)
+            self.assertLessEqual(len(actual["extensionDescription"]), 132)
+
+        self.assertIn('data-i18n="productPromise"', popup)
+        self.assertIn(
+            "Turn product pages into promotional copy, video scripts, and publishing assets.",
+            script,
+        )
+        self.assertIn("把产品网页变成推广文案、视频脚本和发布素材", script)
+        self.assertEqual(contract["name"], "ENHE Product Promo Maker Billing Contract")
+
+        display_text = "\n".join(
+            [
+                popup,
+                script,
+                contract["name"],
+                *(json.dumps(messages, ensure_ascii=False) for messages in locales.values()),
+            ]
+        )
+        self.assertNotIn("ENHE 推广管理器", display_text)
+
     def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
         for size in [16, 48, 128]:
             icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
@@ -6986,8 +7044,9 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.2")
+        self.assertEqual(report["version"], "0.5.3")
         package_path = Path(report["package"])
+        self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.3.zip")
         self.assertTrue(package_path.exists())
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
