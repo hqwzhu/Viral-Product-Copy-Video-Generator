@@ -94,22 +94,30 @@ python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 1. 创建或登录 Chrome Web Store Developer Dashboard 账号。
 2. 按后台要求完成开发者注册和费用支付。
 3. 打开条目 `dloklkbnmoigemnfigbkibogmgbieppl`，不要创建新条目。
-4. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
-5. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
-6. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策。
-7. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。
-8. 说明收费功能：托管运行消耗 ENHE 订阅积分；本地命令生成可以保持免费或受试用限制。
-9. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
+4. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
+5. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
+6. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
+7. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
+8. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
+9. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
+10. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策。
+11. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。
+12. 说明收费功能：托管运行消耗 ENHE 订阅积分；本地命令生成可以保持免费或受试用限制。
+13. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## Microsoft Edge Add-ons 上架步骤
 
 1. 创建或登录 Microsoft Partner Center 账号。
 2. 如果已有 Microsoft Edge 扩展条目，打开现有提交，不为同一扩展创建替代条目。
-3. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
-4. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
-5. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。
-6. 在审核备注中说明远程服务只返回数据，全部扩展逻辑都在安装包内。
-7. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
+3. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
+4. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
+5. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
+6. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
+7. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
+8. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
+9. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。
+10. 在审核备注中说明远程服务只返回数据，全部扩展逻辑都在安装包内。
+11. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## 审核备注模板
 
@@ -123,7 +131,7 @@ ENHE Product Promo Maker is a Manifest V3 extension that turns a product page se
 
 - 托管运行前校验许可证。
 - 运行前预留积分。
-- 运行完成后按实际消耗提交积分。
+- 运行完成后按实际消耗结算积分。
 - 失败时退回未使用的预留积分。
 - 支付平台密钥和 webhook secret 只保存在后端。
 

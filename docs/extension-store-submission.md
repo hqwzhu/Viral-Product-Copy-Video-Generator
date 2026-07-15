@@ -96,22 +96,30 @@ Use the detailed localized descriptions from `docs/store/chrome-listing.md` and 
 1. Create or open a Chrome Web Store Developer Dashboard account.
 2. Pay any required developer registration fee in the dashboard.
 3. Open item `dloklkbnmoigemnfigbkibogmgbieppl`; do not create a new item.
-4. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
-5. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
-6. Fill the localized name, short description, detailed description, category, product website, support URL, and privacy policy fields from the committed documents.
-7. Fill privacy practices using the permission justifications above. State that the extension does not collect platform passwords, cookies, payment secrets, or API tokens.
-8. Explain paid features: hosted runs require ENHE subscription credits; local command generation can remain free or trial-limited.
-9. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for review. If login, account verification, or captcha is required, pause for the account owner to complete it.
+4. Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:
+5. If v0.5.2 is pending review, do not replace it; wait for the review result.
+6. If v0.5.2 is published, continue with the v0.5.3 upload as an update.
+7. If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.
+8. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
+9. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
+10. Fill the localized name, short description, detailed description, category, product website, support URL, and privacy policy fields from the committed documents.
+11. Fill privacy practices using the permission justifications above. State that the extension does not collect platform passwords, cookies, payment secrets, or API tokens.
+12. Explain paid features: hosted runs require ENHE subscription credits; local command generation can remain free or trial-limited.
+13. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for review. If login, account verification, or captcha is required, pause for the account owner to complete it.
 
 ## Microsoft Edge Add-ons Steps
 
 1. Create or open a Microsoft Partner Center account.
 2. Open the existing Microsoft Edge extension submission when applicable; do not create a replacement for an existing item.
-3. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
-4. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
-5. Fill the localized product descriptions, category, privacy policy, support URL, permission justifications, and certification notes.
-6. In reviewer notes, state that remote services return data only and that all extension logic is inside the package.
-7. Confirm the generated publishing assets require user approval, then submit for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.
+3. Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:
+4. If v0.5.2 is pending review, do not replace it; wait for the review result.
+5. If v0.5.2 is published, continue with the v0.5.3 upload as an update.
+6. If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.
+7. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
+8. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
+9. Fill the localized product descriptions, category, privacy policy, support URL, permission justifications, and certification notes.
+10. In reviewer notes, state that remote services return data only and that all extension logic is inside the package.
+11. Confirm the generated publishing assets require user approval, then submit for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.
 
 ## Reviewer Notes Template
 
