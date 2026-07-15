@@ -7394,31 +7394,88 @@ Prompt templates for product copy, SEO content, and video scripts.
             for marker in markers:
                 self.assertIn(marker, text, f"{path} missing {marker}")
 
-        for path in [
-            DOCS / "legal/privacy-policy.md",
-            DOCS / "legal/terms-of-service.md",
-            DOCS / "legal/refund-policy.md",
-            DOCS / "legal/support.md",
-        ]:
+        english_identity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)"
+        english_legal_expectations = {
+            DOCS / "legal/privacy-policy.md": {
+                "heading": "# ENHE Product Promo Maker Privacy Policy",
+                "opening": (
+                    "This policy explains how ENHE AI processes information for "
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser "
+                    "extension and optional hosted service."
+                ),
+                "date": "Effective date: 2026-07-15",
+            },
+            DOCS / "legal/terms-of-service.md": {
+                "heading": "# ENHE Product Promo Maker Terms Of Service",
+                "opening": (
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser "
+                    "extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution."
+                ),
+                "date": "Effective date: 2026-07-10",
+            },
+            DOCS / "legal/refund-policy.md": {
+                "heading": "# ENHE Product Promo Maker Refund Policy",
+                "opening": (
+                    "This policy applies to purchases of "
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager)."
+                ),
+                "date": "Effective date: 2026-07-10",
+            },
+            DOCS / "legal/support.md": {
+                "heading": "# ENHE Product Promo Maker Support",
+                "opening": (
+                    "Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) "
+                    "is available through the public support URL below."
+                ),
+            },
+        }
+        for path, expected in english_legal_expectations.items():
             text = path.read_text(encoding="utf-8")
-            self.assertIn("ENHE Product Promo Maker", text, f"{path} missing new product name")
+            lines = text.splitlines()
+            self.assertEqual(lines[0], expected["heading"], f"{path} has the wrong heading")
+            self.assertIn(expected["opening"], lines, f"{path} missing exact opening sentence")
+            if "date" in expected:
+                self.assertIn(expected["date"], lines, f"{path} missing effective date")
             self.assertEqual(
-                text.count("formerly ENHE Promotion Manager"),
+                text.count(english_identity),
                 1,
-                f"{path} must contain the transition alias exactly once",
+                f"{path} must contain the full identity exactly once",
+            )
+            self.assertEqual(
+                text.count("ENHE Promotion Manager"),
+                1,
+                f"{path} must contain the old product name exactly once",
             )
 
         chinese_privacy_path = DOCS / "legal/privacy-policy.zh-CN.md"
         chinese_privacy = chinese_privacy_path.read_text(encoding="utf-8")
-        self.assertIn(
-            "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）",
-            chinese_privacy,
-            f"{chinese_privacy_path} missing Chinese transition alias",
+        chinese_lines = chinese_privacy.splitlines()
+        chinese_identity = "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
+        chinese_opening = (
+            "本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
+            "浏览器扩展程序及其可选托管服务中的信息。"
+        )
+        self.assertEqual(
+            chinese_lines[0],
+            "# ENHE 产品推广素材生成器隐私政策",
+            f"{chinese_privacy_path} has the wrong heading",
+        )
+        self.assertIn("生效日期：2026-07-15", chinese_lines, f"{chinese_privacy_path} missing effective date")
+        self.assertIn(chinese_opening, chinese_lines, f"{chinese_privacy_path} missing exact opening sentence")
+        self.assertEqual(
+            chinese_privacy.count(chinese_identity),
+            1,
+            f"{chinese_privacy_path} must contain the full identity exactly once",
         )
         self.assertEqual(
             chinese_privacy.count("（原 ENHE Promotion Manager）"),
             1,
             f"{chinese_privacy_path} must contain the transition alias exactly once",
+        )
+        self.assertEqual(
+            chinese_privacy.count("ENHE Promotion Manager"),
+            1,
+            f"{chinese_privacy_path} must contain the old product name exactly once",
         )
 
     def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:

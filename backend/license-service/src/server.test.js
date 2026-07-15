@@ -45,8 +45,22 @@ test("privacy page publishes the approved English and Chinese retention policy",
     const response = await fetch(`${baseUrl}/promotion-manager/privacy`);
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /ENHE Product Promo Maker \(formerly ENHE Promotion Manager\)/);
-    assert.match(html, /ENHE 产品推广素材生成器（原 ENHE Promotion Manager）/);
+    const englishIdentity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)";
+    const chineseIdentity = "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）";
+    assert.ok(html.includes("<h1>ENHE Product Promo Maker Privacy Policy</h1>"));
+    assert.ok(html.includes("Effective date: 2026-07-15"));
+    assert.ok(html.includes(
+      "This policy explains how ENHE AI processes information for ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser extension and optional hosted service."
+    ));
+    assert.equal(html.split(englishIdentity).length - 1, 1);
+    assert.equal(html.split("formerly ENHE Promotion Manager").length - 1, 1);
+    assert.ok(html.includes("<h1>ENHE 产品推广素材生成器隐私政策</h1>"));
+    assert.ok(html.includes("生效日期：2026-07-15"));
+    assert.ok(html.includes(
+      "本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）浏览器扩展程序及其可选托管服务中的信息。"
+    ));
+    assert.equal(html.split(chineseIdentity).length - 1, 1);
+    assert.equal(html.split("（原 ENHE Promotion Manager）").length - 1, 1);
     assert.match(html, /中文 \/ EN/);
     assert.match(html, /automatically deleted 30 days/);
     assert.match(html, /retained for 180 days/);
@@ -65,17 +79,35 @@ test("public legal pages use the new name and one transition alias", async () =>
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const identity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)";
+  const expectations = {
+    terms: {
+      heading: "<h1>ENHE Product Promo Maker Terms Of Service</h1>",
+      opening: "ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.",
+      effectiveDate: "Effective date: 2026-07-10"
+    },
+    refund: {
+      heading: "<h1>ENHE Product Promo Maker Refund Policy</h1>",
+      opening: "This policy applies to purchases of ENHE Product Promo Maker (formerly ENHE Promotion Manager).",
+      effectiveDate: "Effective date: 2026-07-10"
+    },
+    support: {
+      heading: "<h1>ENHE Product Promo Maker Support</h1>",
+      opening: "Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) is available through the public support URL below."
+    }
+  };
   try {
-    for (const page of ["terms", "refund", "support"]) {
+    for (const [page, expected] of Object.entries(expectations)) {
       const response = await fetch(`${baseUrl}/promotion-manager/${page}`);
-      assert.equal(response.status, 200);
+      assert.equal(response.status, 200, `${page} must be public`);
       const html = await response.text();
-      assert.match(html, /ENHE Product Promo Maker/);
-      assert.equal(
-        (html.match(/formerly ENHE Promotion Manager/g) || []).length,
-        1,
-        `${page} must use the transition alias exactly once`
-      );
+      assert.ok(html.includes(expected.heading), `${page} must render its exact heading`);
+      assert.ok(html.includes(expected.opening), `${page} must render its exact opening sentence`);
+      if (expected.effectiveDate) {
+        assert.ok(html.includes(expected.effectiveDate), `${page} must render its effective date`);
+      }
+      assert.equal(html.split(identity).length - 1, 1, `${page} must use the full identity exactly once`);
+      assert.equal(html.split("formerly ENHE Promotion Manager").length - 1, 1, `${page} must use the old name exactly once`);
     }
   } finally {
     await new Promise((resolve) => server.close(resolve));
