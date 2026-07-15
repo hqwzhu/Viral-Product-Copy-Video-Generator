@@ -7029,6 +7029,7 @@ Prompt templates for product copy, SEO content, and video scripts.
 
             ihdr = None
             idat_parts = []
+            iend_seen = False
             offset = 8
             while offset < len(data):
                 if offset + 8 > len(data):
@@ -7040,14 +7041,26 @@ Prompt templates for product copy, SEO content, and video scripts.
                 if chunk_end + 4 > len(data):
                     raise ValueError("truncated PNG chunk")
                 chunk_data = data[chunk_start:chunk_end]
+                stored_crc = struct.unpack(">I", data[chunk_end : chunk_end + 4])[0]
+                computed_crc = zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+                if stored_crc != computed_crc:
+                    chunk_name = chunk_type.decode("ascii", errors="replace")
+                    raise ValueError(f"{chunk_name} CRC mismatch")
                 offset = chunk_end + 4
                 if chunk_type == b"IHDR":
                     ihdr = chunk_data
                 elif chunk_type == b"IDAT":
                     idat_parts.append(chunk_data)
                 elif chunk_type == b"IEND":
+                    if length != 0:
+                        raise ValueError("IEND chunk must be empty")
+                    iend_seen = True
+                    if offset != len(data):
+                        raise ValueError("trailing data after IEND")
                     break
 
+            if not iend_seen:
+                raise ValueError("missing IEND")
             if ihdr is None or len(ihdr) != 13:
                 raise ValueError("missing or invalid PNG IHDR")
             width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
@@ -7124,6 +7137,16 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         v2_data = (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes()
         v3_data = (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes()
+        self.assertEqual(v3_data[-12:-4], b"\x00\x00\x00\x00IEND")
+        with self.subTest("missing IEND"):
+            with self.assertRaisesRegex(ValueError, "missing IEND"):
+                decode_rgba_png(v3_data[:-12])
+        invalid_ihdr_crc = bytearray(v3_data)
+        ihdr_crc_offset = 8 + 4 + 4 + 13
+        invalid_ihdr_crc[ihdr_crc_offset] ^= 0x01
+        with self.subTest("invalid IHDR CRC"):
+            with self.assertRaisesRegex(ValueError, "CRC"):
+                decode_rgba_png(bytes(invalid_ihdr_crc))
         self.assertTrue(v2_data != v3_data, "icon128-v3.png must differ from icon128-v2.png")
         v2_width, v2_height, v2_pixels = decode_rgba_png(v2_data)
         v3_width, v3_height, v3_pixels = decode_rgba_png(v3_data)
