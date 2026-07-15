@@ -7345,24 +7345,88 @@ Prompt templates for product copy, SEO content, and video scripts.
         submission_en = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
         submission_zh = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
 
-        for text in [chrome, edge, reviewer_notes, screenshot_plan, submission_en, submission_zh]:
+        documents = {
+            "chrome listing": chrome,
+            "edge listing": edge,
+            "reviewer notes": reviewer_notes,
+            "screenshot plan": screenshot_plan,
+            "English submission guide": submission_en,
+            "Chinese submission guide": submission_zh,
+        }
+        for label, text in documents.items():
             self.assertIn("ENHE Product Promo Maker", text)
             self.assertNotIn("ENHE 推广管理器", text)
+            self.assertNotIn("0.5.2", text, f"{label} contains the superseded version")
+
+        forbidden_terms = {
+            "guarantee/guaranteed": r"\bguarantee(?:d)?\b",
+            "virality": r"\bvirality\b",
+            "conversion": r"\bconversion\b",
+            "traffic": r"\btraffic\b",
+            "sales": r"\bsales\b",
+            "revenue": r"\brevenue\b",
+            "automatic publishing": r"\bautomatic\s+publishing\b",
+        }
+        for label, text in documents.items():
+            for term, pattern in forbidden_terms.items():
+                self.assertIsNone(
+                    re.search(pattern, text, flags=re.IGNORECASE),
+                    f"{label} contains forbidden promise term: {term}",
+                )
 
         for text in [chrome, edge, submission_zh]:
             self.assertIn("ENHE 产品推广素材生成器", text)
 
-        self.assertIn(
-            "Turn product pages into promotional copy, video scripts, publishing assets, and guarded local or hosted promotion tasks.",
-            chrome,
+        english_promise = (
+            "Turn product pages into promotional copy, video scripts, publishing assets, "
+            "and guarded local or hosted promotion tasks."
         )
-        self.assertIn(
-            "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。",
-            chrome,
+        chinese_promise = "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。"
+        self.assertIn(english_promise, chrome)
+        self.assertIn(chinese_promise, chrome)
+        for listing in [chrome, edge]:
+            self.assertIn(f"### Detailed Description\n\n{english_promise}", listing)
+            self.assertIn(f"### 详细说明\n\n{chinese_promise}", listing)
+
+        reviewer_sentence = (
+            "ENHE Product Promo Maker is a Manifest V3 extension that turns a product page "
+            "selected by the user into promotional copy, video scripts, publishing assets, "
+            "and guarded local commands or hosted ENHE run payloads."
         )
+        self.assertIn(f"```text\n{reviewer_sentence}\n", reviewer_notes)
+
         self.assertIn("ENHE Promo Maker", screenshot_plan)
-        for text in [submission_en, submission_zh]:
+        for asset_line in [
+            "`browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
+            "the label `ENHE Promo Maker`.",
+            "`dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
+            "`dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
+        ]:
+            self.assertIn(asset_line, screenshot_plan)
+
+        submission_markers = [
+            "https://developer.chrome.com/docs/webstore/publish",
+            "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
+            "dloklkbnmoigemnfigbkibogmgbieppl",
+            "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+            "https://www.enhe-tech.com.cn/promotion-manager/support",
+            "`activeTab`",
+            "`storage`",
+            "`clipboardWrite`",
+            "remote code",
+            "enhe-promotion-manager-0.5.3.zip",
+        ]
+        for label, text in [
+            ("English submission guide", submission_en),
+            ("Chinese submission guide", submission_zh),
+        ]:
+            for marker in submission_markers:
+                self.assertIn(marker, text, f"{label} missing {marker}")
             self.assertIn("dist/v0.5.3", text.replace("\\", "/"))
+        self.assertIn("user approval", submission_en)
+        self.assertIn("submit for certification", submission_en)
+        self.assertIn("生成的发布素材需要用户批准", submission_zh)
+        self.assertIn("提交审核", submission_zh)
 
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
