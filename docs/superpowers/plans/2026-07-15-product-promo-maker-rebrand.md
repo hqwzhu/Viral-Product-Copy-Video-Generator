@@ -1038,7 +1038,8 @@ Expected: all Node tests pass.
 Run:
 
 ```powershell
-python -m unittest scripts.test_promotion_manager -v
+New-Item -ItemType Directory -Force -Path 'promotion-output' | Out-Null
+python scripts/test_promotion_manager.py -v
 ```
 
 Expected: final output is `OK` with no failures or errors.
@@ -1116,7 +1117,7 @@ $body = @"
 
 ## Validation
 - npm test
-- python -m unittest scripts.test_promotion_manager -v
+- python scripts/test_promotion_manager.py -v
 - scripts/package_browser_extension.py reports ready for v0.5.3
 - unpacked Chrome checks in English and Simplified Chinese
 "@
