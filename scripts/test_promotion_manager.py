@@ -7021,9 +7021,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("ENHE 推广管理器", display_text)
 
     def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
-        for size in [16, 48, 128]:
+        versions = {16: "v2", 48: "v2", 128: "v3"}
+        for size, version in versions.items():
             icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
-            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-v2.png"
+            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-{version}.png"
             self.assertTrue(versioned_path.exists(), versioned_path)
             data = icon_path.read_bytes()
             self.assertEqual(data, versioned_path.read_bytes())
@@ -7032,6 +7033,11 @@ Prompt templates for product copy, SEO content, and video scripts.
             self.assertEqual((width, height), (size, size))
             self.assertEqual(bit_depth, 8)
             self.assertIn(color_type, {4, 6})
+
+        self.assertNotEqual(
+            (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes(),
+            (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes(),
+        )
 
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
