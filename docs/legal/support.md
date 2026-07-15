@@ -1,6 +1,6 @@
-# ENHE Promotion Manager Support
+# ENHE Product Promo Maker Support
 
-Use this page as the public support URL for Chrome Web Store and Microsoft Edge Add-ons submission.
+Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) is available through the public support URL below.
 
 ## Support URL
 

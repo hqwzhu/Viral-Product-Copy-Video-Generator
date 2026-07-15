@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the 100% completion roadmap for ENHE Promotion Manager."""
+"""Generate the 100% completion roadmap for ENHE Product Promo Maker."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# ENHE Promotion Manager Terms Of Service
+# ENHE Product Promo Maker Terms Of Service
 
 Effective date: 2026-07-10
 
@@ -6,7 +6,7 @@ This is a launch draft. Review with counsel before public launch.
 
 ## Service
 
-ENHE Promotion Manager provides a browser extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.
+ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.
 
 ## User Responsibilities
 

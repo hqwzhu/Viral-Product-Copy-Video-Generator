@@ -5008,7 +5008,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 "--out-file",
                 str(script_path),
                 "--task-name",
-                "ENHE Promotion Manager Test",
+                "ENHE Product Promo Maker Test",
                 "--time",
                 "09:30",
             ],
@@ -5018,7 +5018,44 @@ Prompt templates for product copy, SEO content, and video scripts.
         script = script_path.read_text(encoding="utf-8")
         self.assertIn("Register-ScheduledTask", script)
         self.assertIn("automation_scheduler.py", script)
-        self.assertIn("ENHE Promotion Manager Test", script)
+        self.assertIn("ENHE Product Promo Maker Test", script)
+
+    def test_automation_scheduler_windows_task_uses_compatibility_default_name(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="promotion-windows-task-default-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        config_path = out_dir / "automation.json"
+        config_path.write_text(json.dumps({"version": 1, "jobs": []}), encoding="utf-8")
+        script_path = out_dir / "register-task.ps1"
+        subprocess.run(
+            [
+                sys.executable,
+                str(AUTOMATION_SCHEDULER),
+                "windows-task",
+                "--config",
+                str(config_path),
+                "--out-file",
+                str(script_path),
+                "--time",
+                "09:30",
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+
+        registration = next(
+            line
+            for line in script_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Register-ScheduledTask ")
+        )
+        self.assertEqual(
+            re.findall(r"-TaskName ('[^']*')", registration),
+            ["'ENHE Promotion Manager'"],
+        )
+        self.assertEqual(
+            re.findall(r'-Description ("[^"]*")', registration),
+            ['"Runs the ENHE Product Promo Maker scheduler."'],
+        )
+        self.assertNotIn("-TaskName 'ENHE Product Promo Maker'", registration)
 
     def test_competitor_intake_imports_html_evidence(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="competitor-intake-test-"))
@@ -6735,11 +6772,101 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertTrue(Path(cycle["commentEvidenceCapture"]["commentEvidenceExport"]).exists())
         self.assertTrue(Path(cycle["businessAttribution"]["businessAttributionExport"]).exists())
 
+    def test_current_user_facing_files_do_not_use_retired_product_name(self) -> None:
+        approved_legal_aliases = [
+            "ENHE Product Promo Maker (formerly ENHE Promotion Manager)",
+            "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）",
+        ]
+        approved_compatibility_tokens = {
+            "browser-extension/popup.js": [
+                '"--task-name \\"ENHE Promotion Manager\\""',
+            ],
+            "scripts/automation_scheduler.py": [
+                'task.add_argument("--task-name", default="ENHE Promotion Manager")',
+            ],
+        }
+        retired_names = [
+            "ENHE Promotion Manager",
+            "ENHE 推广管理器",
+            "Promotion Manager",
+            "推广管理器",
+        ]
+        current_files = [
+            "README.md",
+            "README.en.md",
+            "README.zh-CN.md",
+            "browser-extension/popup.js",
+            "backend/license-service/README.md",
+            "backend/license-service/package.json",
+            "backend/license-service/src/migrate.js",
+            "backend/license-service/src/server.js",
+            "backend/license-service/src/worker.js",
+            "deploy/promotion-manager/README.md",
+            "deploy/promotion-manager/enhe-promotion-manager-api.service",
+            "deploy/promotion-manager/enhe-promotion-manager-worker.service",
+            "docs/100-percent-completion-roadmap.md",
+            "docs/browser-extension.md",
+            "docs/mediacrawler-sidecar.md",
+            "docs/open-source-integration.md",
+            "docs/zh-CN/browser-extension.md",
+            "references/workflow.md",
+            "scripts/automation_scheduler.py",
+            "scripts/billing_contract_simulator.py",
+            "scripts/completion_roadmap.py",
+            "scripts/final_capability_audit.py",
+            "scripts/mediacrawler_contract.py",
+            "scripts/mediacrawler_downstream.py",
+            "scripts/package_browser_extension.py",
+            "scripts/platform_capabilities.py",
+            "scripts/platform_data_manager.py",
+            "scripts/publish_executor.py",
+        ]
+
+        for relative_path in current_files:
+            path = ROOT / relative_path
+            text = path.read_text(encoding="utf-8")
+            for approved_alias in approved_legal_aliases:
+                text = text.replace(approved_alias, "")
+            for approved_token in approved_compatibility_tokens.get(relative_path, []):
+                self.assertEqual(text.count(approved_token), 1, str(path))
+                text = text.replace(approved_token, "", 1)
+            for retired_name in retired_names:
+                self.assertNotIn(retired_name, text, str(path))
+
+    def test_rebrand_preserves_internal_compatibility_identifiers(self) -> None:
+        popup = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+        self.assertIn("/api/promotion-manager/license", popup)
+        self.assertIn("/promotion-manager/checkout", popup)
+        self.assertIn('"--task-name \\"ENHE Promotion Manager\\""', popup)
+
+        scheduler = AUTOMATION_SCHEDULER.read_text(encoding="utf-8")
+        self.assertIn('task.add_argument("--task-name", default="ENHE Promotion Manager")', scheduler)
+        self.assertIn(
+            '-Description "Runs the ENHE Product Promo Maker scheduler."',
+            scheduler,
+        )
+
+        package_json = json.loads((LICENSE_SERVICE / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(package_json["name"], "enhe-promotion-manager-license-service")
+
+        package_script = PACKAGE_BROWSER_EXTENSION.read_text(encoding="utf-8")
+        self.assertIn('return f"enhe-promotion-manager-{version}.zip"', package_script)
+
+        state_store = (LICENSE_SERVICE / "src" / "state-store.js").read_text(encoding="utf-8")
+        self.assertIn("promotion_manager_state", state_store)
+
+        deploy_readme = (ROOT / "deploy" / "promotion-manager" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("/opt/enhe/promotion-manager/current", deploy_readme)
+        self.assertIn("/var/lib/enhe-promotion-manager", deploy_readme)
+
+        self.assertTrue((ROOT / "deploy/promotion-manager/enhe-promotion-manager-api.service").exists())
+        self.assertTrue((ROOT / "deploy/promotion-manager/enhe-promotion-manager-worker.service").exists())
+
     def test_github_docs_include_intro_usage_install_extension_and_pricing(self) -> None:
         self.assertTrue(README.exists())
         readme = README.read_text(encoding="utf-8")
         for marker in [
-            "ENHE Promotion Manager",
+            "ENHE Product Promo Maker",
             "README.zh-CN.md",
             "Quick Start",
             "Install",
@@ -6925,7 +7052,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
 
-        self.assertEqual(manifest["version"], "0.5.2")
+        self.assertEqual(manifest["version"], "0.5.3")
         self.assertEqual(manifest["default_locale"], "en")
         self.assertEqual(manifest["name"], "__MSG_extensionName__")
         self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
@@ -6957,10 +7084,171 @@ Prompt templates for product copy, SEO content, and video scripts.
             for key in ["extensionName", "extensionShortName", "extensionDescription", "actionTitle"]:
                 self.assertTrue(messages[key]["message"].strip())
 
+    def test_browser_extension_uses_approved_product_identity(self) -> None:
+        manifest = json.loads((BROWSER_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+        locales = {
+            locale: json.loads(
+                (BROWSER_EXTENSION / "_locales" / locale / "messages.json").read_text(encoding="utf-8")
+            )
+            for locale in ["en", "zh_CN"]
+        }
+        popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
+        script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
+        contract = json.loads((BROWSER_EXTENSION / "billing-contract.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["version"], "0.5.3")
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
+        self.assertEqual(manifest["host_permissions"], ["https://www.enhe-tech.com.cn/*"])
+
+        expected_messages = {
+            "en": {
+                "extensionName": "ENHE Product Promo Maker",
+                "extensionShortName": "ENHE Promo",
+                "actionTitle": "ENHE Product Promo Maker",
+                "extensionDescription": (
+                    "Turn product pages into promotional copy, video scripts, publishing assets, and guarded "
+                    "local or hosted promotion tasks."
+                ),
+            },
+            "zh_CN": {
+                "extensionName": "ENHE 产品推广素材生成器",
+                "extensionShortName": "ENHE 推广素材",
+                "actionTitle": "ENHE 产品推广素材生成器",
+                "extensionDescription": "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。",
+            },
+        }
+        for locale, expected in expected_messages.items():
+            actual = {key: locales[locale][key]["message"] for key in expected}
+            self.assertEqual(actual, expected)
+            self.assertLessEqual(len(actual["extensionShortName"]), 12)
+            self.assertLessEqual(len(actual["extensionDescription"]), 132)
+
+        self.assertIn('data-i18n="productPromise"', popup)
+        self.assertIn(
+            "Turn product pages into promotional copy, video scripts, and publishing assets.",
+            script,
+        )
+        self.assertIn("把产品网页变成推广文案、视频脚本和发布素材", script)
+        self.assertIn('appTitle: "ENHE Product Promo Maker"', script)
+        self.assertIn('appTitle: "ENHE 产品推广素材生成器"', script)
+        apply_translations = script.split("function applyTranslations() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn('document.title = t("appTitle");', apply_translations)
+        self.assertNotIn('document.title = `ENHE ${t("appTitle")}`;', apply_translations)
+        self.assertEqual(contract["name"], "ENHE Product Promo Maker Billing Contract")
+
+        display_text = "\n".join(
+            [
+                popup,
+                script,
+                contract["name"],
+                *(json.dumps(messages, ensure_ascii=False) for messages in locales.values()),
+            ]
+        )
+        self.assertNotIn("ENHE 推广管理器", display_text)
+
     def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
-        for size in [16, 48, 128]:
+        import zlib
+
+        def decode_rgba_png(data: bytes) -> tuple[int, int, list[tuple[int, int, int, int]]]:
+            if data[:8] != b"\x89PNG\r\n\x1a\n":
+                raise ValueError("invalid PNG signature")
+
+            ihdr = None
+            idat_parts = []
+            iend_seen = False
+            offset = 8
+            while offset < len(data):
+                if offset + 8 > len(data):
+                    raise ValueError("truncated PNG chunk header")
+                length = struct.unpack(">I", data[offset : offset + 4])[0]
+                chunk_type = data[offset + 4 : offset + 8]
+                chunk_start = offset + 8
+                chunk_end = chunk_start + length
+                if chunk_end + 4 > len(data):
+                    raise ValueError("truncated PNG chunk")
+                chunk_data = data[chunk_start:chunk_end]
+                stored_crc = struct.unpack(">I", data[chunk_end : chunk_end + 4])[0]
+                computed_crc = zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+                if stored_crc != computed_crc:
+                    chunk_name = chunk_type.decode("ascii", errors="replace")
+                    raise ValueError(f"{chunk_name} CRC mismatch")
+                offset = chunk_end + 4
+                if chunk_type == b"IHDR":
+                    ihdr = chunk_data
+                elif chunk_type == b"IDAT":
+                    idat_parts.append(chunk_data)
+                elif chunk_type == b"IEND":
+                    if length != 0:
+                        raise ValueError("IEND chunk must be empty")
+                    iend_seen = True
+                    if offset != len(data):
+                        raise ValueError("trailing data after IEND")
+                    break
+
+            if not iend_seen:
+                raise ValueError("missing IEND")
+            if ihdr is None or len(ihdr) != 13:
+                raise ValueError("missing or invalid PNG IHDR")
+            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
+                ">IIBBBBB", ihdr
+            )
+            if width <= 0 or height <= 0:
+                raise ValueError("invalid PNG dimensions")
+            if (bit_depth, color_type, compression, filter_method, interlace) != (8, 6, 0, 0, 0):
+                raise ValueError("only 8-bit non-interlaced RGBA PNGs are supported")
+            if not idat_parts:
+                raise ValueError("missing PNG IDAT")
+
+            bytes_per_pixel = 4
+            stride = width * bytes_per_pixel
+            raw = zlib.decompress(b"".join(idat_parts))
+            if len(raw) != height * (stride + 1):
+                raise ValueError("unexpected PNG scanline data length")
+
+            def paeth(left: int, up: int, upper_left: int) -> int:
+                estimate = left + up - upper_left
+                left_distance = abs(estimate - left)
+                up_distance = abs(estimate - up)
+                upper_left_distance = abs(estimate - upper_left)
+                if left_distance <= up_distance and left_distance <= upper_left_distance:
+                    return left
+                if up_distance <= upper_left_distance:
+                    return up
+                return upper_left
+
+            pixels = []
+            previous = bytearray(stride)
+            offset = 0
+            for _ in range(height):
+                filter_type = raw[offset]
+                scanline = bytearray(raw[offset + 1 : offset + stride + 1])
+                offset += stride + 1
+                if filter_type not in {0, 1, 2, 3, 4}:
+                    raise ValueError(f"unsupported PNG filter type {filter_type}")
+                for index in range(stride):
+                    left = scanline[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                    up = previous[index]
+                    upper_left = previous[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                    if filter_type == 0:
+                        predictor = 0
+                    elif filter_type == 1:
+                        predictor = left
+                    elif filter_type == 2:
+                        predictor = up
+                    elif filter_type == 3:
+                        predictor = (left + up) // 2
+                    else:
+                        predictor = paeth(left, up, upper_left)
+                    scanline[index] = (scanline[index] + predictor) & 0xFF
+                pixels.extend(tuple(scanline[index : index + 4]) for index in range(0, stride, 4))
+                previous = scanline
+            return width, height, pixels
+
+        versions = {16: "v2", 48: "v2", 128: "v3"}
+        for size, version in versions.items():
             icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
-            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-v2.png"
+            versioned_path = BROWSER_EXTENSION / "icons" / f"icon{size}-{version}.png"
             self.assertTrue(versioned_path.exists(), versioned_path)
             data = icon_path.read_bytes()
             self.assertEqual(data, versioned_path.read_bytes())
@@ -6968,7 +7256,47 @@ Prompt templates for product copy, SEO content, and video scripts.
             width, height, bit_depth, color_type = struct.unpack(">IIBB", data[16:26])
             self.assertEqual((width, height), (size, size))
             self.assertEqual(bit_depth, 8)
-            self.assertIn(color_type, {4, 6})
+            self.assertEqual(color_type, 6)
+            decoded_width, decoded_height, pixels = decode_rgba_png(data)
+            self.assertEqual((decoded_width, decoded_height), (size, size))
+            corner_indexes = (0, size - 1, (size - 1) * size, size * size - 1)
+            self.assertEqual([pixels[index][3] for index in corner_indexes], [0, 0, 0, 0])
+
+        v2_data = (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes()
+        v3_data = (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes()
+        self.assertEqual(v3_data[-12:-4], b"\x00\x00\x00\x00IEND")
+        with self.subTest("missing IEND"):
+            with self.assertRaisesRegex(ValueError, "missing IEND"):
+                decode_rgba_png(v3_data[:-12])
+        invalid_ihdr_crc = bytearray(v3_data)
+        ihdr_crc_offset = 8 + 4 + 4 + 13
+        invalid_ihdr_crc[ihdr_crc_offset] ^= 0x01
+        with self.subTest("invalid IHDR CRC"):
+            with self.assertRaisesRegex(ValueError, "CRC"):
+                decode_rgba_png(bytes(invalid_ihdr_crc))
+        self.assertTrue(v2_data != v3_data, "icon128-v3.png must differ from icon128-v2.png")
+        v2_width, v2_height, v2_pixels = decode_rgba_png(v2_data)
+        v3_width, v3_height, v3_pixels = decode_rgba_png(v3_data)
+        self.assertEqual((v2_width, v2_height), (128, 128))
+        self.assertEqual((v3_width, v3_height), (128, 128))
+        differences = [
+            (index % 128, index // 128)
+            for index, (v2_pixel, v3_pixel) in enumerate(zip(v2_pixels, v3_pixels))
+            if v2_pixel != v3_pixel
+        ]
+        self.assertTrue(differences, "icon128-v3.png must contain decoded RGBA pixel changes")
+        # Half-open union of the old/new label glyph bounds, padded 1px for antialiasing.
+        label_rect = (26, 97, 104, 106)
+        outside_differences = [
+            (x, y)
+            for x, y in differences
+            if not (label_rect[0] <= x < label_rect[2] and label_rect[1] <= y < label_rect[3])
+        ]
+        self.assertFalse(
+            outside_differences,
+            f"{len(outside_differences)} pixel changes outside label rect; "
+            f"first={outside_differences[0] if outside_differences else None}",
+        )
 
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
@@ -6986,8 +7314,9 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.2")
+        self.assertEqual(report["version"], "0.5.3")
         package_path = Path(report["package"])
+        self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.3.zip")
         self.assertTrue(package_path.exists())
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
@@ -6995,6 +7324,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(
             report["storeSubmission"]["privacyPolicyUrl"],
             "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+        )
+        self.assertEqual(
+            report["storeSubmission"]["supportUrl"],
+            "https://www.enhe-tech.com.cn/promotion-manager/support",
         )
         with zipfile.ZipFile(package_path) as package:
             names = set(package.namelist())
@@ -7008,6 +7341,92 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon128.png", names)
         self.assertIn("_locales/en/messages.json", names)
         self.assertIn("_locales/zh_CN/messages.json", names)
+
+    def test_browser_extension_package_defaults_to_versioned_dist_without_touching_v052_artifacts(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-default-package-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        historical_paths = [
+            ROOT / "dist" / "enhe-promotion-manager-0.5.2.zip",
+            ROOT / "dist" / "browser-extension-package-report.json",
+            ROOT / "dist" / "browser-extension-package-report.md",
+        ]
+        historical_contents = {path: path.read_bytes() for path in historical_paths}
+
+        subprocess.run(
+            [sys.executable, str(PACKAGE_BROWSER_EXTENSION)],
+            check=True,
+            cwd=out_dir,
+        )
+
+        versioned_dir = out_dir / "dist" / "v0.5.3"
+        report_path = versioned_dir / "browser-extension-package-report.json"
+        self.assertTrue(report_path.exists())
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["version"], "0.5.3")
+        self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.3.zip").exists())
+        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.json").exists())
+        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.md").exists())
+        for path, expected in historical_contents.items():
+            self.assertEqual(path.read_bytes(), expected, str(path))
+
+    def test_current_readmes_use_isolated_v053_package_command(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+        retired_tokens = [
+            'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
+            r"dist\enhe-promotion-manager-<version>.zip",
+            r"dist\browser-extension-package-report.json",
+            r"dist\browser-extension-package-report.md",
+        ]
+
+        for readme_path in [
+            README,
+            ROOT / "README.en.md",
+            ROOT / "README.zh-CN.md",
+        ]:
+            readme = readme_path.read_text(encoding="utf-8")
+            with self.subTest(readme=readme_path):
+                self.assertIn(expected_command, readme)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, readme)
+
+    def test_browser_extension_guides_use_isolated_v053_package_outputs(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+        expected_outputs = [
+            r"dist\v0.5.3\enhe-promotion-manager-0.5.3.zip",
+            r"dist\v0.5.3\browser-extension-package-report.json",
+            r"dist\v0.5.3\browser-extension-package-report.md",
+        ]
+        retired_tokens = [
+            'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
+            r"dist\enhe-promotion-manager-<version>.zip",
+            r"dist\browser-extension-package-report.json",
+            r"dist\browser-extension-package-report.md",
+            "`browser-extension-package-report.json`",
+        ]
+
+        for guide_path in [
+            DOCS / "browser-extension.md",
+            DOCS / "zh-CN" / "browser-extension.md",
+        ]:
+            guide = guide_path.read_text(encoding="utf-8")
+            with self.subTest(guide=guide_path):
+                self.assertIn("0.5.3", guide)
+                self.assertIn(expected_command, guide)
+                for output in expected_outputs:
+                    self.assertIn(output, guide)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, guide)
+
+        for roadmap_path in [
+            DOCS / "100-percent-completion-roadmap.md",
+            DOCS / "zh-CN" / "100-percent-completion-guide.md",
+        ]:
+            roadmap = roadmap_path.read_text(encoding="utf-8")
+            with self.subTest(roadmap=roadmap_path):
+                self.assertIn(expected_command, roadmap)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, roadmap)
 
     def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
         package_json_path = LICENSE_SERVICE / "package.json"
@@ -7135,6 +7554,365 @@ Prompt templates for product copy, SEO content, and video scripts.
         for marker in ["/api/promotion-manager/", "/promotion-manager/privacy", "/promotion-manager/runs/"]:
             self.assertIn(marker, nginx)
 
+    def test_store_copy_uses_approved_bilingual_product_identity(self) -> None:
+        chrome = (DOCS / "store" / "chrome-listing.md").read_text(encoding="utf-8")
+        edge = (DOCS / "store" / "edge-listing.md").read_text(encoding="utf-8")
+        reviewer_notes = (DOCS / "store" / "reviewer-notes.md").read_text(encoding="utf-8")
+        screenshot_plan = (DOCS / "store" / "screenshot-plan.md").read_text(encoding="utf-8")
+        submission_en = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
+        submission_zh = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
+
+        documents = {
+            "chrome listing": chrome,
+            "edge listing": edge,
+            "reviewer notes": reviewer_notes,
+            "screenshot plan": screenshot_plan,
+            "English submission guide": submission_en,
+            "Chinese submission guide": submission_zh,
+        }
+        for label, text in documents.items():
+            self.assertIn("ENHE Product Promo Maker", text)
+            self.assertNotIn("ENHE 推广管理器", text)
+            self.assertNotIn(
+                "ENHE Promotion Manager",
+                text,
+                f"{label} contains the legacy English display name",
+            )
+        for label, text in [
+            ("chrome listing", chrome),
+            ("edge listing", edge),
+            ("reviewer notes", reviewer_notes),
+            ("screenshot plan", screenshot_plan),
+        ]:
+            self.assertNotIn("0.5.2", text, f"{label} contains the superseded version")
+
+        outcomes_en = r"(?:virality|viral|conversions?|traffic|sales|revenue)"
+        outcomes_zh = r"(?:爆款|转化|流量|销量|销售额|销售增长|收入|收益)"
+        negative_en = re.compile(
+            r"(?:\bno(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\b(?:do|does|did|is|are|was|were|will|can|could|should|would|have|has)"
+            r"(?:\s+not|n't)(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\b(?:not|never|cannot|can't|won't)(?:\s+[A-Za-z'-]+){0,3}|"
+            r"\bunable\s+to(?:\s+[A-Za-z'-]+){0,3})\s*$",
+            flags=re.IGNORECASE,
+        )
+        negative_zh = re.compile(r"(?:无法|不能|不会|没有|不|未)[\u4e00-\u9fff]{0,4}\s*$")
+        emphatic_en = re.compile(
+            r"(?:\bnot\s+(?:only|just)|n't\s+(?:only|just))\s*$",
+            flags=re.IGNORECASE,
+        )
+        emphatic_zh = re.compile(r"(?:不仅|不只)\s*$")
+        negation_suffix_length = 128
+        promotional_claim_patterns = [
+            (
+                re.compile(
+                    rf"\b(?P<trigger>guarantee(?:d|s)?|guaranteeing|"
+                    rf"ensure(?:d|s)?|ensuring)\b[^.!?;,\n]{{0,80}}"
+                    rf"\b{outcomes_en}\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(
+                    rf"\b(?P<trigger>increas(?:e|es|ed|ing)|boost(?:s|ed|ing)?|"
+                    rf"driv(?:e|es|en|ing)|drove|deliver(?:s|ed|ing)?)\b"
+                    rf"[^.!?;,\n]{{0,80}}\b{outcomes_en}\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(
+                    r"\b(?P<trigger>support(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|"
+                    r"offer(?:s|ed|ing)?|provid(?:e|es|ed|ing))\b[^.!?;,\n]{0,40}"
+                    r"\b(?:automatic|automated) publishing\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(
+                    r"\b(?P<trigger>will|can)\s+(?:automatically\s+publish|auto-publish)\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(
+                    rf"\b{outcomes_en}\b[^.!?;,\n]{{0,30}}"
+                    r"\b(?P<trigger>(?:is|are|was|were)\s+guaranteed)\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(
+                    rf"\b(?P<trigger>is|are|was|were)\s+{outcomes_en}\s+guaranteed\b",
+                    flags=re.IGNORECASE,
+                ),
+                negative_en,
+            ),
+            (
+                re.compile(rf"(?P<trigger>保证|确保)[^。！？；，\n]{{0,40}}{outcomes_zh}"),
+                negative_zh,
+            ),
+            (
+                re.compile(rf"(?P<trigger>提升|增加|带来|实现)[^。！？；，\n]{{0,40}}{outcomes_zh}"),
+                negative_zh,
+            ),
+            (
+                re.compile(r"(?P<trigger>支持|提供|实现)[^。！？；，\n]{0,12}自动发布"),
+                negative_zh,
+            ),
+            (re.compile(r"(?P<trigger>将|会|可)自动发布"), negative_zh),
+        ]
+
+        def is_negated(clause: str, trigger_index: int, negative_pattern: re.Pattern[str]) -> bool:
+            suffix = clause[max(0, trigger_index - negation_suffix_length) : trigger_index]
+            if negative_pattern is negative_en and emphatic_en.search(suffix):
+                return False
+            if negative_pattern is negative_zh and emphatic_zh.search(suffix):
+                return False
+            return negative_pattern.search(suffix) is not None
+
+        def has_promotional_claim(text: str) -> bool:
+            clauses = re.split(
+                r"(?:[,.!?;\n。！？；，]+|\b(?:but|and|yet)\b|但是|但|并且|并|而且|而)",
+                text,
+                flags=re.IGNORECASE,
+            )
+            for clause in clauses:
+                for claim_pattern, negative_pattern in promotional_claim_patterns:
+                    for match in claim_pattern.finditer(clause):
+                        if not is_negated(clause, match.start("trigger"), negative_pattern):
+                            return True
+            return False
+
+        for sample in [
+            "does not guarantee sales or revenue and does not support automatic publishing",
+            "不保证销量，也不支持自动发布",
+            "We make no guarantee of sales",
+            "We do not explicitly guarantee sales",
+            "我们无法保证销量",
+            "我们不会确保销售额",
+            "We don't guarantee sales",
+            "We don't support automatic publishing",
+            "This tool isn't designed to guarantee sales",
+        ]:
+            self.assertFalse(has_promotional_claim(sample), f"legal disclaimer was rejected: {sample}")
+        for sample in [
+            "We guarantee sales and support automatic publishing.",
+            "我们保证销量并支持自动发布。",
+            "We guarantee conversions",
+            "Guaranteed sales",
+            "support automated publishing",
+            "will auto-publish",
+            "我们保证销售增长",
+            "No setup required, guaranteed sales",
+            "We do not collect credentials, yet guarantee sales",
+            "Sales are guaranteed",
+            "无需设置即可保证销量",
+            "我们不收集密码, 保证销量",
+            "We not only guarantee sales",
+            "It doesn't just guarantee revenue",
+            "Not only are sales guaranteed",
+            "我们不仅保证销量",
+        ]:
+            self.assertTrue(has_promotional_claim(sample), f"promotional claim was missed: {sample}")
+        for label, text in documents.items():
+            self.assertFalse(
+                has_promotional_claim(text),
+                f"{label} contains a positive promotional outcome claim",
+            )
+
+        for text in [chrome, edge, submission_zh]:
+            self.assertIn("ENHE 产品推广素材生成器", text)
+
+        english_promise = (
+            "Turn product pages into promotional copy, video scripts, publishing assets, "
+            "and guarded local or hosted promotion tasks."
+        )
+        chinese_promise = "把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。"
+        self.assertIn(english_promise, chrome)
+        self.assertIn(chinese_promise, chrome)
+        english_field_block = (
+            "## English (default)\n\n"
+            "### Name\n\n"
+            "ENHE Product Promo Maker\n\n"
+            "### Short Description\n\n"
+            f"{english_promise}"
+        )
+        chinese_field_block = (
+            "## Simplified Chinese\n\n"
+            "### 名称\n\n"
+            "ENHE 产品推广素材生成器\n\n"
+            "### 简短说明\n\n"
+            f"{chinese_promise}"
+        )
+        for label, listing in [("chrome listing", chrome), ("edge listing", edge)]:
+            self.assertIn(english_field_block, listing, f"{label} has the wrong English fields")
+            self.assertIn(chinese_field_block, listing, f"{label} has the wrong Chinese fields")
+            self.assertIn(f"### Detailed Description\n\n{english_promise}", listing)
+            self.assertIn(f"### 详细说明\n\n{chinese_promise}", listing)
+
+        reviewer_sentence = (
+            "ENHE Product Promo Maker is a Manifest V3 extension that turns a product page "
+            "selected by the user into promotional copy, video scripts, publishing assets, "
+            "and guarded local commands or hosted ENHE run payloads."
+        )
+        self.assertIn(f"```text\n{reviewer_sentence}\n", reviewer_notes)
+
+        self.assertIn("ENHE Promo Maker", screenshot_plan)
+        screenshot_lines = screenshot_plan.splitlines()
+        for asset_line in [
+            "- `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
+            "the label `ENHE Promo Maker`.",
+            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
+            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
+        ]:
+            self.assertIn(asset_line, screenshot_lines)
+
+        submission_markers = [
+            "https://developer.chrome.com/docs/webstore/publish",
+            "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
+            "https://developer.chrome.com/docs/extensions/develop/migrate/remote-hosted-code",
+            "dloklkbnmoigemnfigbkibogmgbieppl",
+            "https://www.enhe-tech.com.cn/promotion-manager/privacy",
+            "https://www.enhe-tech.com.cn/promotion-manager/support",
+            "enhe-promotion-manager-0.5.3.zip",
+        ]
+        for label, text in [
+            ("English submission guide", submission_en),
+            ("Chinese submission guide", submission_zh),
+        ]:
+            for marker in submission_markers:
+                self.assertIn(marker, text, f"{label} missing {marker}")
+            self.assertIn("dist/v0.5.3", text.replace("\\", "/"))
+
+        state_markers_en = [
+            "Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:",
+            "If v0.5.2 is pending review, do not replace it; wait for the review result.",
+            "If v0.5.2 is published, continue with the v0.5.3 upload as an update.",
+            "If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.",
+        ]
+        state_markers_zh = [
+            "上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：",
+            "如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。",
+            "如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。",
+            "如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。",
+        ]
+        upload_step_en = "Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`."
+        screenshots_step_en = (
+            "Upload the v0.5.3 icon and both reviewed localized screenshots from "
+            "`dist\\v0.5.3\\store-assets`."
+        )
+        chrome_submit_step_en = (
+            "Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for "
+            "review. If login, account verification, or captcha is required, pause for the "
+            "account owner to complete it."
+        )
+        edge_submit_step_en = (
+            "Confirm the generated publishing assets require user approval, then submit for "
+            "certification. If login, account verification, or captcha is required, pause for "
+            "the account owner to complete it."
+        )
+        upload_step_zh = "上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`。"
+        screenshots_step_zh = (
+            "上传 v0.5.3 图标和 `dist\\v0.5.3\\store-assets` 中已审核的两张本地化截图。"
+        )
+        chrome_submit_step_zh = (
+            "粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、"
+            "账号验证或 captcha，由账号所有者完成后再继续。"
+        )
+        edge_submit_step_zh = (
+            "确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，"
+            "由账号所有者完成后再继续。"
+        )
+        submission_sections = [
+            (
+                "English Chrome steps",
+                submission_en.split("## Chrome Web Store Steps", 1)[1].split(
+                    "## Microsoft Edge Add-ons Steps", 1
+                )[0],
+                state_markers_en,
+                upload_step_en,
+                [upload_step_en, screenshots_step_en, chrome_submit_step_en],
+            ),
+            (
+                "English Edge steps",
+                submission_en.split("## Microsoft Edge Add-ons Steps", 1)[1].split(
+                    "## Reviewer Notes Template", 1
+                )[0],
+                state_markers_en,
+                upload_step_en,
+                [upload_step_en, screenshots_step_en, edge_submit_step_en],
+            ),
+            (
+                "Chinese Chrome steps",
+                submission_zh.split("## Chrome Web Store 上架步骤", 1)[1].split(
+                    "## Microsoft Edge Add-ons 上架步骤", 1
+                )[0],
+                state_markers_zh,
+                upload_step_zh,
+                [upload_step_zh, screenshots_step_zh, chrome_submit_step_zh],
+            ),
+            (
+                "Chinese Edge steps",
+                submission_zh.split("## Microsoft Edge Add-ons 上架步骤", 1)[1].split(
+                    "## 审核备注模板", 1
+                )[0],
+                state_markers_zh,
+                upload_step_zh,
+                [upload_step_zh, screenshots_step_zh, edge_submit_step_zh],
+            ),
+        ]
+        for label, section, state_markers, upload_step, required_steps in submission_sections:
+            ordered_markers = [*state_markers, upload_step]
+            for marker in ordered_markers:
+                self.assertIn(marker, section, f"{label} missing state gate: {marker}")
+            marker_positions = [section.index(marker) for marker in ordered_markers]
+            self.assertTrue(
+                all(left < right for left, right in zip(marker_positions, marker_positions[1:])),
+                f"{label} must order check, pending, published, rejected, then upload",
+            )
+            normalized_section_lines = [
+                re.sub(r"^\d+\.\s*", "", line) for line in section.splitlines()
+            ]
+            for required_step in required_steps:
+                self.assertIn(required_step, normalized_section_lines, f"{label} missing step")
+
+        submission_en_lines = [
+            re.sub(r"^\d+\.\s*", "", line) for line in submission_en.splitlines()
+        ]
+        for line in [
+            "- `activeTab`: capture the current product URL only after the user acts on the extension.",
+            "- `storage`: store local license and endpoint settings.",
+            "- `clipboardWrite`: copy generated local commands and hosted-run payloads only when requested by the user.",
+            "- `https://www.enhe-tech.com.cn/*`: validate licenses, open checkout and billing, reserve credits, submit hosted-run payloads, and retrieve hosted-run status.",
+            "- No remote code is loaded by `<script src=\"https://...\">`, dynamic imports, `importScripts`, `eval`, or `new Function`.",
+            "- Remote ENHE endpoints are used for data only: license validation, usage authorization, hosted run requests, checkout, and billing portal.",
+            "All extension logic stays inside the package. Remote services return data only and do not provide executable extension code.",
+        ]:
+            self.assertIn(line, submission_en_lines)
+
+        submission_zh_lines = [
+            re.sub(r"^\d+\.\s*", "", line) for line in submission_zh.splitlines()
+        ]
+        for line in [
+            "- `activeTab`：仅在用户操作扩展后读取当前产品页面 URL。",
+            "- `storage`：保存本地许可证和 endpoint 设置。",
+            "- `clipboardWrite`：仅按用户请求复制生成的本地命令和托管运行载荷。",
+            "- `https://www.enhe-tech.com.cn/*`：校验许可证、打开结账和账单页面、预留积分、提交托管运行载荷及查询状态。",
+            "- 不加载 remote code：没有远程 `<script src=\"https://...\">`、动态 import、`importScripts`、`eval` 或 `new Function`。",
+            "- ENHE 远程接口只返回许可证校验、使用授权、托管运行请求、结账和账单门户所需的数据。",
+            "所有扩展逻辑都在安装包内。远程服务仅返回数据，不向扩展提供可执行代码。",
+        ]:
+            self.assertIn(line, submission_zh_lines)
+        self.assertIn("生成的发布素材需要用户批准", submission_zh)
+        self.assertIn("运行完成后按实际消耗结算积分。", submission_zh)
+        self.assertNotIn("运行完成后按实际消耗提交积分。", submission_zh)
+
     def test_browser_extension_store_submission_docs_are_bilingual(self) -> None:
         english = (DOCS / "extension-store-submission.md").read_text(encoding="utf-8")
         chinese = (DOCS / "zh-CN" / "extension-store-submission.md").read_text(encoding="utf-8")
@@ -7191,6 +7969,86 @@ Prompt templates for product copy, SEO content, and video scripts.
             text = path.read_text(encoding="utf-8")
             for marker in markers:
                 self.assertIn(marker, text, f"{path} missing {marker}")
+
+        english_identity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)"
+        english_legal_expectations = {
+            DOCS / "legal/privacy-policy.md": {
+                "prefix": (
+                    "# ENHE Product Promo Maker Privacy Policy\n\n"
+                    "Effective date: 2026-07-15\n\n"
+                    "This policy explains how ENHE AI processes information for "
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser "
+                    "extension and optional hosted service.\n\n"
+                ),
+            },
+            DOCS / "legal/terms-of-service.md": {
+                "prefix": (
+                    "# ENHE Product Promo Maker Terms Of Service\n\n"
+                    "Effective date: 2026-07-10\n\n"
+                    "This is a launch draft. Review with counsel before public launch.\n\n"
+                    "## Service\n\n"
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser "
+                    "extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.\n\n"
+                ),
+            },
+            DOCS / "legal/refund-policy.md": {
+                "prefix": (
+                    "# ENHE Product Promo Maker Refund Policy\n\n"
+                    "Effective date: 2026-07-10\n\n"
+                    "This policy applies to purchases of "
+                    "ENHE Product Promo Maker (formerly ENHE Promotion Manager).\n\n"
+                ),
+            },
+            DOCS / "legal/support.md": {
+                "prefix": (
+                    "# ENHE Product Promo Maker Support\n\n"
+                    "Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) "
+                    "is available through the public support URL below.\n\n"
+                ),
+            },
+        }
+        for path, expected in english_legal_expectations.items():
+            text = path.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith(expected["prefix"]), f"{path} has the wrong opening block")
+            self.assertEqual(
+                text.count(english_identity),
+                1,
+                f"{path} must contain the full identity exactly once",
+            )
+            self.assertEqual(
+                text.count("ENHE Promotion Manager"),
+                1,
+                f"{path} must contain the old product name exactly once",
+            )
+
+        chinese_privacy_path = DOCS / "legal/privacy-policy.zh-CN.md"
+        chinese_privacy = chinese_privacy_path.read_text(encoding="utf-8")
+        chinese_identity = "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
+        chinese_prefix = (
+            "# ENHE 产品推广素材生成器隐私政策\n\n"
+            "生效日期：2026-07-15\n\n"
+            "本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）"
+            "浏览器扩展程序及其可选托管服务中的信息。\n\n"
+        )
+        self.assertTrue(
+            chinese_privacy.startswith(chinese_prefix),
+            f"{chinese_privacy_path} has the wrong opening block",
+        )
+        self.assertEqual(
+            chinese_privacy.count(chinese_identity),
+            1,
+            f"{chinese_privacy_path} must contain the full identity exactly once",
+        )
+        self.assertEqual(
+            chinese_privacy.count("（原 ENHE Promotion Manager）"),
+            1,
+            f"{chinese_privacy_path} must contain the transition alias exactly once",
+        )
+        self.assertEqual(
+            chinese_privacy.count("ENHE Promotion Manager"),
+            1,
+            f"{chinese_privacy_path} must contain the old product name exactly once",
+        )
 
     def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:
         files = [

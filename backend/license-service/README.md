@@ -1,4 +1,4 @@
-# ENHE Promotion Manager License Service
+# ENHE Product Promo Maker License Service
 
 This is the production reference service for commercializing the browser extension. It connects the packaged Chrome/Edge extension contract to Stripe Checkout, Stripe Customer Portal, signed Stripe webhooks, hashed license records, usage reservation, usage commit, hosted-run queue intake, hosted-run status pages, and an isolated worker process.
 

@@ -1,6 +1,12 @@
 # Store Screenshot Plan
 
-Prepare screenshots before submission:
+Prepare the ENHE Product Promo Maker v0.5.3 assets before submission:
+
+- `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and the label `ENHE Promo Maker`.
+- `dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.
+- `dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.
+
+The English and Simplified Chinese popup screenshots must safely show:
 
 1. Product URL captured from a real product page.
 2. Platform selection and workflow depth controls.

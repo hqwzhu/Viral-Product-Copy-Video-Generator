@@ -6,7 +6,8 @@ const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
 
 const EN_TRANSLATIONS = Object.freeze({
-  appTitle: "Promotion Manager",
+  appTitle: "ENHE Product Promo Maker",
+  productPromise: "Turn product pages into promotional copy, video scripts, and publishing assets.",
   languageSwitchLabel: "Interface language",
   productUrlLabel: "Product or website URL",
   useCurrentTab: "Use current tab",
@@ -153,7 +154,8 @@ const EN_TRANSLATIONS = Object.freeze({
 });
 
 const ZH_TRANSLATIONS = Object.freeze({
-  appTitle: "推广管理器",
+  appTitle: "ENHE 产品推广素材生成器",
+  productPromise: "把产品网页变成推广文案、视频脚本和发布素材",
   languageSwitchLabel: "界面语言",
   productUrlLabel: "产品或网站链接",
   useCurrentTab: "使用当前标签页",
@@ -478,7 +480,7 @@ async function setLanguage(language, persist = true) {
 }
 
 function applyTranslations() {
-  document.title = `ENHE ${t("appTitle")}`;
+  document.title = t("appTitle");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });

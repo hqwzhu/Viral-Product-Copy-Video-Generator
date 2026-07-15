@@ -1,5 +1,5 @@
 [Unit]
-Description=ENHE Promotion Manager API
+Description=ENHE Product Promo Maker API
 After=network.target postgresql.service
 
 [Service]

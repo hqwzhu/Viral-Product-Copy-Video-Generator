@@ -1,12 +1,12 @@
-# ENHE Promotion Manager Privacy Policy
+# ENHE Product Promo Maker Privacy Policy
 
 Effective date: 2026-07-15
 
-This policy explains how ENHE AI processes information for the ENHE Promotion Manager browser extension and optional hosted service.
+This policy explains how ENHE AI processes information for ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser extension and optional hosted service.
 
 ## What The Product Does
 
-ENHE Promotion Manager helps users turn product or website URLs into guarded promotion workflow commands, publish packages, and optional ENHE-hosted task runs.
+ENHE Product Promo Maker helps users turn product or website URLs into guarded promotion workflow commands, publish packages, and optional ENHE-hosted task runs.
 
 ## Data We Process
 

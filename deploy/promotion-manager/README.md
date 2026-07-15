@@ -1,4 +1,4 @@
-# ENHE Promotion Manager Deployment
+# ENHE Product Promo Maker Deployment
 
 This deploys the browser-extension backend on the same HTTPS host as the ENHE website while isolating it from the main site process.
 
@@ -56,8 +56,8 @@ Edit `/etc/enhe-promotion-manager/api.env` and fill PostgreSQL and `LICENSE_PEPP
 The domestic flow is isolated from the website order database:
 
 ```text
-Promotion Manager checkout -> shared ZPAY merchant -> signed ZPAY callback
--> Promotion Manager payment record -> hashed license activation
+ENHE Product Promo Maker checkout -> shared ZPAY merchant -> signed ZPAY callback
+-> ENHE Product Promo Maker payment record -> hashed license activation
 ```
 
 `ZPAY_KEY` stays on the server. The extension never receives merchant credentials. Domestic payments are one-time 30-day licenses by default; change `ZPAY_LICENSE_DAYS` if the commercial term changes.

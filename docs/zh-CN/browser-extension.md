@@ -1,6 +1,6 @@
 # 浏览器插件
 
-`browser-extension/` 是 ENHE Promotion Manager 的 Chrome Manifest V3 插件成品目录。它用于从当前产品页面生成 Codex Skill 命令、浏览器辅助发布命令、证据回收命令、定期自动化命令，也可以对接 ENHE 托管运行、license 和 usage credits。
+`browser-extension/` 是 ENHE 产品推广素材生成器的 Chrome Manifest V3 插件成品目录。它用于从当前产品页面生成 Codex Skill 命令、浏览器辅助发布命令、证据回收命令、定期自动化命令，也可以对接 ENHE 托管运行、license 和 usage credits。
 
 ## 能力
 
@@ -29,21 +29,21 @@
 2. 打开 Developer mode。
 3. 点击 Load unpacked。
 4. 选择仓库内的 `browser-extension` 目录。
-5. 固定 ENHE Promotion Manager 到浏览器工具栏。
+5. 固定 ENHE 产品推广素材生成器到浏览器工具栏。
 
 ## 打包成上架包
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 ```
 
 输出：
 
-- `dist\enhe-promotion-manager-<version>.zip`
-- `dist\browser-extension-package-report.json`
-- `dist\browser-extension-package-report.md`
+- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
+- `dist\v0.5.3\browser-extension-package-report.json`
+- `dist\v0.5.3\browser-extension-package-report.md`
 
-上架步骤见 `docs/zh-CN/extension-store-submission.md`。提交前确认 `browser-extension-package-report.json` 的 `status` 为 `ready`。
+上架步骤见 `docs/zh-CN/extension-store-submission.md`。提交前确认 `dist\v0.5.3\browser-extension-package-report.json` 的 `status` 为 `ready`。
 
 ## 收费订阅
 
@@ -78,7 +78,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
 - Product page: https://www.enhe-tech.com.cn/promotion-manager
 - Repository: https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git
 
-## 0.5.2 中英文界面
+## 0.5.3 中英文界面
 
 - 插件首次打开时自动跟随 Chrome 界面语言：中文环境使用中文，其他环境使用英文。
 - 右上角提供 `中文 / EN` 切换，用户选择会保存在插件本地存储中，后续打开继续使用该语言。

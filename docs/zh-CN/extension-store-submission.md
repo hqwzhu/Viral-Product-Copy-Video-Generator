@@ -1,81 +1,138 @@
-# 浏览器插件上架指南
+# ENHE 产品推广素材生成器浏览器扩展上架指南
 
-本文用于把 `browser-extension/` 打包成 Chrome Web Store 或 Microsoft Edge Add-ons 可提交的插件包。
+版本：0.5.3
+
+本文用于把 `browser-extension/` 打包为可提交到 Chrome Web Store 和 Microsoft Edge Add-ons 的 ENHE Product Promo Maker 扩展包。
+
+商店本地化名称：
+
+- 简体中文：`ENHE 产品推广素材生成器`
+- 英文（默认）：`ENHE Product Promo Maker`
 
 官方参考：
 
-- Chrome Web Store 发布文档: https://developer.chrome.com/docs/webstore/publish
-- Microsoft Edge 插件发布文档: https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension
-- Chrome remote code 迁移说明: https://developer.chrome.com/docs/extensions/develop/migrate/remote-hosted-code
+- Chrome Web Store 发布文档：https://developer.chrome.com/docs/webstore/publish
+- Microsoft Edge 扩展发布文档：https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension
+- Chrome remote code 迁移说明：https://developer.chrome.com/docs/extensions/develop/migrate/remote-hosted-code
 
 ## 打包
 
 在仓库根目录运行：
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 ```
 
 输出文件：
 
-- `dist\enhe-promotion-manager-<version>.zip`
-- `dist\browser-extension-package-report.json`
-- `dist\browser-extension-package-report.md`
+- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
+- `dist\v0.5.3\browser-extension-package-report.json`
+- `dist\v0.5.3\browser-extension-package-report.md`
 
-上传 zip 文件到商店；保留 `browser-extension-package-report.json` 作为上架前检查证据。
+把审核通过的商店图片放在：
+
+- `dist\v0.5.3\store-assets\enhe-product-promo-maker-en-1280x800.png`
+- `dist\v0.5.3\store-assets\enhe-product-promo-maker-zh-1280x800.png`
+
+向现有商店条目上传 zip，并保留报告作为发布证据。兼容包名继续使用 `enhe-promotion-manager-0.5.3.zip`。
 
 ## 上架前检查
 
+- 版本和打包输出均为 `dist\v0.5.3` 下的 0.5.3。
 - Manifest 使用 MV3。
-- popup、CSS、JS 都在插件包本地。
+- popup、CSS 和 JavaScript 均随扩展包本地提供。
 - 不加载 remote code：没有远程 `<script src="https://...">`、动态 import、`importScripts`、`eval` 或 `new Function`。
-- ENHE 远程接口只作为数据接口：license 校验、usage 授权、hosted run、checkout、billing portal。
-- 不打包平台密钥、支付密钥、cookie、OAuth token 或 webhook secret。
-- 插件包包含 `icons/icon16.png`、`icons/icon48.png`、`icons/icon128.png`。
-- 插件内带 ENHE 网站、产品页和 GitHub 链接，用于网站引流。
-- 准备公开 privacy policy：`https://www.enhe-tech.com.cn/promotion-manager/privacy`。
-- 准备支持网址，建议使用 `https://www.enhe-tech.com.cn/`。
+- ENHE 远程接口只返回许可证校验、使用授权、托管运行请求、结账和账单门户所需的数据。
+- 不打包平台密钥、支付密钥、Cookie、OAuth token 或 webhook secret。
+- 扩展包包含 `icons/icon16.png`、`icons/icon48.png` 和 `icons/icon128.png`。
+- 扩展包包含英文和简体中文 `_locales` 元数据；popup 首次启动时跟随浏览器语言，并记住用户手动选择的 `中文 / EN`。
+- Privacy policy：`https://www.enhe-tech.com.cn/promotion-manager/privacy`。
+- 支持网址：`https://www.enhe-tech.com.cn/promotion-manager/support`。
+- 产品网站：`https://www.enhe-tech.com.cn/`。
+- 法律页面位于 `docs/legal/`，商店 listing 和审核文案位于 `docs/store/`。
+- 现有 Chrome Web Store 条目 ID 为 `dloklkbnmoigemnfigbkibogmgbieppl`；只更新该条目，不创建第二个条目。
+
+## 权限说明
+
+- `activeTab`：仅在用户操作扩展后读取当前产品页面 URL。
+- `storage`：保存本地许可证和 endpoint 设置。
+- `clipboardWrite`：仅按用户请求复制生成的本地命令和托管运行载荷。
+- `https://www.enhe-tech.com.cn/*`：校验许可证、打开结账和账单页面、预留积分、提交托管运行载荷及查询状态。
+
+所有扩展逻辑都在安装包内。远程服务仅返回数据，不向扩展提供可执行代码。
+
+## 商业发布门槛
+
+提交收费扩展前：
+
+- 通过 HTTPS 部署 `backend/license-service/` 或等效的生产许可证服务。
+- 设置 `DATABASE_URL`，执行 `npm run migrate`，并把 API 和托管 worker 作为隔离服务部署。参见 `deploy/promotion-manager/`。
+- 配置真实的 Stripe Checkout prices、Customer Portal 和签名 webhook。
+- 在 Stripe 测试模式验证 `checkout.session.completed`、`customer.subscription.updated`、`invoice.payment_succeeded` 和 `invoice.payment_failed`。
+- 确认扩展可以校验真实测试许可证、预留托管积分、启动托管运行并通过已部署 API 查看状态 URL。
+- 发布隐私政策、支持、退款/联系和产品页面。
+- 准备展示本地命令生成、许可证校验、积分预留和托管运行载荷审核且不暴露秘密的截图。
+- 所有扩展逻辑必须随安装包提供，远程接口只返回数据。
+- Chrome Web Store 和 Microsoft Edge Add-ons 审核属于外部门槛；打包可自动完成，商店批准仍由商店决定。
+
+## 本地化商店资料
+
+### 简体中文
+
+- 名称：`ENHE 产品推广素材生成器`
+- 简短说明：`把产品网页变成推广文案、视频脚本和发布素材，并生成受控的本地或托管推广任务。`
+
+### 英文（默认）
+
+- 名称：`ENHE Product Promo Maker`
+- 简短说明：`Turn product pages into promotional copy, video scripts, publishing assets, and guarded local or hosted promotion tasks.`
+
+详细本地化说明使用 `docs/store/chrome-listing.md` 和 `docs/store/edge-listing.md` 中的已提交文案。
 
 ## Chrome Web Store 上架步骤
 
-1. 创建或登录 Chrome Web Store Developer Dashboard。
+1. 创建或登录 Chrome Web Store Developer Dashboard 账号。
 2. 按后台要求完成开发者注册和费用支付。
-3. 创建新商品。
-4. 上传 `dist\enhe-promotion-manager-<version>.zip`。
-5. 填写商店资料：
-   - 名称：`ENHE Promotion Manager`
-   - 简短描述：`Generate guarded Codex promotion workflows from any product URL.`
-   - 分类：按后台可选项选择 productivity 或 marketing。
-   - 网站：`https://www.enhe-tech.com.cn/`
-   - 支持网址：`https://www.enhe-tech.com.cn/`
-   - privacy policy：`https://www.enhe-tech.com.cn/promotion-manager/privacy`
-6. 填写隐私实践。插件使用 `activeTab`、`storage`、`clipboardWrite` 和 ENHE 数据接口，不收集平台密码、cookie、支付密钥或 API token。
-7. 说明收费订阅：托管运行消耗 ENHE 订阅积分，本地命令生成可作为免费或试用能力。
-8. 提交审核。
+3. 打开条目 `dloklkbnmoigemnfigbkibogmgbieppl`，不要创建新条目。
+4. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
+5. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
+6. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
+7. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
+8. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
+9. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
+10. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策。
+11. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。
+12. 说明收费功能：托管运行消耗 ENHE 订阅积分；本地命令生成可以保持免费或受试用限制。
+13. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## Microsoft Edge Add-ons 上架步骤
 
-1. 创建或登录 Microsoft Partner Center。
-2. 创建 Microsoft Edge extension 提交。
-3. 上传同一个 `dist\enhe-promotion-manager-<version>.zip`。
-4. 填写产品说明、分类、截图、privacy policy、支持网址和认证说明。
-5. 在审核备注中说明：远程服务只返回数据，所有插件逻辑都在包内。
-6. 提交认证。
+1. 创建或登录 Microsoft Partner Center 账号。
+2. 如果已有 Microsoft Edge 扩展条目，打开现有提交，不为同一扩展创建替代条目。
+3. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
+4. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
+5. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
+6. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
+7. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
+8. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
+9. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。
+10. 在审核备注中说明远程服务只返回数据，全部扩展逻辑都在安装包内。
+11. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## 审核备注模板
 
 ```text
-ENHE Promotion Manager is a Manifest V3 operator extension. It captures the active product URL after user action and generates guarded Codex commands or hosted ENHE run payloads for product promotion workflows. The extension does not auto-publish to third-party platforms, does not bypass login/captcha/risk controls, and does not package remote executable code. ENHE backend endpoints are used only for license validation, subscription credit reservation, checkout, billing portal, and hosted run data exchange.
+ENHE Product Promo Maker is a Manifest V3 extension that turns a product page selected by the user into promotional copy, video scripts, publishing assets, and guarded local commands or hosted ENHE run payloads. It reads the active product URL only after user action. All extension logic is packaged locally; ENHE endpoints return data only for license validation, checkout and billing, credit reservation, hosted-run queue submission, and hosted-run status. The extension does not publish to third-party platforms without user approval, bypass login/captcha/risk controls, or load remote executable code.
 ```
 
 ## 收费订阅说明
 
-不要把支付能力只放在插件本地执行；生产版必须由 ENHE 后端强制控制：
+使用 ENHE 网站账单页面，不在扩展内处理支付。生产环境必须由后端强制执行：
 
-- 托管运行前校验 license。
-- 运行前预留 usage credits。
-- 运行完成后按实际消耗扣减。
+- 托管运行前校验许可证。
+- 运行前预留积分。
+- 运行完成后按实际消耗结算积分。
 - 失败时退回未使用的预留积分。
-- 支付平台密钥和 webhook secret 只放在后端。
+- 支付平台密钥和 webhook secret 只保存在后端。
 
 订阅价格和积分模型见 `docs/subscription-pricing.md`、`docs/billing-backend-contract.md` 和 `browser-extension/billing-contract.json`。

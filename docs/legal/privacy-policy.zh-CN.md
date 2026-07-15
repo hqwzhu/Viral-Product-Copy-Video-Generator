@@ -1,12 +1,12 @@
-# ENHE Promotion Manager 隐私政策
+# ENHE 产品推广素材生成器隐私政策
 
 生效日期：2026-07-15
 
-本政策说明 ENHE AI 如何处理 ENHE Promotion Manager 浏览器扩展程序及其可选托管服务中的信息。
+本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）浏览器扩展程序及其可选托管服务中的信息。
 
 ## 产品功能
 
-ENHE Promotion Manager 帮助用户将产品或网站 URL 转换为受控的推广工作流命令、发布素材包以及可选的 ENHE 托管任务。
+ENHE 产品推广素材生成器帮助用户将产品或网站 URL 转换为受控的推广工作流命令、发布素材包以及可选的 ENHE 托管任务。
 
 ## 我们处理的数据
 

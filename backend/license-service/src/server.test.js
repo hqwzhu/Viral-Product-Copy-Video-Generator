@@ -45,6 +45,24 @@ test("privacy page publishes the approved English and Chinese retention policy",
     const response = await fetch(`${baseUrl}/promotion-manager/privacy`);
     assert.equal(response.status, 200);
     const html = await response.text();
+    const englishIdentity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)";
+    const chineseIdentity = "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）";
+    const englishOpeningHtml = [
+      "<h1>ENHE Product Promo Maker Privacy Policy</h1>",
+      "<p>Effective date: 2026-07-15</p>",
+      "<p>This policy explains how ENHE AI processes information for ENHE Product Promo Maker (formerly ENHE Promotion Manager), including its browser extension and optional hosted service.</p>"
+    ].join("\n");
+    assert.ok(html.includes(englishOpeningHtml), "privacy English must render the approved opening block");
+    assert.equal(html.split(englishIdentity).length - 1, 1);
+    assert.equal(html.split("formerly ENHE Promotion Manager").length - 1, 1);
+    const chineseOpeningHtml = [
+      "<h1>ENHE 产品推广素材生成器隐私政策</h1>",
+      "<p>生效日期：2026-07-15</p>",
+      "<p>本政策说明 ENHE AI 如何处理 ENHE 产品推广素材生成器（原 ENHE Promotion Manager）浏览器扩展程序及其可选托管服务中的信息。</p>"
+    ].join("\n");
+    assert.ok(html.includes(chineseOpeningHtml), "privacy Chinese must render the approved opening block");
+    assert.equal(html.split(chineseIdentity).length - 1, 1);
+    assert.equal(html.split("（原 ENHE Promotion Manager）").length - 1, 1);
     assert.match(html, /中文 \/ EN/);
     assert.match(html, /automatically deleted 30 days/);
     assert.match(html, /retained for 180 days/);
@@ -54,6 +72,49 @@ test("privacy page publishes the approved English and Chinese retention policy",
     assert.match(html, /按照适用法律保留/);
     assert.match(html, /huqingwei5942@gmail\.com/);
     assert.match(html, /enhe_pm_language/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("public legal pages use the new name and one transition alias", async () => {
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const identity = "ENHE Product Promo Maker (formerly ENHE Promotion Manager)";
+  const expectations = {
+    terms: {
+      openingHtml: [
+        "<h1>ENHE Product Promo Maker Terms Of Service</h1>",
+        "<p>Effective date: 2026-07-10</p>",
+        "<p>This is a launch draft. Review with counsel before public launch.</p>",
+        "<h2>Service</h2>",
+        "<p>ENHE Product Promo Maker (formerly ENHE Promotion Manager) provides a browser extension, local Codex workflow commands, and optional ENHE-hosted promotion task execution.</p>"
+      ].join("\n")
+    },
+    refund: {
+      openingHtml: [
+        "<h1>ENHE Product Promo Maker Refund Policy</h1>",
+        "<p>Effective date: 2026-07-10</p>",
+        "<p>This policy applies to purchases of ENHE Product Promo Maker (formerly ENHE Promotion Manager).</p>"
+      ].join("\n")
+    },
+    support: {
+      openingHtml: [
+        "<h1>ENHE Product Promo Maker Support</h1>",
+        "<p>Support for ENHE Product Promo Maker (formerly ENHE Promotion Manager) is available through the public support URL below.</p>"
+      ].join("\n")
+    }
+  };
+  try {
+    for (const [page, expected] of Object.entries(expectations)) {
+      const response = await fetch(`${baseUrl}/promotion-manager/${page}`);
+      assert.equal(response.status, 200, `${page} must be public`);
+      const html = await response.text();
+      assert.ok(html.includes(expected.openingHtml), `${page} must render the approved opening block in order`);
+      assert.equal(html.split(identity).length - 1, 1, `${page} must use the full identity exactly once`);
+      assert.equal(html.split("formerly ENHE Promotion Manager").length - 1, 1, `${page} must use the old name exactly once`);
+    }
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -125,6 +186,10 @@ test("license service queues and completes a hosted worker run", async () => {
     assert.equal(status.workflowType, "standard_run");
     assert.equal(status.commandType, "skill_entry");
     assert.ok(status.artifactDirectory.includes(queued.runId));
+
+    const runHtml = await getText(`${baseUrl}/promotion-manager/runs/${queued.runId}`);
+    assert.match(runHtml, /ENHE Product Promo Maker Run/);
+    assert.doesNotMatch(runHtml, /ENHE Promotion Manager Run/);
 
     const privacyPage = await getText(`${baseUrl}/promotion-manager/privacy`);
     assert.match(privacyPage, /Privacy Policy/);
@@ -232,6 +297,17 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(checkoutHtml, /3_000/);
     assert.match(checkoutHtml, /10 \* 60 \* 1_000/);
     assert.match(checkoutHtml, /localStorage\.getItem\("enhe_pm_language"\)/);
+    assert.match(checkoutHtml, /ENHE Product Promo Maker Checkout/);
+    assert.match(checkoutHtml, /ENHE 产品推广素材生成器 国内支付/);
+    assert.doesNotMatch(checkoutHtml, /ENHE 推广管理器/);
+    assert.doesNotMatch(checkoutHtml, /ENHE Promotion Manager/);
+
+    const billingPage = await fetch(`${baseUrl}/promotion-manager/billing`);
+    assert.equal(billingPage.status, 200);
+    const billingHtml = await billingPage.text();
+    assert.match(billingHtml, /ENHE Product Promo Maker billing/);
+    assert.match(billingHtml, /ENHE 产品推广素材生成器 账单/);
+    assert.doesNotMatch(billingHtml, /ENHE Promotion Manager/);
 
     const checkout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
       method: "POST",
@@ -302,14 +378,14 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     const providerRequest = providerRequests[0];
     assert.equal(providerRequest.type, "wxpay");
     assert.equal(providerRequest.money, "19.00");
-    assert.equal(providerRequest.name, "ENHE Promotion Manager Starter");
+    assert.equal(providerRequest.name, "ENHE Product Promo Maker Starter");
     assert.equal(providerRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
     assert.match(providerRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
     assert.equal(providerRequest.sign, signZpay(providerRequest, process.env.ZPAY_KEY));
     const qrProviderRequest = providerRequests[1];
     assert.equal(qrProviderRequest.type, "wxpay");
     assert.equal(qrProviderRequest.money, "59.00");
-    assert.equal(qrProviderRequest.name, "ENHE Promotion Manager Growth");
+    assert.equal(qrProviderRequest.name, "ENHE Product Promo Maker Growth");
     assert.equal(qrProviderRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
     assert.match(qrProviderRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
     assert.equal(qrProviderRequest.sign, signZpay(qrProviderRequest, process.env.ZPAY_KEY));
@@ -354,6 +430,9 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(successHtml, /Payment confirmed/);
     assert.match(successHtml, /支付已确认/);
     assert.match(successHtml, /enhe_pm_language/);
+    assert.match(successHtml, /ENHE Product Promo Maker/);
+    assert.match(successHtml, /ENHE 产品推广素材生成器/);
+    assert.doesNotMatch(successHtml, /ENHE Promotion Manager/);
 
     const stateBeforeQrPayment = await store.load();
     const qrPayment = Object.values(stateBeforeQrPayment.payments)

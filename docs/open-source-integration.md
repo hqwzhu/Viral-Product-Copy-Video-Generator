@@ -1,6 +1,6 @@
 # Open Source Integration Plan
 
-This document records how ENHE Promotion Manager uses ideas from `firecrawl/firecrawl` and `yikart/AiToEarn` without copying unsafe automation paths.
+This document records how ENHE Product Promo Maker uses ideas from `firecrawl/firecrawl` and `yikart/AiToEarn` without copying unsafe automation paths.
 
 ## Source Snapshot
 

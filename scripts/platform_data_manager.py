@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promotion Manager CLI for guarded local platform evidence collection."""
+"""ENHE Product Promo Maker CLI for guarded local platform evidence collection."""
 
 from __future__ import annotations
 
