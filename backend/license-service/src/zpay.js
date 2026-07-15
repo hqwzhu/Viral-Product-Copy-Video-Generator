@@ -57,7 +57,7 @@ function buildZpayPaymentRequest(input) {
     out_trade_no: input.orderNo,
     notify_url: input.notifyUrl,
     return_url: input.returnUrl,
-    name: `ENHE Promotion Manager ${labelPlan(input.plan)}`,
+    name: `ENHE Product Promo Maker ${labelPlan(input.plan)}`,
     money: formatZpayAmount(input.amount),
     clientip: input.clientIp || "127.0.0.1",
     param: input.paymentId

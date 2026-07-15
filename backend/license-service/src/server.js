@@ -770,7 +770,7 @@ function renderRunPage(run) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ENHE Promotion Manager Run ${runId}</title>
+  <title>ENHE Product Promo Maker Run ${runId}</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
     code { background: #f4f4f5; padding: 2px 4px; border-radius: 4px; }
@@ -798,7 +798,7 @@ function renderZpayCheckoutPage(selectedPlan) {
     .join("");
   const messages = {
     "zh-CN": {
-      title: "ENHE Promotion Manager 国内支付",
+      title: "ENHE 产品推广素材生成器 国内支付",
       intro: "使用微信支付或支付宝购买 30 天许可证。",
       plan: "套餐",
       email: "接收与找回许可证的邮箱",
@@ -816,7 +816,7 @@ function renderZpayCheckoutPage(selectedPlan) {
       privacyHint: "支付由 ENHE AI 的 ZPAY 商户通道处理。许可证密钥不会以明文存储在服务器。"
     },
     en: {
-      title: "ENHE Promotion Manager Checkout",
+      title: "ENHE Product Promo Maker Checkout",
       intro: "Buy a 30-day license with WeChat Pay or Alipay.",
       plan: "Plan",
       email: "Email for license delivery and recovery",
@@ -839,7 +839,7 @@ function renderZpayCheckoutPage(selectedPlan) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ENHE Promotion Manager 国内支付</title>
+  <title>ENHE 产品推广素材生成器 国内支付</title>
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #18181b; background: #f6f7fb; }
     * { box-sizing: border-box; }
@@ -875,7 +875,7 @@ function renderZpayCheckoutPage(selectedPlan) {
       <button class="language-button" type="button" data-language="en">EN</button>
     </div>
     <section class="card">
-      <h1 data-i18n="title">ENHE Promotion Manager 国内支付</h1>
+      <h1 data-i18n="title">ENHE 产品推广素材生成器 国内支付</h1>
       <p data-i18n="intro">使用微信支付或支付宝购买 30 天许可证。</p>
       <form id="checkoutForm" method="post" action="/api/promotion-manager/payments/zpay/checkout">
         <label><span data-i18n="plan">套餐</span><select name="plan" required>${planOptions}</select></label>
@@ -1046,19 +1046,20 @@ function renderCheckoutResult(resultKey, options = {}) {
     },
     billing: {
       en: {
-        title: "ENHE Promotion Manager billing",
+        title: "ENHE Product Promo Maker billing",
         message: "Domestic plans use one-time 30-day payments. Renew or change plans from checkout."
       },
       zh: {
-        title: "ENHE Promotion Manager 账单",
+        title: "ENHE 产品推广素材生成器 账单",
         message: "国内套餐采用一次性购买 30 天许可证，请在结算页续购或更换套餐。"
       }
     }
   };
   const content = messages[resultKey] || messages.paymentNotFound;
   const licenseKey = String(options.licenseKey || "");
-  const resultPanel = (language, title, message, backLabel, licenseLabel, hidden) => `
+  const resultPanel = (language, productName, title, message, backLabel, licenseLabel, hidden) => `
     <section data-language-panel="${language}"${hidden ? " hidden" : ""}>
+      <p class="product-name">${escapeHtml(productName)}</p>
       <h1>${escapeHtml(title)}</h1>
       ${licenseKey
         ? `<p>${escapeHtml(licenseLabel)}</p><p><code>${escapeHtml(licenseKey)}</code></p>`
@@ -1083,8 +1084,8 @@ function renderCheckoutResult(resultKey, options = {}) {
 </head>
 <body>
   <div class="toolbar"><span>中文 / EN</span><button type="button" data-language="zh-CN">中文</button><button type="button" data-language="en">EN</button></div>
-  ${resultPanel("en", content.en.title, content.en.message, "Return to checkout", "License key", false)}
-  ${resultPanel("zh-CN", content.zh.title, content.zh.message, "返回结算页", "许可证密钥", true)}
+  ${resultPanel("en", "ENHE Product Promo Maker", content.en.title, content.en.message, "Return to checkout", "License key", false)}
+  ${resultPanel("zh-CN", "ENHE 产品推广素材生成器", content.zh.title, content.zh.message, "返回结算页", "许可证密钥", true)}
   ${renderLanguageToggleScript()}
 </body>
 </html>`;
@@ -1097,7 +1098,7 @@ function renderLegalPage(page) {
     return "<!doctype html><title>Page not found</title><h1>Page not found</h1>";
   }
   const markdown = fs.readFileSync(pagePath, "utf8");
-  const title = firstHeading(markdown) || "ENHE Promotion Manager";
+  const title = firstHeading(markdown) || "ENHE Product Promo Maker";
   if (page === "privacy") {
     const chinesePath = path.join(__dirname, "..", "..", "..", "docs", "legal", "privacy-policy.zh-CN.md");
     const chineseMarkdown = fs.readFileSync(chinesePath, "utf8");

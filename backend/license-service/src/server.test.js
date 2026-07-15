@@ -126,6 +126,10 @@ test("license service queues and completes a hosted worker run", async () => {
     assert.equal(status.commandType, "skill_entry");
     assert.ok(status.artifactDirectory.includes(queued.runId));
 
+    const runHtml = await getText(`${baseUrl}/promotion-manager/runs/${queued.runId}`);
+    assert.match(runHtml, /ENHE Product Promo Maker Run/);
+    assert.doesNotMatch(runHtml, /ENHE Promotion Manager Run/);
+
     const privacyPage = await getText(`${baseUrl}/promotion-manager/privacy`);
     assert.match(privacyPage, /Privacy Policy/);
     assert.match(privacyPage, /Data We Do Not Collect/);
@@ -232,6 +236,15 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(checkoutHtml, /3_000/);
     assert.match(checkoutHtml, /10 \* 60 \* 1_000/);
     assert.match(checkoutHtml, /localStorage\.getItem\("enhe_pm_language"\)/);
+    assert.match(checkoutHtml, /ENHE Product Promo Maker Checkout/);
+    assert.match(checkoutHtml, /ENHE 产品推广素材生成器 国内支付/);
+    assert.doesNotMatch(checkoutHtml, /ENHE 推广管理器/);
+
+    const billingPage = await fetch(`${baseUrl}/promotion-manager/billing`);
+    assert.equal(billingPage.status, 200);
+    const billingHtml = await billingPage.text();
+    assert.match(billingHtml, /ENHE Product Promo Maker billing/);
+    assert.match(billingHtml, /ENHE 产品推广素材生成器 账单/);
 
     const checkout = await fetch(`${baseUrl}/api/promotion-manager/payments/zpay/checkout`, {
       method: "POST",
@@ -302,14 +315,14 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     const providerRequest = providerRequests[0];
     assert.equal(providerRequest.type, "wxpay");
     assert.equal(providerRequest.money, "19.00");
-    assert.equal(providerRequest.name, "ENHE Promotion Manager Starter");
+    assert.equal(providerRequest.name, "ENHE Product Promo Maker Starter");
     assert.equal(providerRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
     assert.match(providerRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
     assert.equal(providerRequest.sign, signZpay(providerRequest, process.env.ZPAY_KEY));
     const qrProviderRequest = providerRequests[1];
     assert.equal(qrProviderRequest.type, "wxpay");
     assert.equal(qrProviderRequest.money, "59.00");
-    assert.equal(qrProviderRequest.name, "ENHE Promotion Manager Growth");
+    assert.equal(qrProviderRequest.name, "ENHE Product Promo Maker Growth");
     assert.equal(qrProviderRequest.notify_url, "https://www.enhe-tech.com.cn/api/promotion-manager/webhooks/zpay");
     assert.match(qrProviderRequest.return_url, /\/promotion-manager\/checkout\/success\?orderNo=/);
     assert.equal(qrProviderRequest.sign, signZpay(qrProviderRequest, process.env.ZPAY_KEY));
@@ -354,6 +367,8 @@ test("ZPAY checkout activates a hashed license after a verified domestic payment
     assert.match(successHtml, /Payment confirmed/);
     assert.match(successHtml, /支付已确认/);
     assert.match(successHtml, /enhe_pm_language/);
+    assert.match(successHtml, /ENHE Product Promo Maker/);
+    assert.match(successHtml, /ENHE 产品推广素材生成器/);
 
     const stateBeforeQrPayment = await store.load();
     const qrPayment = Object.values(stateBeforeQrPayment.payments)
