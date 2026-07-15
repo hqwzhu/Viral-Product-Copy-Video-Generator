@@ -6,4 +6,4 @@ promotion-output/
 .env.*
 !.env.example
 *.log
-
+.worktrees/

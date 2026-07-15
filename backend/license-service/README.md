@@ -37,6 +37,7 @@ Copy the printed webhook signing secret into `STRIPE_WEBHOOK_SECRET`, then resta
 ## Endpoints
 
 - `GET /health`
+- `GET /api/promotion-manager/health` (same payload as `/health`)
 - `GET /promotion-manager/checkout`
 - `GET /promotion-manager/billing`
 - `GET /promotion-manager/privacy`
@@ -49,7 +50,21 @@ Copy the printed webhook signing secret into `STRIPE_WEBHOOK_SECRET`, then resta
 - `POST /api/promotion-manager/run`
 - `GET /api/promotion-manager/run/:runId`
 - `GET /promotion-manager/runs/:runId`
+- `POST /api/promotion-manager/payments/zpay/checkout`
+- `GET /api/promotion-manager/payments/zpay/status?orderNo=...`
 - `POST /api/promotion-manager/webhooks/stripe`
+- `GET /api/promotion-manager/webhooks/zpay`
+
+The domestic checkout endpoint keeps two response modes:
+
+- A normal HTML form submission receives the existing `303` redirect to the payment provider.
+- A request with `Accept: application/json` receives `201` JSON containing the order number, public payment URL, locally generated QR data URL, plan, amount, 30-day term, and same-origin claim URL.
+
+The payment-status endpoint requires the matching `HttpOnly` claim cookie. It returns only the order status and, after payment, the claim URL; it never returns the License Key. The signed ZPAY webhook remains the only authority that activates a payment.
+
+On the public checkout page, desktop browsers display the QR code and poll for up to ten minutes. Mobile browsers open WeChat Pay or Alipay directly. Chinese and English are available from the visible language control, which follows the browser language on first use and stores the user's selection locally.
+
+Domestic public prices are 30-day licenses: Starter ¥19, Growth ¥59, and Scale ¥199. Provider requests retain two-decimal CNY amounts (`19.00`, `59.00`, and `199.00`).
 
 ## Production Launch Notes
 
