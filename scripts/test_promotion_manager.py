@@ -7021,6 +7021,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertNotIn("ENHE 推广管理器", display_text)
 
     def test_browser_extension_icons_have_expected_size_and_alpha(self) -> None:
+        from PIL import Image
+
         versions = {16: "v2", 48: "v2", 128: "v3"}
         for size, version in versions.items():
             icon_path = BROWSER_EXTENSION / "icons" / f"icon{size}.png"
@@ -7038,6 +7040,20 @@ Prompt templates for product copy, SEO content, and video scripts.
             (BROWSER_EXTENSION / "icons" / "icon128-v2.png").read_bytes(),
             (BROWSER_EXTENSION / "icons" / "icon128-v3.png").read_bytes(),
         )
+
+        with Image.open(BROWSER_EXTENSION / "icons" / "icon128-v2.png") as image:
+            v2_image = image.convert("RGBA")
+        with Image.open(BROWSER_EXTENSION / "icons" / "icon128-v3.png") as image:
+            v3_image = image.convert("RGBA")
+        v2_pixels = v2_image.load()
+        v3_pixels = v3_image.load()
+        # Half-open union of the old/new label glyph bounds, padded 1px for antialiasing.
+        label_rect = (26, 97, 104, 106)
+        for y in range(128):
+            for x in range(128):
+                inside_label = label_rect[0] <= x < label_rect[2] and label_rect[1] <= y < label_rect[3]
+                if not inside_label:
+                    self.assertEqual(v3_pixels[x, y], v2_pixels[x, y], (x, y))
 
     def test_browser_extension_package_script_builds_store_submission_zip(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-package-test-"))
