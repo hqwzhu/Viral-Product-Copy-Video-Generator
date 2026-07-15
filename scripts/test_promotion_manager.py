@@ -6740,6 +6740,14 @@ Prompt templates for product copy, SEO content, and video scripts.
             "ENHE Product Promo Maker (formerly ENHE Promotion Manager)",
             "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）",
         ]
+        approved_compatibility_tokens = {
+            "browser-extension/popup.js": [
+                '"--task-name \\"ENHE Promotion Manager\\""',
+            ],
+            "scripts/automation_scheduler.py": [
+                'task.add_argument("--task-name", default="ENHE Promotion Manager")',
+            ],
+        }
         retired_names = [
             "ENHE Promotion Manager",
             "ENHE 推广管理器",
@@ -6782,6 +6790,8 @@ Prompt templates for product copy, SEO content, and video scripts.
             text = path.read_text(encoding="utf-8")
             for approved_alias in approved_legal_aliases:
                 text = text.replace(approved_alias, "")
+            for approved_token in approved_compatibility_tokens.get(relative_path, []):
+                text = text.replace(approved_token, "")
             for retired_name in retired_names:
                 self.assertNotIn(retired_name, text, str(path))
 
@@ -6789,6 +6799,14 @@ Prompt templates for product copy, SEO content, and video scripts.
         popup = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
         self.assertIn("/api/promotion-manager/license", popup)
         self.assertIn("/promotion-manager/checkout", popup)
+        self.assertIn('"--task-name \\"ENHE Promotion Manager\\""', popup)
+
+        scheduler = AUTOMATION_SCHEDULER.read_text(encoding="utf-8")
+        self.assertIn('task.add_argument("--task-name", default="ENHE Promotion Manager")', scheduler)
+        self.assertIn(
+            '-Description "Runs the ENHE Product Promo Maker scheduler."',
+            scheduler,
+        )
 
         package_json = json.loads((LICENSE_SERVICE / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(package_json["name"], "enhe-promotion-manager-license-service")
@@ -7269,6 +7287,10 @@ Prompt templates for product copy, SEO content, and video scripts.
             report["storeSubmission"]["privacyPolicyUrl"],
             "https://www.enhe-tech.com.cn/promotion-manager/privacy",
         )
+        self.assertEqual(
+            report["storeSubmission"]["supportUrl"],
+            "https://www.enhe-tech.com.cn/promotion-manager/support",
+        )
         with zipfile.ZipFile(package_path) as package:
             names = set(package.namelist())
         self.assertIn("manifest.json", names)
@@ -7281,6 +7303,34 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("icons/icon128.png", names)
         self.assertIn("_locales/en/messages.json", names)
         self.assertIn("_locales/zh_CN/messages.json", names)
+
+    def test_browser_extension_guides_use_isolated_v053_package_outputs(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+        expected_outputs = [
+            r"dist\v0.5.3\enhe-promotion-manager-0.5.3.zip",
+            r"dist\v0.5.3\browser-extension-package-report.json",
+            r"dist\v0.5.3\browser-extension-package-report.md",
+        ]
+        retired_tokens = [
+            'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
+            r"dist\enhe-promotion-manager-<version>.zip",
+            r"dist\browser-extension-package-report.json",
+            r"dist\browser-extension-package-report.md",
+            "`browser-extension-package-report.json`",
+        ]
+
+        for guide_path in [
+            DOCS / "browser-extension.md",
+            DOCS / "zh-CN" / "browser-extension.md",
+        ]:
+            guide = guide_path.read_text(encoding="utf-8")
+            with self.subTest(guide=guide_path):
+                self.assertIn("0.5.3", guide)
+                self.assertIn(expected_command, guide)
+                for output in expected_outputs:
+                    self.assertIn(output, guide)
+                for retired_token in retired_tokens:
+                    self.assertNotIn(retired_token, guide)
 
     def test_license_service_backend_skeleton_matches_extension_billing_contract(self) -> None:
         package_json_path = LICENSE_SERVICE / "package.json"

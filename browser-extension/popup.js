@@ -897,7 +897,7 @@ function automationWindowsTaskCommand() {
     "python scripts\\automation_scheduler.py windows-task",
     `--config ${quote(automationConfig())}`,
     `--out-file ${quote(els.windowsTaskScript.value.trim() || ".\\register-enhe-promotion-task.ps1")}`,
-    "--task-name \"ENHE Product Promo Maker\"",
+    "--task-name \"ENHE Promotion Manager\"",
     `--time ${quote(els.windowsTaskTime.value.trim() || "09:00")}`
   ];
   return args.join(" ");

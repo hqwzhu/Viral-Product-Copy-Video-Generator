@@ -19,7 +19,7 @@
 - chrome: https://developer.chrome.com/docs/webstore/publish
 - edge: https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension
 - privacyPolicyUrl: https://www.enhe-tech.com.cn/promotion-manager/privacy
-- supportUrl: https://www.enhe-tech.com.cn/
+- supportUrl: https://www.enhe-tech.com.cn/promotion-manager/support
 
 ## Guardrails
 - Package local extension code only; remote services may return data, not executable code.

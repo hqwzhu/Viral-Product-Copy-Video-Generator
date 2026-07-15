@@ -34,16 +34,16 @@
 ## 打包成上架包
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 ```
 
 输出：
 
-- `dist\enhe-promotion-manager-<version>.zip`
-- `dist\browser-extension-package-report.json`
-- `dist\browser-extension-package-report.md`
+- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
+- `dist\v0.5.3\browser-extension-package-report.json`
+- `dist\v0.5.3\browser-extension-package-report.md`
 
-上架步骤见 `docs/zh-CN/extension-store-submission.md`。提交前确认 `browser-extension-package-report.json` 的 `status` 为 `ready`。
+上架步骤见 `docs/zh-CN/extension-store-submission.md`。提交前确认 `dist\v0.5.3\browser-extension-package-report.json` 的 `status` 为 `ready`。
 
 ## 收费订阅
 
@@ -78,7 +78,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist"
 - Product page: https://www.enhe-tech.com.cn/promotion-manager
 - Repository: https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git
 
-## 0.5.2 中英文界面
+## 0.5.3 中英文界面
 
 - 插件首次打开时自动跟随 Chrome 界面语言：中文环境使用中文，其他环境使用英文。
 - 右上角提供 `中文 / EN` 切换，用户选择会保存在插件本地存储中，后续打开继续使用该语言。

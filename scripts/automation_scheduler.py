@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     task = subparsers.add_parser("windows-task", help="Write a PowerShell script that registers this scheduler with Windows Task Scheduler.")
     task.add_argument("--config", required=True)
     task.add_argument("--out-file", required=True)
-    task.add_argument("--task-name", default="ENHE Product Promo Maker")
+    task.add_argument("--task-name", default="ENHE Promotion Manager")
     task.add_argument("--time", default="09:00", help="Daily run time in HH:MM.")
     task.add_argument("--state-file", default="")
     return parser.parse_args()

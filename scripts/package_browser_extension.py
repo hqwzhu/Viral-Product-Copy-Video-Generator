@@ -85,7 +85,7 @@ def build_report(out_dir: Path) -> dict[str, Any]:
             "chrome": "https://developer.chrome.com/docs/webstore/publish",
             "edge": "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
             "privacyPolicyUrl": "https://www.enhe-tech.com.cn/promotion-manager/privacy",
-            "supportUrl": "https://www.enhe-tech.com.cn/",
+            "supportUrl": "https://www.enhe-tech.com.cn/promotion-manager/support",
         },
         "guardrails": [
             "Package local extension code only; remote services may return data, not executable code.",
