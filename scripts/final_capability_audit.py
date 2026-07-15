@@ -827,10 +827,10 @@ def github_docs_status() -> dict[str, Any]:
             "remote code",
         ],
         "docs/zh-CN/extension-store-submission.md": [
-            "浏览器插件上架指南",
+            "ENHE 产品推广素材生成器浏览器扩展上架指南",
             "Chrome Web Store 上架步骤",
             "Microsoft Edge Add-ons 上架步骤",
-            "privacy policy",
+            "隐私政策",
             "remote code",
         ],
         "docs/subscription-pricing.md": ["Subscription Pricing", "Credit Model", "Browser publish session", "Plans"],
