@@ -7394,6 +7394,33 @@ Prompt templates for product copy, SEO content, and video scripts.
             for marker in markers:
                 self.assertIn(marker, text, f"{path} missing {marker}")
 
+        for path in [
+            DOCS / "legal/privacy-policy.md",
+            DOCS / "legal/terms-of-service.md",
+            DOCS / "legal/refund-policy.md",
+            DOCS / "legal/support.md",
+        ]:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("ENHE Product Promo Maker", text, f"{path} missing new product name")
+            self.assertEqual(
+                text.count("formerly ENHE Promotion Manager"),
+                1,
+                f"{path} must contain the transition alias exactly once",
+            )
+
+        chinese_privacy_path = DOCS / "legal/privacy-policy.zh-CN.md"
+        chinese_privacy = chinese_privacy_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "ENHE 产品推广素材生成器（原 ENHE Promotion Manager）",
+            chinese_privacy,
+            f"{chinese_privacy_path} missing Chinese transition alias",
+        )
+        self.assertEqual(
+            chinese_privacy.count("（原 ENHE Promotion Manager）"),
+            1,
+            f"{chinese_privacy_path} must contain the transition alias exactly once",
+        )
+
     def test_manual_publish_package_strategy_is_documented_across_skill_usage_and_capability_map(self) -> None:
         files = [
             ROOT / "SKILL.md",

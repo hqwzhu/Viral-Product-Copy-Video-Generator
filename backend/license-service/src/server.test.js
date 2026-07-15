@@ -45,6 +45,8 @@ test("privacy page publishes the approved English and Chinese retention policy",
     const response = await fetch(`${baseUrl}/promotion-manager/privacy`);
     assert.equal(response.status, 200);
     const html = await response.text();
+    assert.match(html, /ENHE Product Promo Maker \(formerly ENHE Promotion Manager\)/);
+    assert.match(html, /ENHE 产品推广素材生成器（原 ENHE Promotion Manager）/);
     assert.match(html, /中文 \/ EN/);
     assert.match(html, /automatically deleted 30 days/);
     assert.match(html, /retained for 180 days/);
@@ -54,6 +56,27 @@ test("privacy page publishes the approved English and Chinese retention policy",
     assert.match(html, /按照适用法律保留/);
     assert.match(html, /huqingwei5942@gmail\.com/);
     assert.match(html, /enhe_pm_language/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("public legal pages use the new name and one transition alias", async () => {
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    for (const page of ["terms", "refund", "support"]) {
+      const response = await fetch(`${baseUrl}/promotion-manager/${page}`);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.match(html, /ENHE Product Promo Maker/);
+      assert.equal(
+        (html.match(/formerly ENHE Promotion Manager/g) || []).length,
+        1,
+        `${page} must use the transition alias exactly once`
+      );
+    }
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
