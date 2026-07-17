@@ -25,7 +25,7 @@ cd enhe-promotion-manager
 2. 点击扩展图标。
 3. 点击“使用当前标签页”。
 4. 核对 URL、标题、目标平台和输出目录。
-5. 点击生成命令并复制到仓库根目录执行。
+5. 点击生成命令并复制到 `skill\viral-product-copy-video-generator` 目录执行。
 
 扩展读取当前标签页的 URL 与标题作为任务输入，不会后台批量读取标签页，也不会把 Cookies、Chrome 登录配置或页面令牌上传到本公开仓库或公开发行包。
 

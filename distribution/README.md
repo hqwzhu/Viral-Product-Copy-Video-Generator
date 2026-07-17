@@ -2,7 +2,7 @@
 
 把产品网页变成推广文案、视频脚本和发布素材。
 
-[English README](README.en.md) · [ENHE AI 官网](https://www.enhe-tech.com.cn/) · [产品页面](https://www.enhe-tech.com.cn/promotion-manager) · [Chrome Web Store](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)
+[English](README.en.md) | [官方网站](https://www.enhe-tech.com.cn/) | [产品页面](https://www.enhe-tech.com.cn/promotion-manager) | [Chrome 商店](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)
 
 ```text
 产品网页 -> 产品事实 -> 爆款/竞品证据 -> 平台文案 -> 视频脚本与素材 -> 发布包 -> 真实数据复盘

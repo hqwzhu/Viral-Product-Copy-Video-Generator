@@ -82,7 +82,7 @@ python -c "from pathlib import Path; Path('distribution/README.md').read_text(en
 
 现象：Chrome 扩展生成了命令，但已安装 Skill 缺少对应脚本，或本地行为仍像旧版本。
 
-进入已审核的 `skill\viral-product-copy-video-generator` 目录后同步：
+进入一个独立克隆、已审核的公开仓库 `skill\viral-product-copy-video-generator` 源目录后同步。不要在 `$HOME\.codex\skills\viral-product-copy-video-generator` 安装目标目录中运行；源与目标相同时会发生同文件复制错误：
 
 ```powershell
 python scripts\self_evolution_audit.py `

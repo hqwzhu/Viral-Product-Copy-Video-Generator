@@ -2,6 +2,19 @@
 
 本文面向 Windows PowerShell，也给出跨平台提示。公开发行包含本地 Codex Skill、Chrome Manifest V3 扩展和校验脚本；Hosted Worker 保持关闭，不需要为本地工作流部署服务端。
 
+## Windows 首选安装检查
+
+克隆公开仓库并进入 `skill\viral-product-copy-video-generator` 后，先运行这组 Windows PowerShell 命令：
+
+```powershell
+python --version
+python -m pip install playwright pillow
+python -m playwright install chromium
+python scripts\self_evolution_audit.py --skip-runtime-checks --out-dir ".\promotion-output\install-audit"
+```
+
+这组命令安装浏览器与图片依赖并执行只读安装审计。FFmpeg 和 YouTube 官方 API 客户端按需单独安装，见下文。
+
 ## 路径一：Chrome Web Store
 
 适合只需要当前页面转任务和命令生成的用户。
@@ -59,25 +72,42 @@ Expand-Archive -Path ".\enhe-product-promo-maker-skill-0.5.3.zip" `
   -DestinationPath $skillHome -Force
 ```
 
-解压后确认 `$skillHome\viral-product-copy-video-generator\SKILL.md` 和 `$skillHome\viral-product-copy-video-generator\scripts\skill_entry.py` 存在。进入公开仓库的 Skill 目录或已安装目录后可运行：
+解压后确认 `$skillHome\viral-product-copy-video-generator\SKILL.md` 和 `$skillHome\viral-product-copy-video-generator\scripts\skill_entry.py` 存在。
+
+安装或替换 Skill 后，完全退出并重新打开 Codex，或在客户端中刷新 Skill 发现并新建任务，确保新版本被重新加载。
+
+如需把已审核源码同步到 Codex Skill 目录，只能从一个独立克隆的公开仓库 Skill 目录运行 `--sync-installed-skill`。不要从 `$skillHome\viral-product-copy-video-generator` 目标目录运行同步命令；源文件与目标文件相同时会发生同文件复制错误。
+
+## 校验发行包 SHA-256
+
+从同一 GitHub Release 下载 `SHA256SUMS`、`enhe-product-promo-maker-skill-0.5.3.zip` 和 `enhe-promotion-manager-extension-0.5.3.zip`，放在同一目录，然后同时校验 Skill 与扩展包：
 
 ```powershell
-python scripts\self_evolution_audit.py `
-  --sync-installed-skill `
-  --approval I_APPROVE_SKILL_SYNC `
-  --out-dir ".\promotion-output"
+$releaseFiles = @(
+  "enhe-product-promo-maker-skill-0.5.3.zip",
+  "enhe-promotion-manager-extension-0.5.3.zip"
+)
+$sumLines = Get-Content ".\SHA256SUMS"
+foreach ($name in $releaseFiles) {
+  $record = $sumLines | Where-Object { $_.EndsWith($name) } | Select-Object -First 1
+  if (-not $record) { throw "SHA256SUMS 中缺少 $name" }
+  $expected = ($record -split "\s+")[0]
+  $actual = (Get-FileHash -LiteralPath ".\$name" -Algorithm SHA256).Hash
+  if ($actual -ne $expected) { throw "$name SHA-256 校验失败" }
+  Write-Host "$name SHA-256 OK"
+}
 ```
 
-这条同步命令只复制允许的 Skill 文档和脚本；它不会复制 Cookies、Chrome 配置、`promotion-output`、`.env`、凭据或运行态。
+任一哈希不一致时不要安装，重新从正式发行页下载并再次校验。
 
 ## 可选依赖
 
-### Playwright 与 Chromium
+### Playwright、Chromium 与 Pillow
 
 用于动态产品页、浏览器可见平台页面和浏览器辅助表单：
 
 ```powershell
-python -m pip install playwright
+python -m pip install playwright pillow
 python -m playwright install chromium
 ```
 
@@ -88,14 +118,6 @@ python scripts\skill_entry.py `
   --link "https://example.com/product" `
   --install-browser-if-missing `
   --out-dir ".\promotion-output"
-```
-
-### Pillow
-
-用于 PNG 封面图和详情图：
-
-```powershell
-python -m pip install pillow
 ```
 
 ### FFmpeg

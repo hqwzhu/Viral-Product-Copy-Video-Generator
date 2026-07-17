@@ -54,7 +54,7 @@ Chrome 商店条目 https://chromewebstore.google.com/detail/enhe-promotion-mana
 
 ## 如何检查本地 Skill 是否同步
 
-进入公开仓库的 `skill\viral-product-copy-video-generator` 目录后运行：
+进入一个独立克隆的公开仓库 `skill\viral-product-copy-video-generator` 源目录后运行。不要从 `$HOME\.codex\skills\viral-product-copy-video-generator` 安装目标目录执行同步：
 
 ```powershell
 python scripts\self_evolution_audit.py `

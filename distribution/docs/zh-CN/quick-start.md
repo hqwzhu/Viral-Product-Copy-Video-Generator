@@ -39,14 +39,14 @@ python scripts\skill_entry.py `
 
 | 目录或文件 | 内容 |
 | --- | --- |
-| `promotion-output\reports\promotion-manager\` | 产品事实、证据、能力审计、就绪状态和发布流程报告 |
-| `promotion-output\reports\promotion-manager\platform-content\` | 各平台标题、正文、标签和互动提示草稿 |
-| `promotion-output\reports\promotion-manager\scripts\` | 口播稿、分镜、镜头和字幕重点 |
-| `promotion-output\reports\promotion-manager\media\` | 可用时的 MP4 草稿、封面图和详情图 |
+| `promotion-output\reports\promotion-manager\generated-content\` | 各平台标题、正文、标签、口播稿、分镜和内容审核报告 |
+| `promotion-output\videos\` | FFmpeg 可用时生成的 MP4 视频草稿 |
+| `promotion-output\media-assets\` | Pillow 可用时按平台生成的 PNG 封面图与详情图 |
 | `promotion-output\reports\promotion-manager\publish-queue\` | 发布队列和每个平台的人工/官方 API 入口 |
-| `promotion-output\reports\promotion-manager\publish-packages\` | 整理好的发布包、警告、缺失项和操作步骤 |
-| `promotion-output\reports\promotion-manager\evidence-inbox\` | 真实 URL、指标、评论、订单和收入证据的导入说明 |
-| `promotion-output\reports\promotion-manager\retrospective\` | 有真实证据后生成的复盘与下一轮建议 |
+| `promotion-output\reports\promotion-manager\publish-packs\` | 整理好的发布包、警告、缺失项和操作步骤 |
+| `promotion-output\reports\promotion-manager\real-evidence-inbox-setup\` | 真实证据收件箱的初始化报告 |
+| `promotion-output\reports\promotion-manager\real-evidence-inbox\` | 真实 URL、指标、评论、订单和收入的导入报告 |
+| `promotion-output\reports\promotion-manager\retrospectives\` | 有真实证据后生成的复盘与下一轮建议 |
 
 如果某个依赖不可用，报告可能出现 `partial_ready` 或媒体 `missing`。这表示文本或部分证据已可用，不代表缺失的媒体或平台结果已经生成。
 
@@ -57,7 +57,7 @@ python scripts\skill_entry.py `
 1. 打开公开产品页面。
 2. 用户主动点击扩展图标，点击“使用当前标签页”。
 3. 选择平台、工作流深度和命令类型。
-4. 复制命令，在仓库根目录运行并审阅输出。
+4. 复制命令，在 `skill\viral-product-copy-video-generator` 目录运行并审阅输出。
 
 扩展生成的命令只是本地执行入口，不会替你提交最终发布。语言可在插件内切换为中文或英文。
 
