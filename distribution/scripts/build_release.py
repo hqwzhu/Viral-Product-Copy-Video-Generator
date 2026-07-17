@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
-def write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+def _json_bytes(payload: dict) -> bytes:
+    return (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
 def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
@@ -93,14 +93,18 @@ def _prepare_release_directory(root: Path) -> Path:
     return version_directory
 
 
-def _new_temp_archive(directory: Path) -> Path:
-    descriptor, name = tempfile.mkstemp(prefix=".tmp-", suffix=".zip", dir=directory)
+def _new_temp_file(directory: Path, suffix: str) -> Path:
+    descriptor, name = tempfile.mkstemp(prefix=".tmp-", suffix=suffix, dir=directory)
     os.close(descriptor)
     path = Path(name)
     if contract._is_link_or_reparse(path) or not path.is_file():
         path.unlink(missing_ok=True)
         raise RuntimeError("temporary release artifact is not a regular file")
     return path
+
+
+def _new_temp_archive(directory: Path) -> Path:
+    return _new_temp_file(directory, ".zip")
 
 
 def _fsync_file(path: Path) -> None:
@@ -120,6 +124,73 @@ def _fsync_directory(path: Path) -> None:
         pass
     finally:
         os.close(descriptor)
+
+
+def _write_temp_bytes(path: Path, data: bytes) -> None:
+    with path.open("r+b") as handle:
+        handle.seek(0)
+        handle.truncate()
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _atomic_write_bytes(root: Path, path: Path, data: bytes) -> None:
+    _validate_release_path(root, path.parent)
+    _validate_release_path(root, path, destination=True)
+    temporary = _new_temp_file(path.parent, ".publish")
+    try:
+        _write_temp_bytes(temporary, data)
+        _validate_release_path(root, path.parent)
+        _validate_release_path(root, path, destination=True)
+        if contract._is_link_or_reparse(temporary) or not temporary.is_file():
+            raise RuntimeError("publication temporary file is not a regular file")
+        os.replace(temporary, path)
+        temporary = None
+        _fsync_directory(path.parent)
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _snapshot_publication(paths: tuple[Path, ...]) -> dict[Path, bytes | None]:
+    snapshots: dict[Path, bytes | None] = {}
+    for path in paths:
+        _validate_release_path(ROOT, path, destination=True)
+        snapshots[path] = path.read_bytes() if path.exists() else None
+    return snapshots
+
+
+def _remove_publication_file(path: Path) -> None:
+    _validate_release_path(ROOT, path.parent)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    if contract._is_link_or_reparse(path):
+        path.unlink()
+    elif path.is_file():
+        path.unlink()
+    else:
+        raise RuntimeError("rollback destination is not a regular file")
+    _fsync_directory(path.parent)
+
+
+def _restore_publication(snapshots: dict[Path, bytes | None]) -> None:
+    failures: list[str] = []
+    for path, data in snapshots.items():
+        try:
+            if data is None:
+                _remove_publication_file(path)
+            else:
+                _atomic_write_bytes(ROOT, path, data)
+        except Exception:
+            failures.append(path.name)
+    if failures:
+        raise RuntimeError("release rollback failed for: " + ", ".join(failures))
 
 
 def build_skill_zip(output: Path) -> None:
@@ -211,6 +282,10 @@ def build_release(validated_extension_zip: Path) -> Path:
     dist = _prepare_release_directory(ROOT)
     skill_zip = dist / release["skillArchive"]
     extension_zip = dist / release["extensionArchive"]
+    checksum_path = ROOT / "SHA256SUMS"
+    snapshots = _snapshot_publication(
+        (skill_zip, extension_zip, release_path, checksum_path)
+    )
     _validate_release_path(ROOT, skill_zip, destination=True)
     _validate_release_path(ROOT, extension_zip, destination=True)
     skill_temp: Path | None = None
@@ -239,6 +314,59 @@ def build_release(validated_extension_zip: Path) -> Path:
         os.replace(extension_temp, extension_zip)
         extension_temp = None
         _fsync_directory(dist)
+
+        release["artifacts"] = {
+            path.name: {
+                "bytes": path.stat().st_size,
+                "sha256": contract.sha256_file(path).upper(),
+            }
+            for path in (skill_zip, extension_zip)
+        }
+        release["treeDigest"] = canonical_tree_digest(release)
+        release["verification"]["status"] = "built"
+        _atomic_write_bytes(ROOT, release_path, _json_bytes(release))
+
+        errors = verify_distribution.validate(ROOT, check_checksums=False)
+        if errors:
+            raise RuntimeError("pre-checksum verification failed: " + "; ".join(errors))
+
+        release["verification"]["status"] = "ready"
+        _atomic_write_bytes(ROOT, release_path, _json_bytes(release))
+        checksum_temp = _new_temp_file(ROOT, ".checksums")
+        try:
+            generate_checksums.write_checksums(
+                ROOT,
+                [
+                    skill_zip.relative_to(ROOT).as_posix(),
+                    extension_zip.relative_to(ROOT).as_posix(),
+                    "release-manifest.json",
+                ],
+                checksum_temp,
+            )
+            _fsync_file(checksum_temp)
+            _validate_release_path(ROOT, checksum_path, destination=True)
+            if contract._is_link_or_reparse(checksum_temp) or not checksum_temp.is_file():
+                raise RuntimeError("staged checksum file is not a regular file")
+            os.replace(checksum_temp, checksum_path)
+            checksum_temp = None
+            _fsync_directory(ROOT)
+        finally:
+            if checksum_temp is not None:
+                try:
+                    checksum_temp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        errors = verify_distribution.validate(ROOT)
+        if errors:
+            raise RuntimeError("final distribution verification failed: " + "; ".join(errors))
+        return dist
+    except BaseException as exc:
+        try:
+            _restore_publication(snapshots)
+        except Exception as rollback_exc:
+            raise RuntimeError("release failed and rollback could not restore prior publication") from rollback_exc
+        raise
     finally:
         for temporary in (skill_temp, extension_temp):
             if temporary is not None:
@@ -246,37 +374,6 @@ def build_release(validated_extension_zip: Path) -> Path:
                     temporary.unlink(missing_ok=True)
                 except OSError:
                     pass
-
-    release["artifacts"] = {
-        path.name: {
-            "bytes": path.stat().st_size,
-            "sha256": contract.sha256_file(path).upper(),
-        }
-        for path in (skill_zip, extension_zip)
-    }
-    release["treeDigest"] = canonical_tree_digest(release)
-    release["verification"]["status"] = "built"
-    write_json(release_path, release)
-
-    errors = verify_distribution.validate(ROOT, check_checksums=False)
-    if errors:
-        raise RuntimeError("pre-checksum verification failed: " + "; ".join(errors))
-
-    release["verification"]["status"] = "ready"
-    write_json(release_path, release)
-    generate_checksums.write_checksums(
-        ROOT,
-        [
-            skill_zip.relative_to(ROOT).as_posix(),
-            extension_zip.relative_to(ROOT).as_posix(),
-            "release-manifest.json",
-        ],
-        ROOT / "SHA256SUMS",
-    )
-    errors = verify_distribution.validate(ROOT)
-    if errors:
-        raise RuntimeError("final distribution verification failed: " + "; ".join(errors))
-    return dist
 
 
 def main() -> None:

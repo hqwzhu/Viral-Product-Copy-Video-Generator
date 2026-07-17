@@ -196,6 +196,72 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
 
 
 class PublicDistributionTest(unittest.TestCase):
+    def test_release_rolls_back_existing_publication_after_prevalidation_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root, validated = create_public_repository(base)
+            version_dir = root / "dist" / f"v{contract.VERSION}"
+            version_dir.mkdir(parents=True)
+            skill_output = version_dir / verify_distribution.EXPECTED_SKILL_ARCHIVE
+            extension_output = version_dir / verify_distribution.EXPECTED_EXTENSION_ARCHIVE
+            checksum_output = root / "SHA256SUMS"
+            release_output = root / "release-manifest.json"
+            previous = {
+                skill_output: b"previous-skill-archive",
+                extension_output: b"previous-extension-archive",
+                checksum_output: b"previous-checksums\n",
+                release_output: release_output.read_bytes(),
+            }
+            for path, data in previous.items():
+                path.write_bytes(data)
+            external = base / "external-sentinel.zip"
+            external.write_bytes(b"external-sentinel")
+
+            with (
+                mock.patch.object(build_release, "ROOT", root),
+                mock.patch.object(
+                    verify_distribution,
+                    "validate",
+                    return_value=["forced prevalidation failure"],
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "forced prevalidation failure"):
+                    build_release.build_release(validated)
+
+            for path, data in previous.items():
+                self.assertEqual(path.read_bytes(), data, path.name)
+            self.assertEqual(external.read_bytes(), b"external-sentinel")
+            self.assertEqual(list(version_dir.glob(".tmp-*")), [])
+            self.assertEqual(list(root.glob(".tmp-*")), [])
+
+    def test_release_removes_new_publication_after_final_validation_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, validated = create_public_repository(Path(temp))
+            release_output = root / "release-manifest.json"
+            previous_release = release_output.read_bytes()
+            version_dir = root / "dist" / f"v{contract.VERSION}"
+            skill_output = version_dir / verify_distribution.EXPECTED_SKILL_ARCHIVE
+            extension_output = version_dir / verify_distribution.EXPECTED_EXTENSION_ARCHIVE
+            checksum_output = root / "SHA256SUMS"
+
+            with (
+                mock.patch.object(build_release, "ROOT", root),
+                mock.patch.object(
+                    verify_distribution,
+                    "validate",
+                    side_effect=[[], ["forced final validation failure"]],
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "forced final validation failure"):
+                    build_release.build_release(validated)
+
+            self.assertEqual(release_output.read_bytes(), previous_release)
+            self.assertFalse(skill_output.exists())
+            self.assertFalse(extension_output.exists())
+            self.assertFalse(checksum_output.exists())
+            self.assertEqual(list(version_dir.glob(".tmp-*")), [])
+            self.assertEqual(list(root.glob(".tmp-*")), [])
+
     def test_release_rejects_mocked_reparse_destination_without_partial_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
