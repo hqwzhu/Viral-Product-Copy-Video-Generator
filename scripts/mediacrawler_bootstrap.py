@@ -104,7 +104,7 @@ def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], Bootstra
     separator = values.index("--")
     parser = argparse.ArgumentParser(description="Run a pinned MediaCrawler checkout safely.")
     parser.add_argument("--checkout", required=True)
-    parser.add_argument("--requested-max-contents", type=int, required=True)
+    parser.add_argument("--requested-max-contents", type=int, default=20)
     parser.add_argument("--xhs-detail-query", default="")
     parser.add_argument("--xhs-detail-target", default="")
     args = parser.parse_args(values[:separator])

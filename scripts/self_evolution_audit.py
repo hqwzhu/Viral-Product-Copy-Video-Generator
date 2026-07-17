@@ -307,7 +307,7 @@ def managed_skill_files(root: Path) -> list[Path]:
             files.append(Path(standalone))
     directory_patterns = {
         "references": ["*.md"],
-        "scripts": ["*.py", "*.jsonl"],
+        "scripts": ["*.py"],
         "docs": ["*.md"],
         "deploy": ["*.md", "*.conf", "*.service", "*.example"],
         "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt", "*.png"],
@@ -323,6 +323,10 @@ def managed_skill_files(root: Path) -> list[Path]:
                 if generated_or_dependency_path(relative):
                     continue
                 files.append(Path(folder) / relative)
+    fixture_dir = root / "scripts" / "fixtures" / "mediacrawler"
+    if fixture_dir.exists():
+        for item in sorted(fixture_dir.glob("*.jsonl")):
+            files.append(Path("scripts/fixtures/mediacrawler") / item.name)
     return sorted(dict.fromkeys(files), key=lambda item: item.as_posix())
 
 

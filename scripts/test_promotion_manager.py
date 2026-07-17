@@ -8325,6 +8325,31 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("scripts/package_browser_extension.py", files)
         self.assertIn("scripts/launch_unlock_pack.py", files)
 
+        with tempfile.TemporaryDirectory(prefix="managed-skill-files-test-") as temp_dir:
+            fixture_root = Path(temp_dir)
+            scripts_dir = fixture_root / "scripts"
+            fixture_dir = scripts_dir / "fixtures" / "mediacrawler"
+            fixture_dir.mkdir(parents=True)
+            (scripts_dir / "helper.py").write_text("pass\n", encoding="utf-8")
+            (scripts_dir / "unrelated-output.jsonl").write_text('{"private": true}\n', encoding="utf-8")
+            fixture_names = [
+                "xiaohongshu-contents.jsonl",
+                "xiaohongshu-comments.jsonl",
+                "douyin-contents.jsonl",
+                "douyin-comments.jsonl",
+                "zhihu-contents.jsonl",
+                "zhihu-comments.jsonl",
+            ]
+            for name in fixture_names:
+                (fixture_dir / name).write_text("{}\n", encoding="utf-8")
+
+            modeled_files = {item.as_posix() for item in module.managed_skill_files(fixture_root)}
+
+        self.assertIn("scripts/helper.py", modeled_files)
+        self.assertNotIn("scripts/unrelated-output.jsonl", modeled_files)
+        for name in fixture_names:
+            self.assertIn(f"scripts/fixtures/mediacrawler/{name}", modeled_files)
+
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)

@@ -222,6 +222,22 @@ class SidecarCommandTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_bootstrap_parser_defaults_requested_max_contents_when_omitted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mediacrawler-bootstrap-test-") as temp_dir:
+            checkout = Path(temp_dir)
+            (checkout / "main.py").touch()
+
+            try:
+                parsed_checkout, upstream_args, overrides = bootstrap.parse_bootstrap_args(
+                    ["--checkout", str(checkout), "--", "--platform", "dy"]
+                )
+            except SystemExit as exc:
+                self.fail(f"omitting --requested-max-contents must use the safe default: {exc}")
+
+        self.assertEqual(parsed_checkout, checkout.resolve())
+        self.assertEqual(upstream_args, ["--platform", "dy"])
+        self.assertEqual(overrides.requested_max_contents, 20)
+
     def test_cdp_port_can_follow_current_authenticated_chrome(self) -> None:
         config = SimpleNamespace(CDP_DEBUG_PORT=9222)
         bootstrap.apply_cdp_port_override(config, "7486")
