@@ -96,7 +96,14 @@ def load_script_module(path: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load module from {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    original_sys_path = sys.path.copy()
+    script_dir = str(path.resolve().parent)
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_sys_path
     return module
 
 
@@ -189,6 +196,28 @@ def playwright_chromium_available() -> bool:
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
+    def test_load_script_module_resolves_sibling_import_and_restores_sys_path(self) -> None:
+        sibling_name = f"_promotion_manager_sibling_{os.getpid()}_{id(self)}"
+        self.assertNotIn(sibling_name, sys.modules)
+
+        with tempfile.TemporaryDirectory(prefix="load-script-module-test-") as temp_dir_name:
+            temp_dir = Path(temp_dir_name).resolve()
+            target_path = temp_dir / "target.py"
+            (temp_dir / f"{sibling_name}.py").write_text("VALUE = 'loaded'\n", encoding="utf-8")
+            target_path.write_text(
+                f"from {sibling_name} import VALUE\n",
+                encoding="utf-8",
+            )
+            original_sys_path = sys.path.copy()
+            self.assertNotIn(str(temp_dir), sys.path)
+
+            try:
+                module = load_script_module(target_path)
+                self.assertEqual(module.VALUE, "loaded")
+                self.assertEqual(sys.path, original_sys_path)
+            finally:
+                sys.modules.pop(sibling_name, None)
+
     def run_all(self) -> Path:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-manager-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
