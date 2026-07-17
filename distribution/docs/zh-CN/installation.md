@@ -86,55 +86,108 @@ foreach ($name in $releaseFiles) {
 然后解压到新的空暂存目录，验证 Skill 根目录，再以可回退方式替换安装目录。以下流程不会递归删除任何目录：
 
 ```powershell
-$skillHome = [IO.Path]::GetFullPath((Join-Path $HOME ".codex\skills"))
-New-Item -ItemType Directory -Path $skillHome -Force | Out-Null
-$installed = [IO.Path]::GetFullPath((Join-Path $skillHome "viral-product-copy-video-generator"))
-$expectedParent = [IO.Path]::GetFullPath((Split-Path -Parent $installed))
-if ($expectedParent -ne $skillHome) { throw "安装目标不在 Skill 根目录内" }
+& {
+  $ErrorActionPreference = "Stop"
 
-$staging = [IO.Path]::GetFullPath((Join-Path $env:TEMP ("enhe-skill-stage-" + [guid]::NewGuid().ToString("N"))))
-New-Item -ItemType Directory -Path $staging | Out-Null
-Expand-Archive -LiteralPath ".\enhe-product-promo-maker-skill-0.5.3.zip" -DestinationPath $staging
-
-$stagingRoot = (Resolve-Path -LiteralPath $staging).Path
-$candidate = (Resolve-Path -LiteralPath (Join-Path $staging "viral-product-copy-video-generator")).Path
-if (-not $candidate.StartsWith($stagingRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-  throw "暂存 Skill 路径越出暂存目录"
-}
-$candidateItem = Get-Item -LiteralPath $candidate
-if (-not $candidateItem.PSIsContainer) { throw "暂存 Skill 根路径不是目录" }
-if (($candidateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "暂存 Skill 根路径不能是重解析点" }
-if (-not (Test-Path -LiteralPath (Join-Path $candidate "SKILL.md") -PathType Leaf)) { throw "暂存包缺少 SKILL.md" }
-if (-not (Test-Path -LiteralPath (Join-Path $candidate "scripts\skill_entry.py") -PathType Leaf)) { throw "暂存包缺少 scripts\skill_entry.py" }
-
-$backup = "$installed.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
-if (Test-Path -LiteralPath $backup) { throw "备份路径已存在：$backup" }
-if (Test-Path -LiteralPath $installed) {
-  $resolvedInstalled = (Resolve-Path -LiteralPath $installed).Path
-  if (-not $resolvedInstalled.StartsWith($skillHome + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "现有 Skill 路径越出 Skill 根目录"
+  $skillHome = [IO.Path]::GetFullPath((Join-Path $HOME ".codex\skills"))
+  if (Test-Path -LiteralPath $skillHome) {
+    $skillHomeItem = Get-Item -LiteralPath $skillHome -Force
+    if (-not $skillHomeItem.PSIsContainer) { throw "Skill 根路径不是目录" }
+    if (($skillHomeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Skill 根路径不能是重解析点" }
   }
-  $installedItem = Get-Item -LiteralPath $resolvedInstalled
-  if (($installedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "现有 Skill 路径不能是重解析点" }
-  Move-Item -LiteralPath $resolvedInstalled -Destination $backup
-}
-$failed = "$installed.failed.$([guid]::NewGuid().ToString('N'))"
-try {
-  Move-Item -LiteralPath $candidate -Destination $installed
-  python "$installed\scripts\skill_entry.py" --help | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "skill_entry.py --help 验证失败" }
-  python "$installed\scripts\self_evolution_audit.py" `
-    --skip-runtime-checks `
-    --out-dir "$HOME\promotion-output\install-audit"
-  if ($LASTEXITCODE -ne 0) { throw "安装审计执行失败" }
-  Write-Host "新 Skill 验证通过。回退副本：$backup"
-} catch {
-  if (Test-Path -LiteralPath $installed) { Move-Item -LiteralPath $installed -Destination $failed }
-  if (Test-Path -LiteralPath $backup) {
-    Move-Item -LiteralPath $backup -Destination $installed
-    throw "新 Skill 验证失败，已恢复旧版本；失败树保留在 $failed。$($_.Exception.Message)"
+  New-Item -ItemType Directory -Path $skillHome -Force | Out-Null
+  $skillHomeItem = Get-Item -LiteralPath $skillHome -Force
+  if (-not $skillHomeItem.PSIsContainer) { throw "Skill 根路径不是目录" }
+  if (($skillHomeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Skill 根路径不能是重解析点" }
+
+  $installed = [IO.Path]::GetFullPath((Join-Path $skillHome "viral-product-copy-video-generator"))
+  $expectedParent = [IO.Path]::GetFullPath((Split-Path -Parent $installed))
+  if (-not [string]::Equals($expectedParent, $skillHome, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "安装目标不在 Skill 根目录内"
   }
-  throw "新 Skill 验证失败；没有旧版本可恢复，失败树保留在 $failed。$($_.Exception.Message)"
+
+  $tempRoot = [IO.Path]::GetFullPath($env:TEMP)
+  $tempRootItem = Get-Item -LiteralPath $tempRoot -Force
+  if (-not $tempRootItem.PSIsContainer) { throw "临时目录根路径不是目录" }
+  if (($tempRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "临时目录根路径不能是重解析点" }
+  $staging = [IO.Path]::GetFullPath((Join-Path $tempRoot ("enhe-skill-stage-" + [guid]::NewGuid().ToString("N"))))
+  $stagingParent = [IO.Path]::GetFullPath((Split-Path -Parent $staging))
+  if (-not [string]::Equals($stagingParent, $tempRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "暂存路径不在临时目录内"
+  }
+  New-Item -ItemType Directory -Path $staging | Out-Null
+  $stagingItem = Get-Item -LiteralPath $staging -Force
+  if (($stagingItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "暂存路径不能是重解析点" }
+  Expand-Archive -LiteralPath ".\enhe-product-promo-maker-skill-0.5.3.zip" -DestinationPath $staging
+
+  $stagingRoot = (Resolve-Path -LiteralPath $staging).Path
+  $candidatePath = [IO.Path]::GetFullPath((Join-Path $staging "viral-product-copy-video-generator"))
+  if (-not $candidatePath.StartsWith($stagingRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "暂存 Skill 路径越出暂存目录"
+  }
+  $candidateItem = Get-Item -LiteralPath $candidatePath -Force
+  if (-not $candidateItem.PSIsContainer) { throw "暂存 Skill 根路径不是目录" }
+  if (($candidateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "暂存 Skill 根路径不能是重解析点" }
+  $candidate = (Resolve-Path -LiteralPath $candidatePath).Path
+  if (-not $candidate.StartsWith($stagingRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "暂存 Skill 解析路径越出暂存目录"
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $candidate "SKILL.md") -PathType Leaf)) { throw "暂存包缺少 SKILL.md" }
+  if (-not (Test-Path -LiteralPath (Join-Path $candidate "scripts\skill_entry.py") -PathType Leaf)) { throw "暂存包缺少 scripts\skill_entry.py" }
+
+  $backup = [IO.Path]::GetFullPath("$installed.backup.$(Get-Date -Format 'yyyyMMddHHmmss')")
+  $backupParent = [IO.Path]::GetFullPath((Split-Path -Parent $backup))
+  if (-not [string]::Equals($backupParent, $skillHome, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "备份路径不在 Skill 根目录内"
+  }
+  $backupParentItem = Get-Item -LiteralPath $backupParent -Force
+  if (-not $backupParentItem.PSIsContainer) { throw "备份父路径不是目录" }
+  if (($backupParentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "备份父路径不能是重解析点" }
+  if (Test-Path -LiteralPath $backup) { throw "备份路径已存在：$backup" }
+  if (Test-Path -LiteralPath $installed) {
+    $installedItem = Get-Item -LiteralPath $installed -Force
+    if (-not $installedItem.PSIsContainer) { throw "现有 Skill 路径不是目录" }
+    if (($installedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "现有 Skill 路径不能是重解析点" }
+    $resolvedInstalled = (Resolve-Path -LiteralPath $installed).Path
+    if (-not $resolvedInstalled.StartsWith($skillHome + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+      throw "现有 Skill 路径越出 Skill 根目录"
+    }
+    Move-Item -LiteralPath $installed -Destination $backup
+  }
+
+  $failed = [IO.Path]::GetFullPath("$installed.failed.$([guid]::NewGuid().ToString('N'))")
+  $failedParent = [IO.Path]::GetFullPath((Split-Path -Parent $failed))
+  if (-not [string]::Equals($failedParent, $skillHome, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "失败树路径不在 Skill 根目录内"
+  }
+  try {
+    Move-Item -LiteralPath $candidate -Destination $installed
+    python "$installed\scripts\skill_entry.py" --help | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "skill_entry.py --help 验证失败" }
+    python "$installed\scripts\self_evolution_audit.py" `
+      --skip-runtime-checks `
+      --out-dir "$HOME\promotion-output\install-audit"
+    if ($LASTEXITCODE -ne 0) { throw "安装审计执行失败" }
+    Write-Host "新 Skill 验证通过。回退副本：$backup"
+  } catch {
+    $failureMessage = $_.Exception.Message
+    if (Test-Path -LiteralPath $installed) {
+      $failedInstalledItem = Get-Item -LiteralPath $installed -Force
+      if (($failedInstalledItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "失败的新 Skill 路径是重解析点，未移动。$failureMessage" }
+      Move-Item -LiteralPath $installed -Destination $failed
+    }
+    if (Test-Path -LiteralPath $backup) {
+      $backupItem = Get-Item -LiteralPath $backup -Force
+      if (($backupItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "备份路径是重解析点，未恢复。$failureMessage" }
+      $resolvedBackup = (Resolve-Path -LiteralPath $backup).Path
+      if (-not $resolvedBackup.StartsWith($skillHome + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "备份解析路径越出 Skill 根目录，未恢复。$failureMessage"
+      }
+      Move-Item -LiteralPath $backup -Destination $installed
+      throw "新 Skill 验证失败，已恢复旧版本；失败树保留在 $failed。$failureMessage"
+    }
+    throw "新 Skill 验证失败；没有旧版本可恢复，失败树保留在 $failed。$failureMessage"
+  }
 }
 ```
 
