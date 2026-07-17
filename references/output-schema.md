@@ -587,7 +587,7 @@ Text and structured-snapshot metric parsing accepts visible English/Chinese labe
 - `nextRoundContent[]`: platform, angle, title, hook, script brief, and source evidence for the next content round
 - `platformActions[]`: per-platform next action such as scaling a commercial winner, converting reach to CTA tests, or importing missing evidence
 - `recommendedCommands[]`: copy-ready commands for running the next cycle, refreshing viral discovery, recovering metrics, and preparing publish readiness
-- `guardrails`: no fabricated metrics, no automatic publish, no secret storage, and no treating missing data as zero
+- `guardrails`: do not fabricate metrics or store secrets; final platform publication requires an operator action or an explicitly approved official API gate; do not treat missing data as zero
 
 `waiting_real_data` means no real metrics, public/browser-visible comments, or matched business attribution were available. `partial_ready` means recommendations can be used, but some platforms or queued items still need real evidence.
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -966,6 +967,40 @@ class DistributionContractTest(unittest.TestCase):
                 release["syncAudit"]["commands"],
                 list(contract.NON_PAYMENT_COMMANDS),
             )
+
+    def test_public_skill_markdown_has_no_unsafe_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "public"
+            builder.build_repository(ROOT, target, source_commit="test-source-commit")
+
+            skill_root = target / "skill" / "viral-product-copy-video-generator"
+            expected_markdown = {
+                path.as_posix()
+                for path in contract.skill_files(ROOT)
+                if path.suffix.lower() == ".md"
+            }
+            actual_markdown = {
+                path.relative_to(skill_root).as_posix()
+                for path in skill_root.rglob("*.md")
+            }
+            self.assertEqual(actual_markdown, expected_markdown)
+
+            command = "\n".join(
+                (
+                    "import json, sys",
+                    "from pathlib import Path",
+                    "sys.path.insert(0, sys.argv[1])",
+                    "import verify_distribution",
+                    "print(json.dumps(verify_distribution.verify_claim_boundaries(Path(sys.argv[2]))))",
+                )
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", command, str(target / "scripts"), str(target)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(json.loads(result.stdout), [])
 
     def test_builder_refuses_non_empty_target(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
