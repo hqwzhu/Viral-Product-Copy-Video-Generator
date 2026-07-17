@@ -95,7 +95,7 @@ python scripts\self_evolution_audit.py `
 
 ## 发布命令被拒绝
 
-先回到 dry-run，检查凭据存在性、目标账号、仓库/视频路径、权限和审批值。官方写入需要 `--execute` 与 `I_APPROVE_PUBLISH`；浏览器辅助在最终提交前停止，最终发布由用户确认。
+先回到 dry-run，检查凭据存在性、目标账号、仓库/视频路径、权限和审批值。`skill_entry.py`、`final_capability_runner.py` 和 `publish_readiness_runner.py` 的官方写入开关是 `--execute-publish --approval I_APPROVE_PUBLISH`；浏览器辅助在最终提交前停止，最终发布由用户确认。
 
 ## 没有复盘数据
 

@@ -78,13 +78,13 @@ python scripts\skill_entry.py `
   --out-dir ".\promotion-output"
 ```
 
-然后打开：
+先打开批次报告：
 
 ```text
-promotion-output\reports\promotion-manager\
+promotion-output\reports\promotion-manager\batch\product-batch-runner.json
 ```
 
-优先查看产品读取、内容草稿、发布队列、发布包、能力就绪报告和证据收件箱说明。MP4、浏览器动态读取和 PNG 图片属于可选增强能力；缺少对应依赖时，文本交付仍可继续，并明确标记媒体缺失。
+报告的 `promotionRuns` 数组会给出每个产品的 `outputDir`、`workflowManifest` 和 `publishQueue`。产品内容、视频、图片、发布包与复盘位于对应的 `promotion-output\product-batch-runs\<run>`；`<run>` 由运行时生成，不应手工猜测。MP4、浏览器动态读取和 PNG 图片属于可选增强能力；缺少对应依赖时，文本交付仍可继续，并明确标记媒体缺失。
 
 你也可以直接从 [Chrome Web Store](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl) 安装插件，或按 [安装指南](docs/zh-CN/installation.md) 使用 `extension\chrome` 未打包扩展和 Skill ZIP。运行本地工作流不需要订阅，也不要求 Hosted Worker。
 
@@ -137,6 +137,8 @@ promotion-output\reports\promotion-manager\
 
 ## 开源许可与第三方组件
 
-本公开仓库中由 ENHE 提供的代码采用 MIT License，详见 `LICENSE`。第三方运行时和上游依赖遵循各自许可证。
+`LICENSE` 当前记录 `Copyright (c) 2026 HU`；`HU` 是该许可文件显示的代码版权标识/权利人。`ENHE AI` 是产品品牌与创作者身份，`深圳市龙岗区恩禾网络科技工作室` 是公开运营与支持主体。授权范围与条件以 `LICENSE` 为准，本说明不修改该许可，也不推断运营主体拥有代码版权。
+
+第三方运行时和上游依赖遵循各自许可证。
 
 MediaCrawler 是独立上游项目，不属于本仓库的 MIT 授权范围。任何面向 ENHE 的商业授权都不会自动把 MediaCrawler 源码再授权给公开用户；使用者需要自行遵守其上游许可证、平台条款和适用法律。更多信息见 [NOTICE](NOTICE.md)。

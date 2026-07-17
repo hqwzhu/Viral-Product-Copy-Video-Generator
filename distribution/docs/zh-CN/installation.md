@@ -63,24 +63,7 @@ python -m pip install --upgrade pip
 
 ### 使用 Skill ZIP
 
-从 [GitHub Releases](https://github.com/hqwzhu/enhe-promotion-manager/releases) 下载 `enhe-product-promo-maker-skill-0.5.3.zip`，在 PowerShell 中解压到你管理 Codex Skill 的目录：
-
-```powershell
-$skillHome = "$HOME\.codex\skills"
-New-Item -ItemType Directory -Force $skillHome | Out-Null
-Expand-Archive -Path ".\enhe-product-promo-maker-skill-0.5.3.zip" `
-  -DestinationPath $skillHome -Force
-```
-
-解压后确认 `$skillHome\viral-product-copy-video-generator\SKILL.md` 和 `$skillHome\viral-product-copy-video-generator\scripts\skill_entry.py` 存在。
-
-安装或替换 Skill 后，完全退出并重新打开 Codex，或在客户端中刷新 Skill 发现并新建任务，确保新版本被重新加载。
-
-如需把已审核源码同步到 Codex Skill 目录，只能从一个独立克隆的公开仓库 Skill 目录运行 `--sync-installed-skill`。不要从 `$skillHome\viral-product-copy-video-generator` 目标目录运行同步命令；源文件与目标文件相同时会发生同文件复制错误。
-
-## 校验发行包 SHA-256
-
-从同一 GitHub Release 下载 `SHA256SUMS`、`enhe-product-promo-maker-skill-0.5.3.zip` 和 `enhe-promotion-manager-extension-0.5.3.zip`，放在同一目录，然后同时校验 Skill 与扩展包：
+从同一个 [GitHub Release](https://github.com/hqwzhu/enhe-promotion-manager/releases) 下载 `SHA256SUMS`、`enhe-product-promo-maker-skill-0.5.3.zip` 和 `enhe-promotion-manager-extension-0.5.3.zip`，放在同一下载目录。先校验两个发行包：
 
 ```powershell
 $releaseFiles = @(
@@ -99,6 +82,65 @@ foreach ($name in $releaseFiles) {
 ```
 
 任一哈希不一致时不要安装，重新从正式发行页下载并再次校验。
+
+然后解压到新的空暂存目录，验证 Skill 根目录，再以可回退方式替换安装目录。以下流程不会递归删除任何目录：
+
+```powershell
+$skillHome = [IO.Path]::GetFullPath((Join-Path $HOME ".codex\skills"))
+New-Item -ItemType Directory -Path $skillHome -Force | Out-Null
+$installed = [IO.Path]::GetFullPath((Join-Path $skillHome "viral-product-copy-video-generator"))
+$expectedParent = [IO.Path]::GetFullPath((Split-Path -Parent $installed))
+if ($expectedParent -ne $skillHome) { throw "安装目标不在 Skill 根目录内" }
+
+$staging = [IO.Path]::GetFullPath((Join-Path $env:TEMP ("enhe-skill-stage-" + [guid]::NewGuid().ToString("N"))))
+New-Item -ItemType Directory -Path $staging | Out-Null
+Expand-Archive -LiteralPath ".\enhe-product-promo-maker-skill-0.5.3.zip" -DestinationPath $staging
+
+$stagingRoot = (Resolve-Path -LiteralPath $staging).Path
+$candidate = (Resolve-Path -LiteralPath (Join-Path $staging "viral-product-copy-video-generator")).Path
+if (-not $candidate.StartsWith($stagingRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+  throw "暂存 Skill 路径越出暂存目录"
+}
+$candidateItem = Get-Item -LiteralPath $candidate
+if (-not $candidateItem.PSIsContainer) { throw "暂存 Skill 根路径不是目录" }
+if (($candidateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "暂存 Skill 根路径不能是重解析点" }
+if (-not (Test-Path -LiteralPath (Join-Path $candidate "SKILL.md") -PathType Leaf)) { throw "暂存包缺少 SKILL.md" }
+if (-not (Test-Path -LiteralPath (Join-Path $candidate "scripts\skill_entry.py") -PathType Leaf)) { throw "暂存包缺少 scripts\skill_entry.py" }
+
+$backup = "$installed.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
+if (Test-Path -LiteralPath $backup) { throw "备份路径已存在：$backup" }
+if (Test-Path -LiteralPath $installed) {
+  $resolvedInstalled = (Resolve-Path -LiteralPath $installed).Path
+  if (-not $resolvedInstalled.StartsWith($skillHome + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "现有 Skill 路径越出 Skill 根目录"
+  }
+  $installedItem = Get-Item -LiteralPath $resolvedInstalled
+  if (($installedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "现有 Skill 路径不能是重解析点" }
+  Move-Item -LiteralPath $resolvedInstalled -Destination $backup
+}
+$failed = "$installed.failed.$([guid]::NewGuid().ToString('N'))"
+try {
+  Move-Item -LiteralPath $candidate -Destination $installed
+  python "$installed\scripts\skill_entry.py" --help | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "skill_entry.py --help 验证失败" }
+  python "$installed\scripts\self_evolution_audit.py" `
+    --skip-runtime-checks `
+    --out-dir "$HOME\promotion-output\install-audit"
+  if ($LASTEXITCODE -ne 0) { throw "安装审计执行失败" }
+  Write-Host "新 Skill 验证通过。回退副本：$backup"
+} catch {
+  if (Test-Path -LiteralPath $installed) { Move-Item -LiteralPath $installed -Destination $failed }
+  if (Test-Path -LiteralPath $backup) {
+    Move-Item -LiteralPath $backup -Destination $installed
+    throw "新 Skill 验证失败，已恢复旧版本；失败树保留在 $failed。$($_.Exception.Message)"
+  }
+  throw "新 Skill 验证失败；没有旧版本可恢复，失败树保留在 $failed。$($_.Exception.Message)"
+}
+```
+
+脚本级验证通过后，完全退出并重新打开 Codex，或在客户端中刷新 Skill 发现并新建任务。完成一次实际命令发现与最小运行验收前保留 `$backup`。如需人工回退，先确认 `$installed` 与 `$backup` 的解析路径仍位于 `$skillHome`，把当前安装移到另一个保留目录，再把 `$backup` 移回 `$installed`；不要用递归删除命令处理回退。
+
+如需把已审核源码同步到 Codex Skill 目录，只能从一个独立克隆的公开仓库 Skill 目录运行 `--sync-installed-skill`。不要从 `$installed` 目标目录运行同步命令；源文件与目标文件相同时会发生同文件复制错误。
 
 ## 可选依赖
 

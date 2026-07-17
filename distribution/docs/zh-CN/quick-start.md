@@ -35,18 +35,30 @@ python scripts\skill_entry.py `
 
 ## 3. 查看输出
 
-重点目录通常包括：
+先从顶层批次报告读取实际产品运行目录，不要猜测 `<run>` 名称：
+
+```powershell
+$batchPath = ".\promotion-output\reports\promotion-manager\batch\product-batch-runner.json"
+$batch = Get-Content -Raw $batchPath | ConvertFrom-Json
+$batch.promotionRuns | Format-Table id, status, outputDir, workflowManifest, publishQueue
+$run = $batch.promotionRuns | Where-Object status -eq "ready" | Select-Object -First 1
+if (-not $run) { throw "没有 ready 产品运行，请先检查批次报告" }
+$runDir = $run.outputDir
+$queue = $run.publishQueue
+```
+
+多个产品运行时，应根据 `id`、URL 和状态选择目标项。`outputDir` 是实际的 `promotion-output\product-batch-runs\<run>`，其中 `<run>` 由运行时生成。产品目录中的重点路径包括：
 
 | 目录或文件 | 内容 |
 | --- | --- |
-| `promotion-output\reports\promotion-manager\generated-content\` | 各平台标题、正文、标签、口播稿、分镜和内容审核报告 |
-| `promotion-output\videos\` | FFmpeg 可用时生成的 MP4 视频草稿 |
-| `promotion-output\media-assets\` | Pillow 可用时按平台生成的 PNG 封面图与详情图 |
-| `promotion-output\reports\promotion-manager\publish-queue\` | 发布队列和每个平台的人工/官方 API 入口 |
-| `promotion-output\reports\promotion-manager\publish-packs\` | 整理好的发布包、警告、缺失项和操作步骤 |
-| `promotion-output\reports\promotion-manager\real-evidence-inbox-setup\` | 真实证据收件箱的初始化报告 |
-| `promotion-output\reports\promotion-manager\real-evidence-inbox\` | 真实 URL、指标、评论、订单和收入的导入报告 |
-| `promotion-output\reports\promotion-manager\retrospectives\` | 有真实证据后生成的复盘与下一轮建议 |
+| `$runDir\reports\promotion-manager\generated-content\` | 各平台标题、正文、标签、口播稿、分镜和内容审核报告 |
+| `$runDir\videos\` | FFmpeg 可用时生成的 MP4 视频草稿 |
+| `$runDir\media-assets\` | Pillow 可用时按平台生成的 PNG 封面图与详情图 |
+| `$runDir\reports\promotion-manager\publish-queue\` | 发布队列和每个平台的人工/官方 API 入口 |
+| `$runDir\reports\promotion-manager\publish-packs\` | 整理好的发布包、警告、缺失项和操作步骤 |
+| `$runDir\reports\promotion-manager\retrospectives\` | 有真实证据后生成的复盘与下一轮建议 |
+
+手动运行真实证据收件箱命令并把 `--out-dir` 设为 `$runDir` 后，报告分别位于 `$runDir\reports\promotion-manager\real-evidence-inbox-setup\` 和 `$runDir\reports\promotion-manager\real-evidence-inbox\`。
 
 如果某个依赖不可用，报告可能出现 `partial_ready` 或媒体 `missing`。这表示文本或部分证据已可用，不代表缺失的媒体或平台结果已经生成。
 
@@ -67,8 +79,8 @@ python scripts\skill_entry.py `
 
 ```powershell
 python scripts\browser_publish_session.py `
-  --publish-queue ".\promotion-output\reports\promotion-manager\publish-queue\publish-queue.json" `
-  --out-dir ".\promotion-output"
+  --publish-queue "$queue" `
+  --out-dir "$runDir"
 ```
 
 使用 `--run-form-fill --headed` 时，工具只填写可见字段并在最终提交前停止。真实发布仍需要用户确认、平台登录和账号授权。
@@ -82,7 +94,7 @@ python scripts\real_evidence_inbox_setup.py `
   --product-url "https://example.com/product" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --inbox-dir ".\promotion-evidence-inbox" `
-  --out-dir ".\promotion-output"
+  --out-dir "$runDir"
 ```
 
 把真实发布 URL、平台导出、评论、订单和收入文件放入收件箱，再导入并运行监控：
@@ -90,10 +102,10 @@ python scripts\real_evidence_inbox_setup.py `
 ```powershell
 python scripts\real_evidence_inbox.py `
   --inbox-dir ".\promotion-evidence-inbox" `
-  --out-dir ".\promotion-output"
+  --out-dir "$runDir"
 
 python scripts\performance_monitor.py `
-  --out-dir ".\promotion-output"
+  --out-dir "$runDir"
 ```
 
 没有真实数据时，状态保持 `waiting_real_data`。合成演示只用于验证本地流程，不能当作发布表现、订单或收入。
