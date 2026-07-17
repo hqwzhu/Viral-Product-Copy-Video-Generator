@@ -98,8 +98,7 @@ def load_script_module(path: Path):
     module = importlib.util.module_from_spec(spec)
     original_sys_path = sys.path.copy()
     script_dir = str(path.resolve().parent)
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
+    sys.path[:] = [script_dir, *(entry for entry in sys.path if entry != script_dir)]
     try:
         spec.loader.exec_module(module)
     finally:
@@ -196,27 +195,62 @@ def playwright_chromium_available() -> bool:
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
-    def test_load_script_module_resolves_sibling_import_and_restores_sys_path(self) -> None:
+    def test_load_script_module_prefers_script_dir_and_restores_sys_path(self) -> None:
         sibling_name = f"_promotion_manager_sibling_{os.getpid()}_{id(self)}"
         self.assertNotIn(sibling_name, sys.modules)
 
         with tempfile.TemporaryDirectory(prefix="load-script-module-test-") as temp_dir_name:
-            temp_dir = Path(temp_dir_name).resolve()
-            target_path = temp_dir / "target.py"
-            (temp_dir / f"{sibling_name}.py").write_text("VALUE = 'loaded'\n", encoding="utf-8")
+            temp_dir = Path(temp_dir_name)
+            script_dir = (temp_dir / "script").resolve()
+            shadow_dir = (temp_dir / "shadow").resolve()
+            script_dir.mkdir()
+            shadow_dir.mkdir()
+            target_path = script_dir / "target.py"
+            (script_dir / f"{sibling_name}.py").write_text("VALUE = 'local'\n", encoding="utf-8")
+            (shadow_dir / f"{sibling_name}.py").write_text("VALUE = 'shadow'\n", encoding="utf-8")
             target_path.write_text(
-                f"from {sibling_name} import VALUE\n",
+                f"from {sibling_name} import VALUE\n"
+                "import sys\n"
+                f"SCRIPT_DIR_FIRST = sys.path[0] == {str(script_dir)!r}\n"
+                f"SCRIPT_DIR_COUNT = sys.path.count({str(script_dir)!r})\n",
                 encoding="utf-8",
             )
             original_sys_path = sys.path.copy()
-            self.assertNotIn(str(temp_dir), sys.path)
+            load_sys_path = [str(shadow_dir), *original_sys_path, str(script_dir), str(script_dir)]
+            sys.path[:] = load_sys_path
 
             try:
                 module = load_script_module(target_path)
-                self.assertEqual(module.VALUE, "loaded")
-                self.assertEqual(sys.path, original_sys_path)
+                self.assertEqual(module.VALUE, "local")
+                self.assertTrue(module.SCRIPT_DIR_FIRST)
+                self.assertEqual(module.SCRIPT_DIR_COUNT, 1)
+                self.assertEqual(sys.path, load_sys_path)
             finally:
+                sys.path[:] = original_sys_path
                 sys.modules.pop(sibling_name, None)
+
+    def test_load_script_module_restores_sys_path_after_execution_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="load-script-module-error-test-") as temp_dir_name:
+            script_dir = Path(temp_dir_name).resolve()
+            target_path = script_dir / "target.py"
+            target_path.write_text(
+                "import sys\n"
+                f"if sys.path[0] != {str(script_dir)!r} or sys.path.count({str(script_dir)!r}) != 1:\n"
+                "    raise AssertionError('script dir was not normalized')\n"
+                "sys.path.insert(0, 'target-mutated-path')\n"
+                "raise RuntimeError('target failed')\n",
+                encoding="utf-8",
+            )
+            original_sys_path = sys.path.copy()
+            load_sys_path = ["before-load", str(script_dir), *original_sys_path, str(script_dir)]
+            sys.path[:] = load_sys_path
+
+            try:
+                with self.assertRaisesRegex(RuntimeError, "target failed"):
+                    load_script_module(target_path)
+                self.assertEqual(sys.path, load_sys_path)
+            finally:
+                sys.path[:] = original_sys_path
 
     def run_all(self) -> Path:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-manager-test-"))
