@@ -8279,6 +8279,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("README.md", files)
         self.assertIn("README.en.md", files)
         self.assertIn("README.zh-CN.md", files)
+        self.assertIn("requirements-youtube.txt", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/zh-CN/installation.md", files)
         self.assertIn("docs/zh-CN/usage.md", files)
