@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -815,6 +816,75 @@ class DistributionContractTest(unittest.TestCase):
 
             self.assertTrue((snapshot / "scripts" / "tracked.py").is_file())
             self.assertFalse((snapshot / "scripts" / "ignored.py").exists())
+
+    def test_committed_extension_snapshot_matches_validated_release_bytes(self) -> None:
+        release_path = ROOT / "dist" / "v0.5.3" / "enhe-promotion-manager-0.5.3.zip"
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            source = base / "source"
+            snapshot = base / "snapshot"
+            source.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=source,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Distribution Test"],
+                cwd=source,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "core.autocrlf", "true"],
+                cwd=source,
+                check=True,
+            )
+            attributes = ROOT / ".gitattributes"
+            if attributes.is_file():
+                (source / ".gitattributes").write_bytes(attributes.read_bytes())
+            for path in contract.extension_files(ROOT):
+                destination = source / "browser-extension" / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((ROOT / "browser-extension" / path).read_bytes())
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=source,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(["git", "commit", "-q", "-m", "fixture"], cwd=source, check=True)
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=source,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            builder.snapshot_committed_source(source, snapshot, commit)
+
+            with zipfile.ZipFile(release_path) as release:
+                release_members = set(release.namelist())
+                self.assertEqual(
+                    release_members,
+                    {path.as_posix() for path in contract.extension_files(ROOT)},
+                )
+                for member in sorted(release_members):
+                    with self.subTest(member=member):
+                        expected = release.read(member)
+                        self.assertEqual(
+                            (snapshot / "browser-extension" / member).read_bytes(),
+                            expected,
+                        )
+                        attribute = subprocess.run(
+                            ["git", "check-attr", "text", "--", f"browser-extension/{member}"],
+                            cwd=source,
+                            capture_output=True,
+                            text=True,
+                            check=True,
+                        ).stdout.strip()
+                        self.assertTrue(attribute.endswith(": text: unset"), attribute)
 
     def test_builder_rejects_mocked_reparse_target_ancestor(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
