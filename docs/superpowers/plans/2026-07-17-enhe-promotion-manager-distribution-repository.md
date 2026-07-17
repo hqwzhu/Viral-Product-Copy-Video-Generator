@@ -287,12 +287,14 @@ class DistributionContractTest(unittest.TestCase):
         for script_name in contract.NON_PAYMENT_COMMANDS:
             self.assertTrue((ROOT / "scripts" / script_name).is_file(), script_name)
 
-    def test_skill_allowlist_contains_runtime_files_and_excludes_private_modules(self) -> None:
+    def test_skill_allowlist_contains_runtime_files_and_only_sanitized_fixtures(self) -> None:
         names = {path.as_posix() for path in contract.skill_files(ROOT)}
         self.assertIn("SKILL.md", names)
         self.assertIn("requirements-youtube.txt", names)
         self.assertIn("scripts/skill_entry.py", names)
         self.assertIn("scripts/fixtures/mediacrawler/douyin-contents.jsonl", names)
+        self.assertNotIn("scripts/unrelated.jsonl", names)
+        self.assertNotIn("scripts/fixtures/mediacrawler/nested/private.jsonl", names)
         self.assertNotIn("browser-extension/manifest.json", names)
         self.assertFalse(any(name.startswith("backend/") for name in names))
         self.assertFalse(any(name.startswith("deploy/") for name in names))
@@ -337,7 +339,7 @@ Expected: import error for `scripts.distribution_contract`.
 
 - [ ] **Step 3: Implement the explicit contract module**
 
-Create `scripts/distribution_contract.py` with these public interfaces and exact allowlist behavior:
+Create `scripts/distribution_contract.py` with these public interfaces and exact allowlist behavior. Python files remain recursive under `scripts`, but JSONL is public only when it is an immediate child of `scripts/fixtures/mediacrawler`; never include arbitrary or nested JSONL under `scripts`:
 
 ```python
 from __future__ import annotations
@@ -378,8 +380,9 @@ SKILL_EXCLUDED_SCRIPTS = {
 }
 SKILL_DIRECTORIES = {
     "references": ("*.md",),
-    "scripts": ("*.py", "*.jsonl"),
+    "scripts": ("*.py",),
 }
+MEDIACRAWLER_FIXTURE_DIRECTORY = Path("scripts/fixtures/mediacrawler")
 FORBIDDEN_PARTS = {
     ".env", ".venv", "node_modules", "promotion-output", "cookies.json",
     "chrome-profile", "user-data-dir", "mediacrawler-backup", "__pycache__",
@@ -409,6 +412,9 @@ def skill_files(root: Path) -> list[Path]:
                     and not (rel.parent == Path("scripts") and rel.name in SKILL_EXCLUDED_SCRIPTS)
                 ):
                     files.append(rel)
+    for path in (root / MEDIACRAWLER_FIXTURE_DIRECTORY).glob("*.jsonl"):
+        if path.is_file():
+            files.append(path.relative_to(root))
     return sorted(set(files), key=lambda item: item.as_posix())
 
 
