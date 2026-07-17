@@ -7,6 +7,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import distribution_contract as contract
 
@@ -63,6 +64,47 @@ class DistributionContractTest(unittest.TestCase):
         self.assertEqual(contract.extension_command_refs(popup), list(EXPECTED_COMMANDS))
         for script_name in contract.NON_PAYMENT_COMMANDS:
             self.assertTrue((ROOT / "scripts" / script_name).is_file(), script_name)
+
+    def test_extension_command_discovery_handles_variants_and_rejects_bypasses(self) -> None:
+        commands = "\n".join(
+            (
+                "python scripts/automation_scheduler.py",
+                r"python.exe scripts\browser_publish_session.py",
+                "python3 scripts/final_capability_readiness.py",
+                r"python3.exe scripts\launch_unlock_pack.py",
+                "python3.11 scripts/performance_monitor.py",
+                r"python3.11.exe scripts\promotion_manager.py",
+                "py scripts/skill_entry.py",
+                r"py.exe scripts\unapproved-tool.py",
+            )
+        )
+        self.assertEqual(
+            contract.extension_command_refs(commands),
+            [
+                "automation_scheduler.py",
+                "browser_publish_session.py",
+                "final_capability_readiness.py",
+                "launch_unlock_pack.py",
+                "performance_monitor.py",
+                "promotion_manager.py",
+                "skill_entry.py",
+                "unapproved-tool.py",
+            ],
+        )
+
+        unsupported = (
+            "node scripts/unapproved.py",
+            "node scripts/unapproved-tool.py",
+            "python2 scripts/unapproved.py",
+            r"pythonw scripts\unapproved.py",
+            "not-python scripts/unapproved.py",
+            "scripts/unapproved.py",
+            "python scripts/skill_entry.py && node scripts/unapproved.py",
+        )
+        for command in unsupported:
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(ValueError, "unsupported interpreter"):
+                    contract.extension_command_refs(command)
 
     def test_skill_allowlist_contains_runtime_docs_and_only_sanitized_fixtures(self) -> None:
         names = {path.as_posix() for path in contract.skill_files(ROOT)}
@@ -154,11 +196,13 @@ class DistributionContractTest(unittest.TestCase):
                 write_text(root, f"notes/secret-{index}.txt", secret + "\n")
             write_text(root, "safe.txt", "no credentials here\n")
             (root / "binary.dat").write_bytes(b"\x00" + secret_values[0].encode("ascii"))
+            (root / "invalid.dat").write_bytes(b"\xff" + secret_values[1].encode("ascii"))
             (root / "huge.txt").write_bytes(secret_values[1].encode("ascii") + b"x" * 2_000_000)
 
             violations = contract.scan_forbidden(root)
             rules = {item["rule"] for item in violations}
             paths = {item["path"] for item in violations}
+            findings = {(item["path"], item["rule"]) for item in violations}
             self.assertLessEqual(
                 {"forbidden_path", "github_token", "firecrawl_key", "private_key", "live_license"},
                 rules,
@@ -181,8 +225,29 @@ class DistributionContractTest(unittest.TestCase):
             serialized = json.dumps(violations, sort_keys=True)
             for secret in secret_values:
                 self.assertNotIn(secret, serialized)
-            self.assertNotIn("binary.dat", paths)
+            self.assertIn(("binary.dat", "github_token"), findings)
+            self.assertIn(("invalid.dat", "firecrawl_key"), findings)
             self.assertNotIn("huge.txt", paths)
+
+    def test_forbidden_scan_reports_unreadable_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            unreadable = write_text(root, "unreadable.txt")
+            real_read_bytes = Path.read_bytes
+
+            def read_bytes_with_denial(path: Path) -> bytes:
+                if path == unreadable:
+                    raise PermissionError("test-only read denial")
+                return real_read_bytes(path)
+
+            with mock.patch.object(Path, "read_bytes", new=read_bytes_with_denial):
+                violations = contract.scan_forbidden(root)
+
+            self.assertIn(
+                {"path": "unreadable.txt", "rule": "unreadable_file"},
+                violations,
+            )
+            self.assertNotIn("test-only read denial", json.dumps(violations, sort_keys=True))
 
     def test_sha256_and_tree_digest_are_deterministic_and_content_sensitive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -220,6 +285,68 @@ class DistributionContractTest(unittest.TestCase):
                 [path.as_posix() for path in contract.extension_files(root)],
                 ["manifest.json"],
             )
+
+    def test_public_file_walkers_reject_real_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            secret = "github_pat_abcdefghijklmnopqrstuvwxyz123456"
+            outside = write_text(base, "outside.txt", secret)
+
+            def symlink(link: Path) -> None:
+                link.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    link.symlink_to(outside)
+                except OSError as exc:
+                    self.skipTest(f"OS denied symlink creation: {exc}")
+
+            skill_root = base / "skill"
+            symlink(skill_root / "scripts" / "escape.py")
+            with self.assertRaisesRegex(ValueError, "link|reparse|outside"):
+                contract.skill_files(skill_root)
+
+            extension_root = base / "extension-source"
+            symlink(extension_root / "browser-extension" / "escape.js")
+            with self.assertRaisesRegex(ValueError, "link|reparse|outside"):
+                contract.extension_files(extension_root)
+
+            digest_root = base / "digest"
+            symlink(digest_root / "escape.txt")
+            with self.assertRaisesRegex(ValueError, "link|reparse|outside"):
+                contract.tree_digest(digest_root)
+
+            violations = contract.scan_forbidden(digest_root)
+            self.assertIn({"path": "escape.txt", "rule": "unsafe_link"}, violations)
+            self.assertNotIn(secret, json.dumps(violations, sort_keys=True))
+
+    def test_public_file_walkers_reject_resolved_paths_outside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            outside = write_text(base, "outside.txt", "private\n").resolve()
+            skill_root = base / "skill"
+            extension_root = base / "extension-source"
+            digest_root = base / "digest"
+            write_text(skill_root, "scripts/escape.py")
+            write_text(extension_root, "browser-extension/escape.js")
+            write_text(digest_root, "escape.txt")
+
+            real_resolve = Path.resolve
+
+            def resolve_with_escape(path: Path, *args: object, **kwargs: object) -> Path:
+                if path.name.startswith("escape"):
+                    return outside
+                return real_resolve(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "resolve", new=resolve_with_escape):
+                with self.assertRaisesRegex(ValueError, "outside"):
+                    contract.skill_files(skill_root)
+                with self.assertRaisesRegex(ValueError, "outside"):
+                    contract.extension_files(extension_root)
+                with self.assertRaisesRegex(ValueError, "outside"):
+                    contract.tree_digest(digest_root)
+                self.assertIn(
+                    {"path": "escape.txt", "rule": "unsafe_link"},
+                    contract.scan_forbidden(digest_root),
+                )
 
 
 if __name__ == "__main__":

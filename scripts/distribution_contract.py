@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import stat
 from pathlib import Path
 
 
@@ -47,6 +49,13 @@ _SKILL_FORBIDDEN_PARTS = {
     "promotion-output",
 }
 _MAX_TEXT_FILE_SIZE = 2_000_000
+_SCRIPT_NAME_PATTERN = r"[A-Za-z0-9_.-]+\.py"
+_SCRIPT_REFERENCE = re.compile(rf"\bscripts[\\/]+({_SCRIPT_NAME_PATTERN})\b", re.IGNORECASE)
+_SUPPORTED_SCRIPT_COMMAND = re.compile(
+    rf"(?<![A-Za-z0-9_.-])(?:python(?:3(?:\.\d+)?)?|py)(?:\.exe)?\s+"
+    rf"scripts[\\/]+({_SCRIPT_NAME_PATTERN})\b",
+    re.IGNORECASE,
+)
 _SECRET_PATTERNS = (
     (
         "github_token",
@@ -63,7 +72,14 @@ _SECRET_PATTERNS = (
 
 def extension_command_refs(text: str) -> list[str]:
     """Return unique Python script names referenced by extension commands."""
-    return sorted(set(re.findall(r"python scripts\\+([A-Za-z0-9_]+\.py)", text)))
+    references = list(_SCRIPT_REFERENCE.finditer(text))
+    supported = {match.start(1): match.group(1) for match in _SUPPORTED_SCRIPT_COMMAND.finditer(text)}
+    names: set[str] = set()
+    for reference in references:
+        if reference.start(1) not in supported:
+            raise ValueError(f"unsupported interpreter for {reference.group(1)}")
+        names.add(reference.group(1))
+    return sorted(names)
 
 
 def _is_env_part(part: str) -> bool:
@@ -79,28 +95,147 @@ def _skill_path_allowed(relative: Path) -> bool:
     )
 
 
+def _is_link_or_reparse(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    attributes = getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return bool(reparse_flag and attributes & reparse_flag)
+
+
+def _resolved_root(root: Path) -> Path:
+    try:
+        if _is_link_or_reparse(root):
+            raise ValueError(f"unsafe link or reparse point at root: {root}")
+        resolved = root.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"unreadable distribution root: {root}") from exc
+    if not root.is_dir():
+        raise ValueError(f"distribution root is not a directory: {root}")
+    return resolved
+
+
+def _source_issue(root_resolved: Path, path: Path) -> str | None:
+    try:
+        if _is_link_or_reparse(path):
+            return "unsafe_link"
+        resolved = path.resolve(strict=True)
+    except OSError:
+        return "unreadable_file"
+    if not resolved.is_relative_to(root_resolved):
+        return "unsafe_link"
+    return None
+
+
+def _relative_name(root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _walk_tree(root: Path, start: Path | None = None) -> tuple[list[Path], list[Path], list[dict[str, str]]]:
+    root_resolved = _resolved_root(root)
+    start = root if start is None else start
+    try:
+        start.lstat()
+    except FileNotFoundError:
+        return [], [], []
+    except OSError:
+        return [], [], [{"path": _relative_name(root, start), "rule": "unreadable_file"}]
+
+    start_issue = _source_issue(root_resolved, start)
+    if start_issue:
+        return [], [], [{"path": _relative_name(root, start), "rule": start_issue}]
+
+    files: list[Path] = []
+    directories: list[Path] = []
+    issues: list[dict[str, str]] = []
+
+    def record_walk_error(error: OSError) -> None:
+        failed = Path(error.filename) if error.filename else start
+        issues.append({"path": _relative_name(root, failed), "rule": "unreadable_file"})
+
+    for current, directory_names, file_names in os.walk(
+        start,
+        topdown=True,
+        onerror=record_walk_error,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        safe_directories: list[str] = []
+        for name in sorted(directory_names):
+            path = current_path / name
+            issue = _source_issue(root_resolved, path)
+            if issue:
+                issues.append({"path": _relative_name(root, path), "rule": issue})
+            else:
+                directories.append(path)
+                safe_directories.append(name)
+        directory_names[:] = safe_directories
+
+        for name in sorted(file_names):
+            path = current_path / name
+            issue = _source_issue(root_resolved, path)
+            if issue:
+                issues.append({"path": _relative_name(root, path), "rule": issue})
+            else:
+                files.append(path)
+
+    return files, directories, issues
+
+
+def _strict_files(root: Path, start: Path | None = None) -> list[Path]:
+    files, _, issues = _walk_tree(root, start)
+    if issues:
+        issue = issues[0]
+        raise ValueError(
+            f"unsafe link, reparse point, unreadable path, or path outside root: {issue['path']}"
+        )
+    return files
+
+
 def skill_files(root: Path) -> list[Path]:
     """List source files allowed in the public Skill package."""
-    files = [Path(name) for name in _SKILL_STANDALONES if (root / name).is_file()]
+    root_resolved = _resolved_root(root)
+    files: list[Path] = []
+    for name in _SKILL_STANDALONES:
+        path = root / name
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise ValueError(f"unreadable public source: {name}") from exc
+        issue = _source_issue(root_resolved, path)
+        if issue:
+            raise ValueError(f"unsafe link, reparse point, or path outside root: {name}")
+        if path.is_file():
+            files.append(Path(name))
 
-    for path in (root / "references").rglob("*.md"):
+    for path in _strict_files(root, root / "references"):
         relative = path.relative_to(root)
-        if path.is_file() and _skill_path_allowed(relative):
+        if path.suffix == ".md" and _skill_path_allowed(relative):
             files.append(relative)
 
-    for path in (root / "scripts").rglob("*.py"):
+    script_paths = _strict_files(root, root / "scripts")
+    for path in script_paths:
         relative = path.relative_to(root)
         if (
-            path.is_file()
+            path.suffix == ".py"
             and path.name not in _DISTRIBUTION_ONLY_SCRIPTS
             and _skill_path_allowed(relative)
         ):
             files.append(relative)
 
-    fixture_directory = root / "scripts" / "fixtures" / "mediacrawler"
-    for path in fixture_directory.glob("*.jsonl"):
+    fixture_directory = Path("scripts/fixtures/mediacrawler")
+    for path in script_paths:
         relative = path.relative_to(root)
-        if path.is_file() and _skill_path_allowed(relative):
+        if (
+            relative.parent == fixture_directory
+            and path.suffix == ".jsonl"
+            and _skill_path_allowed(relative)
+        ):
             files.append(relative)
 
     return sorted(set(files), key=lambda item: item.as_posix())
@@ -112,9 +247,8 @@ def extension_files(root: Path) -> list[Path]:
     return sorted(
         (
             path.relative_to(extension)
-            for path in extension.rglob("*")
-            if path.is_file()
-            and not any(part.startswith(".") for part in path.relative_to(extension).parts)
+            for path in _strict_files(root, extension)
+            if not any(part.startswith(".") for part in path.relative_to(extension).parts)
         ),
         key=lambda item: item.as_posix(),
     )
@@ -133,7 +267,7 @@ def tree_digest(root: Path) -> str:
     """Return a deterministic digest of relative file paths and bytes."""
     digest = hashlib.sha256()
     paths = sorted(
-        (path for path in root.rglob("*") if path.is_file()),
+        _strict_files(root),
         key=lambda path: path.relative_to(root).as_posix(),
     )
     for path in paths:
@@ -168,27 +302,27 @@ def _is_forbidden_path_part(part: str) -> bool:
 
 def scan_forbidden(root: Path) -> list[dict[str, str]]:
     """Find private paths and secret patterns without returning secret values."""
-    violations: list[dict[str, str]] = []
-    paths = sorted(root.rglob("*"), key=lambda path: path.relative_to(root).as_posix())
-    for path in paths:
+    files, directories, violations = _walk_tree(root)
+    for path in sorted(directories + files, key=lambda item: item.relative_to(root).as_posix()):
         relative = path.relative_to(root)
         if any(_is_forbidden_path_part(part) for part in relative.parts):
             violations.append({"path": relative.as_posix(), "rule": "forbidden_path"})
             continue
-        if not path.is_file():
+        if path in directories:
             continue
         try:
-            if path.stat().st_size > _MAX_TEXT_FILE_SIZE:
-                continue
+            size = path.stat().st_size
+        except OSError:
+            violations.append({"path": relative.as_posix(), "rule": "unreadable_file"})
+            continue
+        if size > _MAX_TEXT_FILE_SIZE:
+            continue
+        try:
             content = path.read_bytes()
         except OSError:
+            violations.append({"path": relative.as_posix(), "rule": "unreadable_file"})
             continue
-        if b"\0" in content:
-            continue
-        try:
-            text = content.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
+        text = content.decode("utf-8", errors="replace")
         for rule, pattern in _SECRET_PATTERNS:
             if pattern.search(text):
                 violations.append({"path": relative.as_posix(), "rule": rule})
