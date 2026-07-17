@@ -46,6 +46,115 @@ def write_text(root: Path, relative: str, text: str = "test\n") -> Path:
 
 
 class DistributionContractTest(unittest.TestCase):
+    def test_distribution_templates_have_matching_bilingual_documents(self) -> None:
+        distribution = ROOT / "distribution"
+        zh_docs = distribution / "docs" / "zh-CN"
+        en_docs = distribution / "docs" / "en"
+        expected_names = {
+            "data-and-privacy.md",
+            "extension-guide.md",
+            "features.md",
+            "installation.md",
+            "platform-research.md",
+            "publishing-and-review.md",
+            "quick-start.md",
+            "skill-guide.md",
+            "troubleshooting.md",
+            "version-sync.md",
+        }
+
+        zh_names = {path.name for path in zh_docs.glob("*.md")}
+        en_names = {path.name for path in en_docs.glob("*.md")}
+        self.assertEqual(zh_names, expected_names)
+        self.assertEqual(en_names, expected_names)
+        self.assertEqual(zh_names, en_names)
+        self.assertEqual(len(zh_names), 10)
+
+        zh_readme = (distribution / "README.md").read_text(encoding="utf-8")
+        en_readme = (distribution / "README.en.md").read_text(encoding="utf-8")
+        self.assertIn(contract.PRODUCT_PROMISE_ZH, zh_readme)
+        self.assertIn(contract.PRODUCT_PROMISE_EN, en_readme)
+
+        def feature_rows(path: Path, expected_columns: list[str]) -> list[list[str]]:
+            table_lines = [
+                line
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("|")
+            ]
+            columns = [cell.strip() for cell in table_lines[0].strip("|").split("|")]
+            self.assertEqual(columns, expected_columns)
+            rows = [
+                [cell.strip() for cell in line.strip("|").split("|")]
+                for line in table_lines[2:]
+            ]
+            self.assertEqual(len(rows), 16)
+            self.assertTrue(all(len(row) == 5 for row in rows))
+            return rows
+
+        feature_rows(
+            zh_docs / "features.md",
+            ["功能", "它做什么", "解决什么问题", "给用户带来的收益", "典型场景"],
+        )
+        feature_rows(
+            en_docs / "features.md",
+            [
+                "Capability",
+                "What it does",
+                "Problem it solves",
+                "User benefit",
+                "Typical use case",
+            ],
+        )
+
+        zh_corpus = zh_readme + "\n" + "\n".join(
+            (zh_docs / name).read_text(encoding="utf-8") for name in sorted(zh_names)
+        )
+        en_corpus = en_readme + "\n" + "\n".join(
+            (en_docs / name).read_text(encoding="utf-8") for name in sorted(en_names)
+        )
+        for fact in (
+            "公开仓库/Skill/扩展源码版本：0.5.3",
+            "Chrome 商店当前公开版本（发布前）：0.5.2",
+            "非支付命令引用：11/11 已在随包 Skill 中存在",
+            "Hosted Worker：关闭",
+        ):
+            self.assertIn(fact, zh_corpus)
+        for fact in (
+            "Public repository / Skill / extension source version: 0.5.3",
+            "Current public Chrome Web Store version (before update): 0.5.2",
+            "Non-payment command references: 11/11 exist in the bundled Skill",
+            "Hosted Worker: disabled",
+        ):
+            self.assertIn(fact, en_corpus)
+
+        shared_identity = (
+            "ENHE AI",
+            "深圳市龙岗区恩禾网络科技工作室",
+            "https://www.enhe-tech.com.cn/",
+            "https://www.enhe-tech.com.cn/promotion-manager",
+            "huqingwei5942@gmail.com",
+            "https://github.com/hqwzhu",
+            contract.STORE_ITEM_ID,
+        )
+        for value in shared_identity:
+            self.assertIn(value, zh_corpus)
+            self.assertIn(value, en_corpus)
+
+        combined = (zh_corpus + "\n" + en_corpus).lower()
+        for marker in ("todo", "tbd", "placeholder"):
+            self.assertNotIn(marker, combined)
+        for banned_claim in (
+            "guaranteed viral",
+            "bypass captcha",
+            "automatic final publish",
+            "automatically click final publish",
+            "保证爆款",
+            "承诺爆款",
+            "绕过验证码",
+            "自动点击最终发布",
+        ):
+            self.assertNotIn(banned_claim, combined)
+
     def test_committed_snapshot_excludes_ignored_allowlisted_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
