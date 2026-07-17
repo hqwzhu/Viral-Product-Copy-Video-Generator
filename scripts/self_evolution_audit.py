@@ -307,7 +307,7 @@ def managed_skill_files(root: Path) -> list[Path]:
             files.append(Path(standalone))
     directory_patterns = {
         "references": ["*.md"],
-        "scripts": ["*.py"],
+        "scripts": ["*.py", "*.jsonl"],
         "docs": ["*.md"],
         "deploy": ["*.md", "*.conf", "*.service", "*.example"],
         "browser-extension": ["*.json", "*.html", "*.css", "*.js", "*.md", "*.txt", "*.png"],

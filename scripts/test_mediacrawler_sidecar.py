@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -161,6 +162,31 @@ class SidecarCommandTests(unittest.TestCase):
         self.assertEqual(detail[detail.index("--specified_id") + 1], "https://www.douyin.com/video/dy-aweme-001")
         self.assertEqual(creator[creator.index("--creator_id") + 1], "creator-id-001")
 
+    def test_xiaohongshu_detail_command_uses_safe_context_without_signed_parameters(self) -> None:
+        request = sidecar.CollectRequest(
+            platform="xiaohongshu",
+            mode="detail",
+            target=(
+                "https://www.xiaohongshu.com/explore/xhs-note-001"
+                "?xsec_token=must-not-persist&xsec_source=pc_search"
+            ),
+            max_contents=1,
+            max_comments=5,
+            detail_context_query="AI 工具",
+        )
+
+        command = sidecar.build_mediacrawler_command(self.install, request, self.raw_dir)
+        serialized = " ".join(command)
+
+        self.assertEqual(command[command.index("--xhs-detail-query") + 1], "AI 工具")
+        self.assertEqual(command[command.index("--xhs-detail-target") + 1], "xhs-note-001")
+        self.assertEqual(
+            command[command.index("--specified_id") + 1],
+            "https://www.xiaohongshu.com/explore/xhs-note-001",
+        )
+        self.assertNotIn("xsec_token", serialized)
+        self.assertNotIn("must-not-persist", serialized)
+
     def test_build_command_resolves_relative_output_path_for_upstream_working_directory(self) -> None:
         command = sidecar.build_mediacrawler_command(
             self.install,
@@ -209,6 +235,45 @@ class BootstrapTests(unittest.TestCase):
             config.ZHIHU_CREATOR_URL_LIST,
             ["https://www.zhihu.com/people/a", "https://www.zhihu.com/people/b"],
         )
+
+    def test_zhihu_search_limits_upstream_results_before_comment_collection(self) -> None:
+        patcher = getattr(bootstrap, "patch_zhihu_search_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_note_by_keyword(self, *args: object, **kwargs: object) -> list[dict[str, str]]:
+                return [{"content_id": f"answer-{index}"} for index in range(20)]
+
+        patcher(FakeClient, 3)
+        rows = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI 内容生产"))
+        self.assertEqual([item["content_id"] for item in rows], ["answer-0", "answer-1", "answer-2"])
+
+    def test_xiaohongshu_detail_context_switches_to_filtered_search(self) -> None:
+        config = SimpleNamespace(CRAWLER_TYPE="detail", KEYWORDS="")
+        parsed = SimpleNamespace(platform="xhs", type="detail")
+        apply_context = getattr(bootstrap, "apply_xiaohongshu_detail_context", None)
+        patcher = getattr(bootstrap, "patch_xiaohongshu_detail_search", None)
+        self.assertIsNotNone(apply_context)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_note_by_keyword(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": True,
+                    "items": [
+                        {"id": "other-note", "xsec_token": "other-secret"},
+                        {"id": "target-note", "xsec_token": "target-secret"},
+                    ],
+                }
+
+        apply_context(config, parsed, "AI 工具", "target-note")
+        patcher(FakeClient, "target-note")
+        response = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI 工具"))
+        self.assertEqual(config.CRAWLER_TYPE, "search")
+        self.assertEqual(config.KEYWORDS, "AI 工具")
+        self.assertEqual(parsed.type, "search")
+        self.assertEqual([item["id"] for item in response["items"]], ["target-note"])
+        self.assertTrue(response["has_more"])
 
     def test_existing_cdp_cleanup_drops_references_without_closing_context(self) -> None:
         calls: list[str] = []
@@ -358,6 +423,23 @@ class SidecarRuntimeTests(unittest.TestCase):
         self.assertEqual(calls, 2)
         self.assertEqual(result.status, "ready")
         self.assertEqual(result.retry_count, 1)
+
+    def test_execute_process_decodes_upstream_output_as_utf8(self) -> None:
+        completed = subprocess.CompletedProcess(["python"], 0, stdout="中文输出", stderr="")
+        with mock.patch.object(sidecar.subprocess, "run", return_value=completed) as run:
+            result = sidecar.execute_process(["python", "main.py"], self.root, 30)
+
+        self.assertIs(result, completed)
+        run.assert_called_once_with(
+            ["python", "main.py"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=30,
+        )
 
 
 class SidecarInstallTests(unittest.TestCase):
@@ -632,6 +714,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual(report["status"], "provider_unavailable")
         self.assertFalse(report["writesPerformed"])
+
+    def test_xiaohongshu_detail_recovers_query_from_prior_normalized_output(self) -> None:
+        out_dir = self.root / "promotion-output"
+        prior_run = out_dir / "reports" / "promotion-manager" / "platform-data" / "mediacrawler" / "prior-search"
+        downstream.write_jsonl(
+            prior_run / "contents.jsonl",
+            [
+                {
+                    "platform": "xiaohongshu",
+                    "contentId": "target-note",
+                    "sourceUrl": "https://www.xiaohongshu.com/explore/target-note",
+                    "sourceKeyword": "AI 工具",
+                }
+            ],
+        )
+        resolver = getattr(platform_data_manager, "resolve_xiaohongshu_detail_query", None)
+        self.assertIsNotNone(resolver)
+
+        query = resolver(
+            out_dir,
+            "https://www.xiaohongshu.com/explore/target-note?xsec_token=must-not-persist&xsec_source=pc_search",
+        )
+
+        self.assertEqual(query, "AI 工具")
+
     def test_offline_fixture_collect_writes_manifest_normalized_files_and_downstream_artifacts(self) -> None:
         out_dir = self.root / "promotion-output"
         report = self.run_main(

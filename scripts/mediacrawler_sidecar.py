@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import urllib.parse
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -62,6 +63,7 @@ class CollectRequest:
     max_comments: int = MAX_COMMENTS
     include_sub_comments: bool = False
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+    detail_context_query: str = ""
 
     def __post_init__(self) -> None:
         canonical = mediacrawler_contract.canonical_platform(self.platform)
@@ -78,6 +80,8 @@ class CollectRequest:
             raise ValueError("query is required for search mode")
         if self.mode in {"detail", "creator"} and not self.target.strip():
             raise ValueError(f"target is required for {self.mode} mode")
+        if canonical == "xiaohongshu" and self.mode == "detail":
+            object.__setattr__(self, "target", mediacrawler_contract.sanitize_url(self.target.strip()))
 
 
 @dataclass
@@ -108,32 +112,47 @@ def build_mediacrawler_command(install: SidecarInstall, request: CollectRequest,
         str(BOOTSTRAP_PATH),
         "--checkout",
         str(install.checkout),
-        "--",
-        "--platform",
-        PLATFORM_FLAGS[request.platform],
-        "--lt",
-        "qrcode",
-        "--type",
-        request.mode,
-        "--headless",
-        "false",
-        "--save_data_option",
-        "jsonl",
-        "--save_data_path",
-        str(raw_dir.resolve()),
-        "--get_comment",
-        "true" if request.max_comments else "false",
-        "--get_sub_comment",
-        "true" if request.include_sub_comments else "false",
-        "--max_comments_count_singlenotes",
-        str(request.max_comments),
-        "--crawler_max_notes_count",
+        "--requested-max-contents",
         str(request.max_contents),
-        "--max_concurrency_num",
-        "1",
-        "--enable_ip_proxy",
-        "false",
     ]
+    if request.platform == "xiaohongshu" and request.mode == "detail" and request.detail_context_query.strip():
+        command.extend(
+            [
+                "--xhs-detail-query",
+                request.detail_context_query.strip(),
+                "--xhs-detail-target",
+                xiaohongshu_content_id(request.target),
+            ]
+        )
+    command.extend(
+        [
+            "--",
+            "--platform",
+            PLATFORM_FLAGS[request.platform],
+            "--lt",
+            "qrcode",
+            "--type",
+            request.mode,
+            "--headless",
+            "false",
+            "--save_data_option",
+            "jsonl",
+            "--save_data_path",
+            str(raw_dir.resolve()),
+            "--get_comment",
+            "true" if request.max_comments else "false",
+            "--get_sub_comment",
+            "true" if request.include_sub_comments else "false",
+            "--max_comments_count_singlenotes",
+            str(request.max_comments),
+            "--crawler_max_notes_count",
+            str(request.max_contents),
+            "--max_concurrency_num",
+            "1",
+            "--enable_ip_proxy",
+            "false",
+        ]
+    )
     if request.mode == "search":
         command.extend(["--keywords", request.query.strip()])
     elif request.mode == "detail":
@@ -449,7 +468,28 @@ def run_sidecar(
 
 
 def execute_process(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout)
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        timeout=timeout,
+    )
+
+
+def xiaohongshu_content_id(target: str) -> str:
+    value = mediacrawler_contract.sanitize_url(str(target or "").strip())
+    if not value.lower().startswith(("http://", "https://")):
+        return value
+    parts = [part for part in urllib.parse.urlsplit(value).path.split("/") if part]
+    if "explore" in parts:
+        index = parts.index("explore")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    return parts[-1] if parts else ""
 
 
 def lock_path(install: SidecarInstall) -> Path:

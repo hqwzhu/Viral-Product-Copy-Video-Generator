@@ -73,6 +73,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInstall) -> dict[str, Any]:
+    out_dir = Path(args.out_dir)
+    detail_context_query = ""
+    if args.platform == "xiaohongshu" and args.mode == "detail":
+        detail_context_query = resolve_xiaohongshu_detail_query(out_dir, args.target)
     request = mediacrawler_sidecar.CollectRequest(
         platform=args.platform,
         mode=args.mode,
@@ -82,11 +86,11 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
         max_comments=args.max_comments,
         include_sub_comments=args.include_sub_comments,
         timeout_seconds=args.timeout_seconds,
+        detail_context_query=detail_context_query,
     )
     started_monotonic = time.monotonic()
     started_at = utc_now()
     run_id = new_run_id(request)
-    out_dir = Path(args.out_dir)
     run_dir = out_dir / "reports" / "promotion-manager" / "platform-data" / "mediacrawler" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
 
@@ -318,6 +322,23 @@ def read_jsonl_files(paths: list[Path]) -> list[dict[str, Any]]:
                 if isinstance(value, dict):
                     rows.append(value)
     return rows
+
+
+def resolve_xiaohongshu_detail_query(out_dir: Path, target: str) -> str:
+    target_id = mediacrawler_sidecar.xiaohongshu_content_id(target)
+    if not target_id:
+        return ""
+    root = Path(out_dir) / "reports" / "promotion-manager" / "platform-data" / "mediacrawler"
+    paths = sorted(root.glob("*/contents.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in paths:
+        for row in read_jsonl_files([path]):
+            if (
+                row.get("platform") == "xiaohongshu"
+                and str(row.get("contentId") or "").strip() == target_id
+                and str(row.get("sourceKeyword") or "").strip()
+            ):
+                return str(row["sourceKeyword"]).strip()
+    return ""
 
 
 def load_published_items(override: str, out_dir: Path) -> list[dict[str, Any]]:

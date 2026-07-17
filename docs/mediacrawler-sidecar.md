@@ -87,6 +87,8 @@ python scripts\promotion_manager.py platform-data collect --platform xiaohongshu
 python scripts\promotion_manager.py platform-data collect --platform xiaohongshu --mode creator --target "https://www.xiaohongshu.com/user/profile/创作者ID" --out-dir .\promotion-output
 ```
 
+使用同一 `--out-dir` 时，小红书详情命令可以从之前的规范化搜索结果恢复安全的搜索关键词，在新的 Sidecar 子进程中重新获取临时详情上下文，并在进入详情和评论阶段前只保留目标内容。`xsec_token` 不进入命令行、运行清单或规范化输出；临时 raw 仍按默认规则在运行结束后删除。如果目标没有对应的历史搜索结果，请先执行一次限量搜索。
+
 ### 抖音
 
 ```powershell
@@ -126,6 +128,7 @@ python scripts\promotion_manager.py platform-data collect --platform xiaohongshu
 | 代理、媒体下载、多账号 | 关闭 |
 
 可以把内容数、评论数和超时调低，不能通过普通 CLI 参数突破硬上限。
+对于上游搜索接口固定返回一整页的情况，ENHE Bootstrap 会在评论采集前按 `--max-contents` 裁剪结果，避免对最终不会保留的内容采集评论。Windows 子进程输出固定按 UTF-8 解码，中文日志不会再因系统 GBK 默认编码导致运行失败。
 
 ## 状态说明
 
