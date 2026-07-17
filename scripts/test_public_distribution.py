@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts import build_public_distribution as builder
 from scripts import distribution_contract as contract
 
 
@@ -44,6 +45,68 @@ def write_text(root: Path, relative: str, text: str = "test\n") -> Path:
 
 
 class DistributionContractTest(unittest.TestCase):
+    def test_builder_creates_component_manifests_without_private_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "public"
+            builder.build_repository(ROOT, target, source_commit="test-source-commit")
+
+            skill = target / "skill" / "viral-product-copy-video-generator"
+            extension = target / "extension" / "chrome"
+            self.assertTrue((skill / "SKILL.md").is_file())
+            self.assertTrue((skill / "requirements-youtube.txt").is_file())
+            self.assertTrue((extension / "manifest.json").is_file())
+            self.assertFalse((target / "backend").exists())
+            self.assertFalse((target / "deploy").exists())
+            self.assertEqual(contract.scan_forbidden(target), [])
+
+            skill_component = json.loads(
+                (skill / "component-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(skill_component["version"], contract.VERSION)
+            self.assertEqual(skill_component["sourceCommit"], "test-source-commit")
+            self.assertEqual(skill_component["runtime"], "Python 3.11 and Codex")
+            self.assertEqual(
+                skill_component["entryPoints"], ["SKILL.md", "scripts/skill_entry.py"]
+            )
+            self.assertEqual(
+                skill_component["capabilityIds"], list(contract.NON_PAYMENT_COMMANDS)
+            )
+            extension_component = json.loads(
+                (extension / "component-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(extension_component["version"], contract.VERSION)
+            self.assertEqual(extension_component["sourceCommit"], "test-source-commit")
+            self.assertEqual(extension_component["runtime"], "Chrome Manifest V3")
+            self.assertEqual(
+                extension_component["entryPoints"],
+                ["manifest.json", "popup.html", "popup.js"],
+            )
+            self.assertEqual(
+                extension_component["nonPaymentCapabilityIds"],
+                list(contract.NON_PAYMENT_COMMANDS),
+            )
+            self.assertIs(extension_component["billingParityIncluded"], False)
+
+            release = json.loads(
+                (target / "release-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(release["version"], "0.5.3")
+            self.assertEqual(release["sourceCommit"], "test-source-commit")
+            self.assertEqual(release["syncAudit"]["status"], "ready")
+            self.assertEqual(
+                release["syncAudit"]["commands"],
+                list(contract.NON_PAYMENT_COMMANDS),
+            )
+
+    def test_builder_refuses_non_empty_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "public"
+            target.mkdir()
+            (target / "keep.txt").write_text("keep\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "target directory is not empty"):
+                builder.build_repository(ROOT, target, source_commit="test")
+
     def test_public_identity_constants_are_exact(self) -> None:
         self.assertEqual(contract.VERSION, "0.5.3")
         self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.2")

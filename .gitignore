@@ -8,3 +8,4 @@ promotion-output/
 !.env.example
 *.log
 .worktrees/
+dist/public-repository-*/
