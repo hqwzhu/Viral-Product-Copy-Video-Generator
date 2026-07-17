@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 import zipfile
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 import distribution_contract as contract
 import generate_checksums
@@ -58,7 +61,10 @@ def _extension_source_files() -> dict[str, Path]:
 def copy_validated_extension(source_zip: Path, output: Path) -> None:
     expected = _extension_source_files()
     with zipfile.ZipFile(source_zip) as archive:
-        names = archive.namelist()
+        try:
+            names = verify_distribution._safe_zip_members(archive)
+        except ValueError as exc:
+            raise RuntimeError("validated extension ZIP contains an unsafe member path") from exc
         if (
             len(names) != len(set(names))
             or set(names) != set(expected)
@@ -90,6 +96,9 @@ def build_release(validated_extension_zip: Path) -> Path:
         raise RuntimeError("release Skill archive name differs from the distribution contract")
     if release.get("extensionArchive") != verify_distribution.EXPECTED_EXTENSION_ARCHIVE:
         raise RuntimeError("release extension archive name differs from the distribution contract")
+    component_errors = verify_distribution.verify_component_paths(ROOT)
+    if component_errors:
+        raise RuntimeError("public component contains generated or unsafe paths")
 
     dist = ROOT / "dist" / f"v{contract.VERSION}"
     dist.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,10 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
+from pathlib import PurePosixPath
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +26,7 @@ VERSION = contract.VERSION
 SKILL_TARGET = Path("skill/viral-product-copy-video-generator")
 EXTENSION_TARGET = Path("extension/chrome")
 _GENERATED_TEMPLATE_PARTS = {"__pycache__", ".pytest_cache", "dist", "tmp-release-download"}
+_GENERATED_COMPONENT_PARTS = _GENERATED_TEMPLATE_PARTS
 
 
 def _is_link_or_reparse(path: Path) -> bool:
@@ -31,6 +35,23 @@ def _is_link_or_reparse(path: Path) -> bool:
     attributes = getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0)
     flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     return bool(flag and attributes & flag)
+
+
+def _validate_target_ancestors(target: Path) -> None:
+    current = target
+    while True:
+        try:
+            current.lstat()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise RuntimeError(f"unreadable target ancestor: {current}") from exc
+        else:
+            if _is_link_or_reparse(current):
+                raise RuntimeError(f"unsafe link or reparse target ancestor: {current}")
+        if current.parent == current:
+            return
+        current = current.parent
 
 
 def copy_file(source: Path, target: Path) -> None:
@@ -74,6 +95,19 @@ def _copy_allowlisted_files(source: Path, target: Path) -> None:
     extension_target = target / EXTENSION_TARGET
     for relative in extension_files:
         copy_file(source / "browser-extension" / relative, extension_target / relative)
+
+
+def _reject_generated_component_paths(target: Path) -> None:
+    for component in (target / SKILL_TARGET, target / EXTENSION_TARGET):
+        for path in contract._strict_files(target, component):
+            relative = path.relative_to(component)
+            if (
+                any(part in _GENERATED_COMPONENT_PARTS for part in relative.parts)
+                or path.suffix == ".pyc"
+            ):
+                raise RuntimeError(
+                    f"generated or cache path is forbidden in public component: {relative.as_posix()}"
+                )
 
 
 def _write_manifests(target: Path, source_commit: str) -> None:
@@ -133,7 +167,7 @@ def _write_manifests(target: Path, source_commit: str) -> None:
             "verification": {
                 "status": "pending",
                 "commands": [
-                    "python scripts/build_release.py --validated-extension-zip dist/validated/enhe-promotion-manager-0.5.3.zip",
+                    f"python scripts/build_release.py --validated-extension-zip dist/validated/enhe-promotion-manager-{VERSION}.zip",
                     "python scripts/verify_distribution.py",
                     "python -m unittest discover -s tests -v",
                 ],
@@ -146,17 +180,18 @@ def build_repository(source: Path, target: Path, source_commit: str) -> None:
     """Build a new public tree without overwriting unknown destination content."""
     source = Path(source).absolute()
     target = Path(target).absolute()
+    _validate_target_ancestors(target)
     if target.exists():
-        if _is_link_or_reparse(target):
-            raise RuntimeError(f"target directory is an unsafe link or reparse point: {target}")
         if not target.is_dir():
             raise RuntimeError(f"target path is not a directory: {target}")
         if any(target.iterdir()):
             raise RuntimeError(f"target directory is not empty: {target}")
     target.mkdir(parents=True, exist_ok=True)
+    _validate_target_ancestors(target)
 
     _copy_templates(source, target)
     _copy_allowlisted_files(source, target)
+    _reject_generated_component_paths(target)
     popup_path = source / "browser-extension" / "popup.js"
     popup = popup_path.read_text(encoding="utf-8")
     commands = contract.extension_command_refs(popup)
@@ -187,6 +222,51 @@ def clean_source_commit(source: Path) -> str:
     return result.stdout.strip()
 
 
+def snapshot_committed_source(source: Path, snapshot: Path, source_commit: str) -> None:
+    """Extract only bytes tracked by the selected commit into a new directory."""
+    source = Path(source).absolute()
+    snapshot = Path(snapshot).absolute()
+    if snapshot.exists() and any(snapshot.iterdir()):
+        raise RuntimeError(f"snapshot directory is not empty: {snapshot}")
+    snapshot.mkdir(parents=True, exist_ok=True)
+    snapshot_root = snapshot.resolve(strict=True)
+    with tempfile.TemporaryDirectory(prefix="public-source-archive-") as temp:
+        archive_path = Path(temp) / "source.zip"
+        subprocess.run(
+            [
+                "git",
+                "archive",
+                "--format=zip",
+                f"--output={archive_path}",
+                source_commit,
+            ],
+            cwd=source,
+            check=True,
+            capture_output=True,
+        )
+        with zipfile.ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                relative = PurePosixPath(info.filename)
+                if (
+                    relative.is_absolute()
+                    or "\\" in info.filename
+                    or any(part in {"", ".", ".."} for part in relative.parts)
+                ):
+                    raise RuntimeError("git archive contains an unsafe member path")
+                mode = info.external_attr >> 16
+                if stat.S_IFMT(mode) == stat.S_IFLNK:
+                    raise RuntimeError("git archive contains a symbolic link")
+                destination = snapshot.joinpath(*relative.parts)
+                if not destination.resolve(strict=False).is_relative_to(snapshot_root):
+                    raise RuntimeError("git archive member escapes the snapshot root")
+                if info.is_dir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as source_handle, destination.open("xb") as target_handle:
+                    shutil.copyfileobj(source_handle, target_handle)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", required=True)
@@ -198,8 +278,13 @@ def main() -> None:
     if not validated_zip.is_file():
         raise RuntimeError(f"validated extension zip is missing: {validated_zip}")
     target = Path(args.output_dir).absolute()
-    build_repository(ROOT, target, source_commit)
+    with tempfile.TemporaryDirectory(prefix="public-source-snapshot-") as temp:
+        snapshot = Path(temp) / "source"
+        snapshot_committed_source(ROOT, snapshot, source_commit)
+        build_repository(snapshot, target, source_commit)
     copy_file(validated_zip, target / "dist" / "validated" / f"enhe-promotion-manager-{VERSION}.zip")
+    if clean_source_commit(ROOT) != source_commit:
+        raise RuntimeError("source repository changed during public distribution build")
     print(f"Public repository assembled at: {target}")
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +46,69 @@ def write_text(root: Path, relative: str, text: str = "test\n") -> Path:
 
 
 class DistributionContractTest(unittest.TestCase):
+    def test_committed_snapshot_excludes_ignored_allowlisted_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            source = base / "source"
+            snapshot = base / "snapshot"
+            source.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=source,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Distribution Test"],
+                cwd=source,
+                check=True,
+            )
+            write_text(source, ".gitignore", "scripts/ignored.py\n")
+            write_text(source, "scripts/tracked.py", "print('tracked')\n")
+            subprocess.run(["git", "add", "."], cwd=source, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "fixture"], cwd=source, check=True)
+            write_text(source, "scripts/ignored.py", "print('ignored')\n")
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=source,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            builder.snapshot_committed_source(source, snapshot, commit)
+
+            self.assertTrue((snapshot / "scripts" / "tracked.py").is_file())
+            self.assertFalse((snapshot / "scripts" / "ignored.py").exists())
+
+    def test_builder_rejects_mocked_reparse_target_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            ancestor = Path(temp) / "ancestor"
+            ancestor.mkdir()
+            target = ancestor / "nested" / "public"
+
+            with mock.patch.object(
+                builder,
+                "_is_link_or_reparse",
+                side_effect=lambda path: path == ancestor,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "ancestor|reparse|unsafe"):
+                    builder.build_repository(ROOT, target, source_commit="test")
+
+    def test_builder_rejects_real_symlink_target_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            outside = base / "outside"
+            outside.mkdir()
+            link = base / "linked"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"OS denied symlink creation: {exc}")
+
+            with self.assertRaisesRegex(RuntimeError, "link|reparse|unsafe"):
+                builder.build_repository(ROOT, link / "public", source_commit="test")
+
     def test_builder_creates_component_manifests_without_private_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp) / "public"

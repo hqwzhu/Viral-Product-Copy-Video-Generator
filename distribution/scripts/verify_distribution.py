@@ -6,9 +6,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 import distribution_contract as contract
 
@@ -49,25 +52,54 @@ REQUIRED_FILES = (
     "scripts/distribution_contract.py",
     "tests/test_distribution.py",
 ) + REQUIRED_DOCS
-BANNED_CLAIMS = (
-    "guaranteed viral",
-    "保证爆款",
-    "自动点击最终发布",
-    "bypass captcha",
-    "绕过验证码",
+CLAIM_PATTERNS = (
+    (
+        "guaranteed viral",
+        re.compile(r"\b(?:guarantee(?:d|s|ing)?\s+(?:a\s+)?viral|viral\s+(?:is\s+)?guaranteed)\b", re.IGNORECASE),
+    ),
+    ("guaranteed hit", re.compile(r"保证爆款")),
+    (
+        "automatic final publish",
+        re.compile(
+            r"\b(?:automatic|automatically)\b.{0,40}\b(?:click(?:s|ed|ing)?\s+)?(?:the\s+)?(?:final\s+)?(?:publish(?:ing|ed)?|publication)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    ("automatic final publish", re.compile(r"自动点击最终发布")),
+    ("bypass captcha", re.compile(r"\bbypass(?:es|ed|ing)?\s+(?:a\s+)?captcha\b", re.IGNORECASE)),
+    ("bypass captcha", re.compile(r"绕过验证码")),
 )
+_ENGLISH_NEGATION = re.compile(
+    r"(?:does\s+not|do\s+not|is\s+not|are\s+not|will\s+not|cannot|can't|won't|never|not|without)\s+$",
+    re.IGNORECASE,
+)
+_CHINESE_NEGATION = re.compile(r"(?:不|不会|不能|未|不支持|不允许|不提供)\s*$")
+_TEXT_SUFFIXES = {".html", ".js", ".json", ".md", ".txt"}
+_GENERATED_COMPONENT_PARTS = {"dist", "__pycache__", ".pytest_cache", "tmp-release-download"}
+VERSION = contract.VERSION
 EXPECTED_CHECKSUM_PATHS = (
     "release-manifest.json",
-    "dist/v0.5.3/enhe-product-promo-maker-skill-0.5.3.zip",
-    "dist/v0.5.3/enhe-promotion-manager-extension-0.5.3.zip",
+    f"dist/v{VERSION}/enhe-product-promo-maker-skill-{VERSION}.zip",
+    f"dist/v{VERSION}/enhe-promotion-manager-extension-{VERSION}.zip",
 )
-EXPECTED_SKILL_ARCHIVE = "enhe-product-promo-maker-skill-0.5.3.zip"
-EXPECTED_EXTENSION_ARCHIVE = "enhe-promotion-manager-extension-0.5.3.zip"
+EXPECTED_SKILL_ARCHIVE = f"enhe-product-promo-maker-skill-{VERSION}.zip"
+EXPECTED_EXTENSION_ARCHIVE = f"enhe-promotion-manager-extension-{VERSION}.zip"
 EXPECTED_VALIDATOR_COMMANDS = (
-    "python scripts/build_release.py --validated-extension-zip dist/validated/enhe-promotion-manager-0.5.3.zip",
+    f"python scripts/build_release.py --validated-extension-zip dist/validated/enhe-promotion-manager-{VERSION}.zip",
     "python scripts/verify_distribution.py",
     "python -m unittest discover -s tests -v",
 )
+
+
+def redact_error(message: str) -> str:
+    redacted = str(message)
+    for rule, pattern in contract._SECRET_PATTERNS:
+        redacted = pattern.sub(f"<redacted:{rule}>", redacted)
+    return redacted
+
+
+def _redact_errors(errors: list[str]) -> list[str]:
+    return [redact_error(error) for error in errors]
 
 
 def read_json(path: Path) -> dict:
@@ -77,12 +109,23 @@ def read_json(path: Path) -> dict:
     return payload
 
 
-def public_text(root: Path) -> str:
-    chunks: list[str] = []
-    for path in sorted(root.rglob("*.md")):
-        if ".git" not in path.parts and "dist" not in path.parts:
-            chunks.append(path.read_text(encoding="utf-8", errors="replace"))
-    return "\n".join(chunks)
+def _public_text_surfaces(root: Path) -> list[Path]:
+    surfaces: set[Path] = set(root.glob("*.md"))
+    for relative in (Path("docs"), Path("extension/chrome"), Path("skill")):
+        start = root / relative
+        if not start.is_dir():
+            continue
+        surfaces.update(
+            path
+            for path in start.rglob("*")
+            if path.is_file() and path.suffix.lower() in _TEXT_SUFFIXES
+        )
+    return sorted(surfaces, key=lambda path: path.relative_to(root).as_posix())
+
+
+def _claim_is_negated(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 48) : start]
+    return bool(_ENGLISH_NEGATION.search(prefix) or _CHINESE_NEGATION.search(prefix))
 
 
 def verify_required_files(root: Path) -> list[str]:
@@ -218,6 +261,30 @@ def verify_non_payment_sync(root: Path, release: dict) -> list[str]:
     return errors
 
 
+def verify_component_paths(root: Path) -> list[str]:
+    errors: list[str] = []
+    for component_name in (
+        "skill/viral-product-copy-video-generator",
+        "extension/chrome",
+    ):
+        component = root / component_name
+        files, directories, issues = contract._walk_tree(root, component)
+        for issue in issues:
+            errors.append(
+                f"unsafe public component path: {component_name}/{issue['path']} ({issue['rule']})"
+            )
+        for path in files + directories:
+            relative = path.relative_to(component)
+            if (
+                any(part.lower() in _GENERATED_COMPONENT_PARTS for part in relative.parts)
+                or path.suffix.lower() == ".pyc"
+            ):
+                errors.append(
+                    f"generated or cache path in public component: {component_name}/{relative.as_posix()}"
+                )
+    return errors
+
+
 def verify_hosted_worker_language(root: Path) -> list[str]:
     zh = (root / "docs/zh-CN/version-sync.md").read_text(encoding="utf-8")
     en = (root / "docs/en/version-sync.md").read_text(encoding="utf-8")
@@ -230,16 +297,23 @@ def verify_hosted_worker_language(root: Path) -> list[str]:
 
 
 def verify_claim_boundaries(root: Path) -> list[str]:
-    text = public_text(root).lower()
-    return [f"unsafe public claim: {claim}" for claim in BANNED_CLAIMS if claim.lower() in text]
+    errors: list[str] = []
+    for path in _public_text_surfaces(root):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for rule, pattern in CLAIM_PATTERNS:
+            if any(not _claim_is_negated(text, match.start()) for match in pattern.finditer(text)):
+                errors.append(
+                    f"unsafe public claim: {rule} ({path.relative_to(root).as_posix()})"
+                )
+    return errors
 
 
 def _safe_zip_members(archive: zipfile.ZipFile) -> list[str]:
     names = archive.namelist()
-    for name in names:
+    for index, name in enumerate(names, start=1):
         path = Path(name)
-        if path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"unsafe archive member path: {name}")
+        if path.is_absolute() or ".." in path.parts or "\\" in name:
+            raise ValueError(f"unsafe archive member path at index {index}")
     return names
 
 
@@ -335,12 +409,7 @@ def canonical_tree_digest(root: Path, release: dict) -> str:
     ):
         relative = path.relative_to(root)
         relative_name = relative.as_posix()
-        if any(
-            part in {".git", "dist", "__pycache__", ".pytest_cache"}
-            for part in relative.parts
-        ):
-            continue
-        if path.suffix == ".pyc":
+        if relative.parts and relative.parts[0] in {".git", "dist"}:
             continue
         if relative_name == "SHA256SUMS":
             continue
@@ -375,15 +444,19 @@ def verify_checksums(root: Path) -> list[str]:
     errors: list[str] = []
     records: dict[str, str] = {}
     names_in_order: list[str] = []
-    for line in checksum_path.read_text(encoding="utf-8").splitlines():
+    for line_number, line in enumerate(
+        checksum_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
         match = re.fullmatch(r"([0-9A-F]{64})  (.+)", line)
         if not match:
-            errors.append(f"invalid checksum line: {line}")
+            errors.append(
+                f"invalid checksum line {line_number}: expected uppercase SHA-256 and relative path"
+            )
             continue
         expected, name = match.groups()
         names_in_order.append(name)
         if name in records:
-            errors.append(f"duplicate checksum entry: {name}")
+            errors.append(f"duplicate checksum entry at line {line_number}")
         records[name] = expected
         if name not in EXPECTED_CHECKSUM_PATHS:
             continue
@@ -402,9 +475,14 @@ def verify_forbidden(root: Path) -> list[str]:
     return [
         f"forbidden public content: {item['path']} ({item['rule']})"
         for item in violations
-        if not any(
-            part in {".git", "dist", "__pycache__", ".pytest_cache"}
-            for part in Path(item["path"]).parts
+        if not (
+            Path(item["path"]).parts
+            and Path(item["path"]).parts[0] in {".git", "dist"}
+        )
+        and not (
+            any(part in {"__pycache__", ".pytest_cache"} for part in Path(item["path"]).parts)
+            and not item["path"].startswith("skill/")
+            and not item["path"].startswith("extension/")
         )
     ]
 
@@ -413,17 +491,22 @@ def validate(root: Path, check_checksums: bool = True) -> list[str]:
     root = Path(root).resolve()
     errors = verify_required_files(root)
     if errors:
-        return errors
+        return _redact_errors(errors)
     try:
         release = read_json(root / "release-manifest.json")
         if release.get("version") != contract.VERSION:
             errors.append("release version differs from distribution contract")
-        if release.get("verification", {}).get("status") not in {"built", "ready"}:
+        verification_status = release.get("verification", {}).get("status")
+        if check_checksums:
+            if verification_status != "ready":
+                errors.append("release verification status must be ready")
+        elif verification_status not in {"built", "ready"}:
             errors.append("release verification status is not built or ready")
         errors.extend(verify_identity_and_links(root, release))
         errors.extend(verify_versions(root, release))
         errors.extend(verify_extension_boundary(root))
         errors.extend(verify_non_payment_sync(root, release))
+        errors.extend(verify_component_paths(root))
         errors.extend(verify_hosted_worker_language(root))
         errors.extend(verify_claim_boundaries(root))
         errors.extend(verify_archives(root, release))
@@ -433,14 +516,14 @@ def validate(root: Path, check_checksums: bool = True) -> list[str]:
         errors.extend(verify_forbidden(root))
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         errors.append(f"validation failure: {exc}")
-    return errors
+    return _redact_errors(errors)
 
 
 def main() -> None:
     try:
         errors = validate(ROOT)
     except Exception as exc:  # pragma: no cover - final CLI guard
-        errors = [f"validation failure: {exc}"]
+        errors = [redact_error(f"validation failure: {exc}")]
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
