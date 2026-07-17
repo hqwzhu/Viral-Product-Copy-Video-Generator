@@ -196,6 +196,92 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
 
 
 class PublicDistributionTest(unittest.TestCase):
+    def test_release_rejects_mocked_reparse_destination_without_partial_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root, validated = create_public_repository(base)
+            version_dir = root / "dist" / f"v{contract.VERSION}"
+            version_dir.mkdir(parents=True)
+            skill_output = version_dir / verify_distribution.EXPECTED_SKILL_ARCHIVE
+            extension_output = version_dir / verify_distribution.EXPECTED_EXTENSION_ARCHIVE
+            sentinel = b"external-sentinel"
+            extension_output.write_bytes(sentinel)
+            real_is_link = contract._is_link_or_reparse
+
+            def mocked_reparse(path: Path) -> bool:
+                return path == extension_output or real_is_link(path)
+
+            with (
+                mock.patch.object(build_release, "ROOT", root),
+                mock.patch.object(
+                    contract,
+                    "_is_link_or_reparse",
+                    side_effect=mocked_reparse,
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "link|reparse|destination"):
+                    build_release.build_release(validated)
+
+            self.assertEqual(extension_output.read_bytes(), sentinel)
+            self.assertFalse(skill_output.exists())
+            self.assertEqual(list(version_dir.glob(".tmp-*.zip")), [])
+
+    def test_release_rejects_real_symlink_destination_without_touching_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root, validated = create_public_repository(base)
+            version_dir = root / "dist" / f"v{contract.VERSION}"
+            version_dir.mkdir(parents=True)
+            skill_output = version_dir / verify_distribution.EXPECTED_SKILL_ARCHIVE
+            extension_output = version_dir / verify_distribution.EXPECTED_EXTENSION_ARCHIVE
+            external = base / "external.zip"
+            sentinel = b"external-sentinel"
+            external.write_bytes(sentinel)
+            try:
+                extension_output.symlink_to(external)
+            except OSError as exc:
+                self.skipTest(f"OS denied symlink creation: {exc}")
+
+            with mock.patch.object(build_release, "ROOT", root):
+                with self.assertRaisesRegex(RuntimeError, "link|reparse|destination"):
+                    build_release.build_release(validated)
+
+            self.assertEqual(external.read_bytes(), sentinel)
+            self.assertFalse(skill_output.exists())
+            self.assertTrue(extension_output.is_symlink())
+            self.assertEqual(list(version_dir.glob(".tmp-*.zip")), [])
+
+    def test_release_rejects_non_directory_dist_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, validated = create_public_repository(Path(temp))
+            (root / "dist").write_bytes(b"not-a-directory")
+
+            with mock.patch.object(build_release, "ROOT", root):
+                with self.assertRaisesRegex(RuntimeError, "directory|ancestor"):
+                    build_release.build_release(validated)
+
+    def test_release_cleans_staged_archives_when_extension_validation_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, validated = create_public_repository(Path(temp))
+            version_dir = root / "dist" / f"v{contract.VERSION}"
+            skill_output = version_dir / verify_distribution.EXPECTED_SKILL_ARCHIVE
+            extension_output = version_dir / verify_distribution.EXPECTED_EXTENSION_ARCHIVE
+
+            with (
+                mock.patch.object(build_release, "ROOT", root),
+                mock.patch.object(
+                    build_release,
+                    "copy_validated_extension",
+                    side_effect=RuntimeError("fixture validation failure"),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "fixture validation failure"):
+                    build_release.build_release(validated)
+
+            self.assertFalse(skill_output.exists())
+            self.assertFalse(extension_output.exists())
+            self.assertEqual(list(version_dir.glob(".tmp-*.zip")), [])
+
     def test_release_build_is_complete_deterministic_and_byte_faithful(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root, validated = create_public_repository(Path(temp))

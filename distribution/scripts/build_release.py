@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -32,6 +34,94 @@ def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
     archive.writestr(info, data)
 
 
+def _validate_root_ancestors(root: Path) -> None:
+    current = root.absolute()
+    while True:
+        try:
+            current.lstat()
+        except OSError as exc:
+            raise RuntimeError("release root has an unreadable ancestor") from exc
+        if contract._is_link_or_reparse(current):
+            raise RuntimeError("release root has an unsafe link or reparse ancestor")
+        if current.parent == current:
+            return
+        current = current.parent
+
+
+def _validate_release_path(root: Path, path: Path, *, destination: bool = False) -> Path:
+    root_absolute = root.absolute()
+    _validate_root_ancestors(root_absolute)
+    root_resolved = contract._resolved_root(root_absolute)
+    path_absolute = path.absolute()
+    try:
+        relative = path_absolute.relative_to(root_absolute)
+    except ValueError as exc:
+        raise RuntimeError("release artifact path is outside the repository root") from exc
+    current = root_absolute
+    for part in relative.parts:
+        current /= part
+        try:
+            current.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise RuntimeError("release artifact path has an unreadable ancestor") from exc
+        if contract._is_link_or_reparse(current):
+            raise RuntimeError("release artifact path has an unsafe link or reparse point")
+        is_destination = destination and current == path_absolute
+        if is_destination:
+            if not current.is_file():
+                raise RuntimeError("release artifact destination is not a regular file")
+        elif not current.is_dir():
+            raise RuntimeError("release artifact ancestor is not a directory")
+        if not current.resolve(strict=True).is_relative_to(root_resolved):
+            raise RuntimeError("release artifact path escapes the repository root")
+    return path_absolute
+
+
+def _prepare_release_directory(root: Path) -> Path:
+    dist_root = root / "dist"
+    version_directory = dist_root / f"v{contract.VERSION}"
+    _validate_release_path(root, dist_root)
+    if not dist_root.exists():
+        dist_root.mkdir()
+    _validate_release_path(root, dist_root)
+    _validate_release_path(root, version_directory)
+    if not version_directory.exists():
+        version_directory.mkdir()
+    _validate_release_path(root, version_directory)
+    return version_directory
+
+
+def _new_temp_archive(directory: Path) -> Path:
+    descriptor, name = tempfile.mkstemp(prefix=".tmp-", suffix=".zip", dir=directory)
+    os.close(descriptor)
+    path = Path(name)
+    if contract._is_link_or_reparse(path) or not path.is_file():
+        path.unlink(missing_ok=True)
+        raise RuntimeError("temporary release artifact is not a regular file")
+    return path
+
+
+def _fsync_file(path: Path) -> None:
+    with path.open("r+b") as handle:
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _fsync_directory(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
 def build_skill_zip(output: Path) -> None:
     source = ROOT / "skill" / "viral-product-copy-video-generator"
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +137,24 @@ def build_skill_zip(output: Path) -> None:
                 f"viral-product-copy-video-generator/{relative}",
                 path.read_bytes(),
             )
+
+
+def validate_skill_zip(path: Path) -> None:
+    source = ROOT / "skill" / "viral-product-copy-video-generator"
+    expected = {
+        f"viral-product-copy-video-generator/{item.relative_to(source).as_posix()}": item
+        for item in contract._strict_files(ROOT, source)
+    }
+    with zipfile.ZipFile(path) as archive:
+        names = verify_distribution._safe_zip_members(archive)
+        if len(names) != len(set(names)) or set(names) != set(expected):
+            raise RuntimeError("staged Skill ZIP member list differs from public source")
+        for info in archive.infolist():
+            if info.date_time != FIXED_ZIP_TIMESTAMP:
+                raise RuntimeError("staged Skill ZIP timestamp is not deterministic")
+        for name, source_path in expected.items():
+            if archive.read(name) != source_path.read_bytes():
+                raise RuntimeError("staged Skill ZIP bytes differ from public source")
 
 
 def _extension_source_files() -> dict[str, Path]:
@@ -100,12 +208,44 @@ def build_release(validated_extension_zip: Path) -> Path:
     if component_errors:
         raise RuntimeError("public component contains generated or unsafe paths")
 
-    dist = ROOT / "dist" / f"v{contract.VERSION}"
-    dist.mkdir(parents=True, exist_ok=True)
+    dist = _prepare_release_directory(ROOT)
     skill_zip = dist / release["skillArchive"]
     extension_zip = dist / release["extensionArchive"]
-    build_skill_zip(skill_zip)
-    copy_validated_extension(validated_extension_zip, extension_zip)
+    _validate_release_path(ROOT, skill_zip, destination=True)
+    _validate_release_path(ROOT, extension_zip, destination=True)
+    skill_temp: Path | None = None
+    extension_temp: Path | None = None
+    try:
+        skill_temp = _new_temp_archive(dist)
+        extension_temp = _new_temp_archive(dist)
+        build_skill_zip(skill_temp)
+        validate_skill_zip(skill_temp)
+        _fsync_file(skill_temp)
+        copy_validated_extension(validated_extension_zip, extension_temp)
+        if extension_temp.read_bytes() != validated_extension_zip.read_bytes():
+            raise RuntimeError("staged extension ZIP bytes differ from validated input")
+        _fsync_file(extension_temp)
+
+        _validate_release_path(ROOT, skill_zip, destination=True)
+        _validate_release_path(ROOT, extension_zip, destination=True)
+        if contract._is_link_or_reparse(skill_temp) or not skill_temp.is_file():
+            raise RuntimeError("staged Skill ZIP is not a regular file")
+        if contract._is_link_or_reparse(extension_temp) or not extension_temp.is_file():
+            raise RuntimeError("staged extension ZIP is not a regular file")
+        _validate_release_path(ROOT, skill_zip, destination=True)
+        os.replace(skill_temp, skill_zip)
+        skill_temp = None
+        _validate_release_path(ROOT, extension_zip, destination=True)
+        os.replace(extension_temp, extension_zip)
+        extension_temp = None
+        _fsync_directory(dist)
+    finally:
+        for temporary in (skill_temp, extension_temp):
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     release["artifacts"] = {
         path.name: {
