@@ -210,7 +210,7 @@ You can also let the run command attempt to install Chromium under an explicit f
 
 ```powershell
 python scripts\skill_entry.py `
-  --link "https://example.com/product" `
+  --link "https://www.enhe-tech.com.cn/promotion-manager" `
   --install-browser-if-missing `
   --out-dir ".\promotion-output"
 ```

@@ -75,7 +75,7 @@ YouTube 还需要安装 `requirements-youtube.txt` 中的官方客户端；GitHu
 
 ```powershell
 python scripts\real_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
+  --product-url "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --inbox-dir ".\promotion-evidence-inbox" `
   --out-dir "$runDir"

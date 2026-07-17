@@ -75,7 +75,7 @@ After publishing, record the real URL first, then import real metrics, comments,
 
 ```powershell
 python scripts\real_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
+  --product-url "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --inbox-dir ".\promotion-evidence-inbox" `
   --out-dir "$runDir"

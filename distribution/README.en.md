@@ -73,7 +73,7 @@ git clone https://github.com/hqwzhu/enhe-promotion-manager.git
 cd .\enhe-promotion-manager\skill\viral-product-copy-video-generator
 
 python scripts\skill_entry.py `
-  --link "https://example.com/product" `
+  --link "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --out-dir ".\promotion-output"
 ```

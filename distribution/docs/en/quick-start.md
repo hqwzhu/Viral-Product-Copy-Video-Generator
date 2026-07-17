@@ -18,7 +18,7 @@ The following command uses a public example URL. Replace it directly with your p
 
 ```powershell
 python scripts\skill_entry.py `
-  --link "https://example.com/product" `
+  --link "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --out-dir ".\promotion-output"
 ```
@@ -91,7 +91,7 @@ First create the evidence inbox:
 
 ```powershell
 python scripts\real_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
+  --product-url "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --inbox-dir ".\promotion-evidence-inbox" `
   --out-dir "$runDir"

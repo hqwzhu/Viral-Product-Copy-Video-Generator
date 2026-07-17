@@ -18,7 +18,7 @@ The default data boundary is the local file system. URL reads use public pages, 
 
 ```powershell
 python scripts\skill_entry.py `
-  --link "https://example.com/product" `
+  --link "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --out-dir ".\promotion-output"
 ```
@@ -53,7 +53,7 @@ python scripts\browser_publish_session.py `
 
 ```powershell
 python scripts\real_evidence_inbox_setup.py `
-  --product-url "https://example.com/product" `
+  --product-url "https://www.enhe-tech.com.cn/promotion-manager" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
   --inbox-dir ".\promotion-evidence-inbox" `
   --out-dir "$runDir"

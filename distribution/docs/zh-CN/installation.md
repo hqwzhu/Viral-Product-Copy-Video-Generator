@@ -210,7 +210,7 @@ python -m playwright install chromium
 
 ```powershell
 python scripts\skill_entry.py `
-  --link "https://example.com/product" `
+  --link "https://www.enhe-tech.com.cn/promotion-manager" `
   --install-browser-if-missing `
   --out-dir ".\promotion-output"
 ```

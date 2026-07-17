@@ -155,64 +155,176 @@ class DistributionContractTest(unittest.TestCase):
                 "Typical use case",
             ],
         )
-        expected_capability_pairs = [
-            ("产品网页读取", "Product webpage reading"),
-            ("多链接与网站产品发现", "Multi-link and website product discovery"),
-            ("竞品与爆款内容研究", "Competitor and high-performing content research"),
-            ("本机登录态 Sidecar 研究", "Local-login Sidecar research"),
-            ("事实、证据与风险控制", "Fact, evidence, and risk controls"),
-            ("平台原生文案生成", "Platform-native copy generation"),
-            ("视频口播稿与分镜", "Spoken video scripts and storyboards"),
-            ("MP4 视频草稿", "MP4 video drafts"),
-            ("封面图与详情图", "Cover and detail images"),
-            ("完整发布包", "Complete publishing packs"),
-            ("受控发布辅助", "Controlled publishing assistance"),
-            ("发布后真实证据导入", "Post-publication real-evidence import"),
-            ("复盘与下一轮优化", "Retrospectives and next-iteration optimization"),
-            ("Chrome 当前页面转任务", "Turn the current Chrome page into a task"),
-            ("中英文界面", "Chinese and English UI"),
-            ("本地优先隐私", "Local-first privacy"),
+        feature_fields = ("what", "problem", "benefit", "use_case")
+        feature_contracts = [
+            (
+                ("产品网页读取", "Product webpage reading"),
+                (
+                    (r"公开产品页.*浏览器快照", r"public product page.*browser snapshot"),
+                    (r"信息散落.*猜测当事实", r"scattered.*assumptions as facts"),
+                    (r"来源.*状态.*风险提示", r"sources.*status.*risk notes"),
+                    (r"SaaS 产品页.*定位.*目标用户", r"SaaS product page.*positioning.*target users"),
+                ),
+            ),
+            (
+                ("多链接与网站产品发现", "Multi-link and website product discovery"),
+                (
+                    (r"多个产品链接.*站点地图.*候选产品页", r"multiple product links.*sitemap.*candidate product pages"),
+                    (r"产品线多.*逐页复制.*耗时", r"product line.*one by one.*time-consuming"),
+                    (r"一次运行.*候选清单.*评分", r"candidate list.*one run.*scores"),
+                    (r"几十个工具页面.*批量", r"dozens of tool pages.*batches"),
+                ),
+            ),
+            (
+                ("竞品与爆款内容研究", "Competitor and high-performing content research"),
+                (
+                    (r"竞品.*创作者.*钩子.*可见指标", r"competitors.*creators.*hooks.*visible metrics"),
+                    (r"只凭感觉.*参考内容来自哪里", r"intuition.*reference material came from"),
+                    (r"可复核的证据库.*内容模式.*补采", r"reviewable evidence library.*content patterns.*follow-up collection"),
+                    (r"AI 工具.*YouTube.*小红书.*抖音", r"AI tool.*YouTube.*Xiaohongshu.*Douyin"),
+                ),
+            ),
+            (
+                ("本机登录态 Sidecar 研究", "Local-login Sidecar research"),
+                (
+                    (r"MediaCrawler Sidecar.*本机 Chrome 登录态", r"MediaCrawler Sidecar.*local Chrome login state"),
+                    (r"匿名读取.*浏览器可见内容", r"anonymous reads.*visible in a user's browser"),
+                    (r"用户控制的本机环境.*保留状态", r"user-controlled local environment.*preserving collection status"),
+                    (r"本机完成登录.*小红书关键词", r"signing in locally.*Xiaohongshu keyword"),
+                ),
+            ),
+            (
+                ("事实、证据与风险控制", "Fact, evidence, and risk controls"),
+                (
+                    (r"事实.*来源.*权限.*合成演示.*缺失", r"facts.*sources.*permissions.*synthetic demonstration.*missing"),
+                    (r"无法核查.*数字.*链接.*假设", r"numbers.*links.*assumptions.*cannot be checked"),
+                    (r"审核者.*可以用.*补证据", r"reviewers.*usable.*needs evidence"),
+                    (r"引用.*风险提示.*waiting_real_data", r"citations.*risk notes.*waiting_real_data"),
+                ),
+            ),
+            (
+                ("平台原生文案生成", "Platform-native copy generation"),
+                (
+                    (r"YouTube.*知乎.*小红书.*抖音.*GitHub.*标题.*标签", r"YouTube.*Zhihu.*Xiaohongshu.*Douyin.*GitHub.*titles.*tags"),
+                    (r"通用文案.*不同平台.*语气", r"generic.*does not fit.*different platforms"),
+                    (r"减少重复改写.*多平台草稿", r"reduces repetitive rewriting.*platform-specific drafts"),
+                    (r"视频简介.*知乎回答.*小红书笔记", r"video description.*Zhihu answer.*Xiaohongshu post"),
+                ),
+            ),
+            (
+                ("视频口播稿与分镜", "Spoken video scripts and storyboards"),
+                (
+                    (r"产品事实.*口播稿.*镜头顺序.*字幕", r"product facts.*spoken scripts.*shot order.*subtitle"),
+                    (r"文案.*拍摄.*剪辑.*共同结构", r"copywriting.*shooting.*editing.*shared production structure"),
+                    (r"可拍.*可审.*可交接", r"filmed.*reviewed.*handed off"),
+                    (r"30–60 秒.*页面录屏", r"30–60 second.*screen captures"),
+                ),
+            ),
+            (
+                ("MP4 视频草稿", "MP4 video drafts"),
+                (
+                    (r"FFmpeg.*音频素材.*MP4", r"FFmpeg.*audio assets.*MP4"),
+                    (r"只有文字.*节奏.*画面缺口", r"text alone.*pacing.*missing visuals"),
+                    (r"时长.*画幅.*素材占位", r"duration.*aspect ratio.*provisional asset"),
+                    (r"可播放的 MP4.*首轮审稿", r"playable MP4.*first review"),
+                ),
+            ),
+            (
+                ("封面图与详情图", "Cover and detail images"),
+                (
+                    (r"Pillow.*PNG.*尺寸.*路径", r"Pillow.*PNG.*dimensions.*paths"),
+                    (r"每个平台.*重新整理图片.*漏传", r"every platform.*reorganized.*omit"),
+                    (r"图片.*标题.*视频.*发布字段", r"images.*title.*video.*publishing fields"),
+                    (r"小红书.*抖音.*封面.*产品细节图", r"Xiaohongshu.*Douyin.*cover.*product-detail"),
+                ),
+            ),
+            (
+                ("完整发布包", "Complete publishing packs"),
+                (
+                    (r"标题.*标签.*媒体路径.*跟踪链接.*人工步骤", r"titles.*tags.*media paths.*tracking links.*manual steps"),
+                    (r"内容.*素材.*发布说明.*分散", r"content.*assets.*publishing instructions.*scattered"),
+                    (r"一份清单.*留下记录", r"one checklist.*audit record"),
+                    (r"已审核任务.*创作者.*客户", r"approved task.*creator.*client"),
+                ),
+            ),
+            (
+                ("受控发布辅助", "Controlled publishing assistance"),
+                (
+                    (r"dry-run.*字段填充.*发布队列.*最终提交前停止", r"dry-run.*field filling.*publishing queues.*stops before final submission"),
+                    (r"误操作.*凭据.*账号权限", r"mistakes.*credential.*account-permission"),
+                    (r"完整载荷.*截图.*缺失项", r"full payload.*screenshots.*missing items"),
+                    (r"YouTube 官方 API dry-run.*小红书", r"YouTube official API dry-run.*Xiaohongshu"),
+                ),
+            ),
+            (
+                ("发布后真实证据导入", "Post-publication real-evidence import"),
+                (
+                    (r"真实 URL.*截图.*订单.*收入", r"real URLs.*screenshots.*orders.*revenue"),
+                    (r"平台后台.*统一入口", r"platform dashboards.*consistent retrospective entry point"),
+                    (r"可追溯.*示例数字", r"traceable.*sample numbers"),
+                    (r"published-urls.csv.*metrics.csv.*评论文件", r"published-urls.csv.*metrics.csv.*comment files"),
+                ),
+            ),
+            (
+                ("复盘与下一轮优化", "Retrospectives and next-iteration optimization"),
+                (
+                    (r"真实证据.*表现摘要.*受众需求.*下一轮.*钩子", r"real evidence.*performance summaries.*audience needs.*next topic.*hook"),
+                    (r"结构化反馈.*下一轮靠猜", r"structured feedback.*next iteration.*guesswork"),
+                    (r"真实数据.*内容方向.*优先级", r"real data.*content direction.*priority"),
+                    (r"不同标题.*真实指标.*下一轮素材", r"different titles.*real metrics.*next asset set"),
+                ),
+            ),
+            (
+                ("Chrome 当前页面转任务", "Turn the current Chrome page into a task"),
+                (
+                    (r"用户主动点击.*当前标签页 URL.*可复制", r"explicit user click.*current tab URL.*copyable"),
+                    (r"浏览器.*终端.*手工抄链接.*易出错", r"manually copying.*browser.*terminal.*error-prone"),
+                    (r"几秒内.*本地任务.*审阅命令", r"within seconds.*local task.*reviewable"),
+                    (r"产品官网.*功能页.*单链接", r"product website.*feature page.*single-link"),
+                ),
+            ),
+            (
+                ("中英文界面", "Chinese and English UI"),
+                (
+                    (r"中文/英文切换.*所选参数", r"Chinese and English.*selected parameters"),
+                    (r"团队成员语言不同.*入口不统一", r"different languages.*consistent entry point"),
+                    (r"中文运营.*英文协作者", r"Chinese-language operators.*English-language collaborators"),
+                    (r"中文运营选择平台.*英文协作者审核", r"Chinese-language operator selects platforms.*English-language collaborator reviews"),
+                ),
+            ),
+            (
+                ("本地优先隐私", "Local-first privacy"),
+                (
+                    (r"输出.*Cookies.*Chrome 登录配置.*本机", r"output.*Cookies.*Chrome login profiles.*local computer"),
+                    (r"账号状态.*客户数据.*隐藏令牌", r"account state.*client data.*hidden tokens"),
+                    (r"减少数据外传面.*审计.*删除", r"reduces the surface for data transfer.*review.*deletion"),
+                    (r"客户电脑.*决定分享", r"client's computer.*decide what to share"),
+                ),
+            ),
         ]
-        self.assertEqual(
-            [row[0] for row in zh_feature_rows],
-            [pair[0] for pair in expected_capability_pairs],
-        )
-        self.assertEqual(
-            [row[0] for row in en_feature_rows],
-            [pair[1] for pair in expected_capability_pairs],
-        )
-        self.assertEqual(
-            list(zip([row[0] for row in zh_feature_rows], [row[0] for row in en_feature_rows])),
-            expected_capability_pairs,
-        )
-
-        selected_feature_markers = {
-            0: {
-                "zh": ("浏览器快照", "把猜测当事实", "来源、状态和风险提示", "SaaS 产品页"),
-                "en": ("browser snapshot", "assumptions as facts", "sources, status, and risk notes", "SaaS product page"),
-            },
-            3: {
-                "zh": ("MediaCrawler Sidecar", "纯匿名读取", "用户控制的本机环境", "小红书关键词"),
-                "en": ("MediaCrawler Sidecar", "anonymous reads", "user-controlled local environment", "Xiaohongshu keyword"),
-            },
-            10: {
-                "zh": ("最终提交前停止", "凭据和账号权限", "完整载荷、截图和缺失项", "YouTube 官方 API dry-run"),
-                "en": ("stops before final submission", "credential and account-permission", "full payload, screenshots, and missing items", "YouTube official API dry-run"),
-            },
-            11: {
-                "zh": ("真实 URL", "平台后台", "可追溯", "published-urls.csv"),
-                "en": ("real URLs", "platform dashboards", "traceable", "published-urls.csv"),
-            },
-            15: {
-                "zh": ("Cookies", "客户数据", "数据外传面", "客户电脑"),
-                "en": ("Cookies", "client data", "surface for data transfer", "client's computer"),
-            },
-        }
-        for row_index, language_markers in selected_feature_markers.items():
-            for cell, marker in zip(zh_feature_rows[row_index][1:], language_markers["zh"]):
-                self.assertIn(marker, cell)
-            for cell, marker in zip(en_feature_rows[row_index][1:], language_markers["en"]):
-                self.assertIn(marker, cell)
+        self.assertEqual(len(feature_contracts), 16)
+        self.assertEqual(len(zh_feature_rows), len(feature_contracts))
+        self.assertEqual(len(en_feature_rows), len(feature_contracts))
+        for row_index, ((zh_name, en_name), field_contracts) in enumerate(feature_contracts):
+            self.assertEqual(len(field_contracts), len(feature_fields))
+            self.assertEqual(zh_feature_rows[row_index][0], zh_name)
+            self.assertEqual(en_feature_rows[row_index][0], en_name)
+            for field_index, (field_name, language_patterns) in enumerate(
+                zip(feature_fields, field_contracts),
+                start=1,
+            ):
+                for language, row, pattern in (
+                    ("zh", zh_feature_rows[row_index], language_patterns[0]),
+                    ("en", en_feature_rows[row_index], language_patterns[1]),
+                ):
+                    capability = row[0]
+                    normalized_cell = row[field_index].casefold()
+                    for marker in pattern.split(".*"):
+                        message = (
+                            f"{language} capability={capability!r} field={field_name!r} "
+                            f"lacks semantic marker {marker!r}"
+                        )
+                        self.assertIn(marker.casefold(), normalized_cell, message)
 
         def assert_markers(path: Path, markers: tuple[str, ...]) -> None:
             text = path.read_text(encoding="utf-8")
@@ -627,6 +739,47 @@ class DistributionContractTest(unittest.TestCase):
                 self.assertIsNone(re.search(r"\b(?:todo|tbd|placeholder)\b", lowered))
                 for banned_claim in banned_claims:
                     self.assertNotIn(banned_claim, lowered)
+
+    def test_distribution_runnable_examples_use_official_product_url(self) -> None:
+        distribution = ROOT / "distribution"
+        official_url = "https://www.enhe-tech.com.cn/promotion-manager"
+        obsolete_url = "https://example.com/product"
+        required_product_guides = {
+            distribution / "README.md",
+            distribution / "README.en.md",
+            distribution / "docs" / "zh-CN" / "quick-start.md",
+            distribution / "docs" / "en" / "quick-start.md",
+            distribution / "docs" / "zh-CN" / "skill-guide.md",
+            distribution / "docs" / "en" / "skill-guide.md",
+        }
+        markdown_files = [
+            distribution / "README.md",
+            distribution / "README.en.md",
+            *sorted((distribution / "docs" / "zh-CN").glob("*.md")),
+            *sorted((distribution / "docs" / "en").glob("*.md")),
+        ]
+        powershell_block = re.compile(r"```powershell\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+        guides_with_product_commands: set[Path] = set()
+        for path in markdown_files:
+            for block_index, block in enumerate(
+                powershell_block.findall(path.read_text(encoding="utf-8")),
+                start=1,
+            ):
+                with self.subTest(path=path.relative_to(distribution), block=block_index):
+                    self.assertNotIn(obsolete_url, block)
+                    is_product_run = (
+                        "python scripts\\skill_entry.py" in block
+                        and "--link " in block
+                        and "--link-mode site" not in block
+                    )
+                    is_evidence_setup = (
+                        "python scripts\\real_evidence_inbox_setup.py" in block
+                        and "--product-url " in block
+                    )
+                    if is_product_run or is_evidence_setup:
+                        self.assertIn(official_url, block)
+                        guides_with_product_commands.add(path)
+        self.assertLessEqual(required_product_guides, guides_with_product_commands)
 
     def test_committed_snapshot_excludes_ignored_allowlisted_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
