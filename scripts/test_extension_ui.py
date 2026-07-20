@@ -164,6 +164,37 @@ class ExtensionUiContractTests(unittest.TestCase):
                     self.assertEqual(invoked["hostedRunMessage"], expected_message)
                     context.close()
 
+    def test_disabled_hosted_estimate_is_reference_only_without_upsell(self):
+        page_url = f"{(EXTENSION / 'popup.html').resolve().as_uri()}?view=workspace"
+        expected = {
+            "en-US": (
+                ("Reference only", "Hosted Worker off", "Local Skill runs do not consume hosted credits"),
+                ("USD", "prepaid", "estimated hosted cost", "estimated gross cost"),
+            ),
+            "zh-CN": (
+                ("仅供未来参考", "Hosted Worker 当前关闭", "本地 Skill 不消耗托管点数"),
+                ("USD", "预付", "预计最高成本"),
+            ),
+        }
+
+        with _chromium_browser(self) as browser:
+            for locale, (required, forbidden) in expected.items():
+                with self.subTest(locale=locale):
+                    context = browser.new_context(locale=locale, viewport={"width": 1280, "height": 900})
+                    page = context.new_page()
+                    page.goto(page_url, wait_until="load")
+                    page.locator('body[data-initialized="true"]').wait_for(timeout=3000)
+                    self.assertEqual(page.input_value("#plan"), "starter")
+                    self.assertEqual(page.input_value("#monthlyRuns"), "20")
+                    summary = page.text_content("#costSummary")
+                    for marker in required:
+                        self.assertIn(marker, summary)
+                    for marker in forbidden:
+                        self.assertNotIn(marker, summary)
+                    self.assertFalse(page.is_disabled("#openCheckout"))
+                    self.assertFalse(page.is_disabled("#openPortal"))
+                    context.close()
+
     def test_workspace_markup_groups_primary_and_secondary_content_with_unique_ids(self):
         self.assertRegex(self.html, r'<body[^>]*data-layout=["\']popup["\'][^>]*data-view=["\']main["\']')
         self.assertRegex(self.html, r'class=["\'][^"\']*workspace-grid[^"\']*["\']')

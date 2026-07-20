@@ -224,6 +224,7 @@ const EN_TRANSLATIONS = Object.freeze({
   acceptedStatus: "accepted",
   unknownValue: "unknown",
   creditsCount: "{credits} credits",
+  hostedEstimateReference: "Reference only — Hosted Worker off. {plan} includes {included} hosted credits; this setup plans {planned} credits for {workflow}. Local Skill runs do not consume hosted credits.",
   costSummary: "{plan} includes {included} credits at CNY {price}/30 days. {workflow}: {perRun} credits/run, {planned} credits planned, estimated gross cost up to USD {cost}.",
   costOverage: " Add prepaid credits or reduce automation depth.",
   labelWorkflow: "Workflow",
@@ -463,6 +464,7 @@ const ZH_TRANSLATIONS = Object.freeze({
   acceptedStatus: "已受理",
   unknownValue: "未知",
   creditsCount: "{credits} 点",
+  hostedEstimateReference: "仅供未来参考——Hosted Worker 当前关闭。{plan} 套餐包含 {included} 点托管额度，当前设置为 {workflow}、计划使用 {planned} 点。本地 Skill 不消耗托管点数。",
   costSummary: "{plan} 包含 {included} 点，价格为 ¥{price}/30 天。{workflow}：每次 {perRun} 点，计划使用 {planned} 点，预计最高成本约 USD {cost}。",
   costOverage: " 请购买预付点数或降低自动化深度。",
   labelWorkflow: "工作流",
@@ -1861,8 +1863,17 @@ async function openPortal() {
 function updateEstimate() {
   const estimate = estimateCredits();
   const plan = PLANS[els.plan.value] || PLANS.free;
-  const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.creditMeter.textContent = t("creditsCount", { credits: estimate.credits });
+  if (!HOSTED_WORKER_ENABLED) {
+    els.costSummary.textContent = t("hostedEstimateReference", {
+      plan: plan.label,
+      included: plan.credits,
+      workflow: t(estimate.label),
+      planned: estimate.credits
+    });
+    return;
+  }
+  const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.costSummary.textContent = currentLanguage === "en"
     ? `${plan.label} includes ${plan.credits} credits at CNY ${plan.priceCny}/30 days. ${t(estimate.label)}: ${estimate.creditsPerRun} credits/run, ${estimate.credits} credits planned, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`
     : t("costSummary", {
