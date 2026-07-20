@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import argparse
+import hashlib
 import json
 import http.server
 import os
@@ -7381,6 +7382,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         package_path = Path(report["package"])
         self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.3.zip")
         self.assertTrue(package_path.exists())
+        archive_sha256 = hashlib.sha256(package_path.read_bytes()).hexdigest().upper()
+        self.assertEqual(report.get("archiveName"), package_path.name)
+        self.assertEqual(report.get("archiveSha256"), archive_sha256)
+        report_markdown = (out_dir / "dist/browser-extension-package-report.md").read_text(encoding="utf-8")
+        self.assertIn(f"- Archive: `{package_path.name}`", report_markdown)
+        self.assertIn(f"- SHA-256: `{archive_sha256}`", report_markdown)
+        self.assertIn("- Version: `0.5.3`", report_markdown)
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])

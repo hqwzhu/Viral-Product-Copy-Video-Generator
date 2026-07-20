@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import zipfile
@@ -81,11 +82,14 @@ def build_report(out_dir: Path) -> dict[str, Any]:
         if not checks["packageCreated"]:
             status = "blocked"
             missing.append("packageCreated")
+    archive_sha256 = sha256_file(package_path) if checks["packageCreated"] else ""
     return {
         "generatedAt": TODAY,
         "status": status,
         "extensionDir": str(EXTENSION_DIR),
         "package": str(package_path),
+        "archiveName": package_path.name,
+        "archiveSha256": archive_sha256,
         "version": str(manifest.get("version", "")),
         "name": str(manifest.get("name", "")),
         "checks": checks,
@@ -125,6 +129,10 @@ def write_zip(package_path: Path, files: list[Path]) -> None:
     with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for rel in files:
             archive.write(EXTENSION_DIR / rel, rel.as_posix())
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def icons_ready(manifest: dict[str, Any]) -> bool:
@@ -200,7 +208,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Generated: {report['generatedAt']}",
         f"- Status: `{report['status']}`",
         f"- Package: {report['package']}",
-        f"- Version: {report['version']}",
+        f"- Archive: `{report['archiveName']}`",
+        f"- SHA-256: `{report['archiveSha256']}`",
+        f"- Version: `{report['version']}`",
         "",
         "## Checks",
     ]
