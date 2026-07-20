@@ -9,3 +9,5 @@ promotion-output/
 *.log
 .worktrees/
 dist/public-repository-*/
+.playwright-cli/
+output/playwright/

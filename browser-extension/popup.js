@@ -530,6 +530,45 @@ const COMMAND_LABELS = {
   automation_windows_task: "labelWindowsTask"
 };
 
+const WORKSPACE_DRAFT_KEY = "enhePromotionManagerWorkspaceDraft";
+const WORKSPACE_DRAFT_VALUE_IDS = Object.freeze([
+  "productUrl",
+  "workflowDepth",
+  "commandType",
+  "outDir",
+  "platformDataPlatform",
+  "platformDataMode",
+  "platformDataTarget",
+  "publishQueue",
+  "platformPublishUrls",
+  "evidenceInbox",
+  "automationConfig",
+  "automationOutputRoot",
+  "automationJobId",
+  "automationIntervalDays",
+  "windowsTaskScript",
+  "windowsTaskTime",
+  "plan",
+  "monthlyRuns"
+]);
+const WORKSPACE_DRAFT_CHECKBOX_IDS = Object.freeze([
+  "platformDataSubComments",
+  "runFormFill",
+  "captureBrowserEvidence",
+  "allowLocalhost",
+  "autoSearchCompetitors",
+  "enableMultiQueryDiscovery",
+  "browserFollowUps",
+  "enablePublishQueue",
+  "enableBrowserPublishAssistant",
+  "enableBrowserFormFill",
+  "enableMetricsRecovery",
+  "enableNextRoundOptimization",
+  "alsoWindowsTask",
+  "deepReview",
+  "hostedVideo"
+]);
+
 const els = {
   languageZh: document.getElementById("languageZh"),
   languageEn: document.getElementById("languageEn"),
@@ -616,17 +655,24 @@ els.copyHostedPayload.addEventListener("click", copyHostedPayload);
 els.startHostedRun.addEventListener("click", startHostedRun);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
-els.openGuide.addEventListener("click", () => setView("guide"));
+els.openGuide.addEventListener("click", () => {
+  setView("guide");
+  focusSelectedGuideTab();
+});
 els.openWorkspace.addEventListener("click", () => {
   openWorkspace().catch(() => {});
 });
-els.guideBack.addEventListener("click", () => setView("main"));
+els.guideBack.addEventListener("click", () => {
+  setView("main");
+  els.openGuide.focus();
+});
 els.guideTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-guide-tab]");
   if (tab) {
     setGuideTab(tab.dataset.guideTab);
   }
 });
+els.guideTabs.addEventListener("keydown", handleGuideTabKeydown);
 els.languageZh.addEventListener("click", () => setLanguage("zh-CN"));
 els.languageEn.addEventListener("click", () => setLanguage("en"));
 els.plan.addEventListener("change", updateEstimate);
@@ -653,31 +699,38 @@ Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
 
 async function init() {
   initializeViewState(window.location.search);
-  setLanguage(browserUiLanguage(), false);
-  const stored = await readLocalStorage([
-    "licenseKey",
-    "licenseEndpoint",
-    "usageAuthorizeEndpoint",
-    "hostedRunEndpoint",
-    "licensePlan",
-    "licenseActive",
-    "uiLanguage"
-  ]);
-  await setLanguage(stored.uiLanguage || currentLanguage, !stored.uiLanguage);
-  els.licenseKey.value = stored.licenseKey || "";
-  els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
-  els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
-  els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
-  if (stored.licensePlan) {
-    const planKey = String(stored.licensePlan).toLowerCase();
-    if (PLANS[planKey]) {
-      els.plan.value = planKey;
+  try {
+    setLanguage(browserUiLanguage(), false);
+    const stored = await readLocalStorage([
+      "licenseKey",
+      "licenseEndpoint",
+      "usageAuthorizeEndpoint",
+      "hostedRunEndpoint",
+      "licensePlan",
+      "licenseActive",
+      "uiLanguage"
+    ]);
+    await setLanguage(stored.uiLanguage || currentLanguage, !stored.uiLanguage);
+    els.licenseKey.value = stored.licenseKey || "";
+    els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
+    els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
+    els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
+    if (stored.licensePlan) {
+      const planKey = String(stored.licensePlan).toLowerCase();
+      if (PLANS[planKey]) {
+        els.plan.value = planKey;
+      }
     }
+    setLicenseStatus(stored.licenseActive ? "statusActive" : "statusLocal", stored.licenseActive ? "active" : "");
+    await useCurrentTab();
+    if (document.body.dataset.layout === "workspace") {
+      applyWorkspaceDraft(await readWorkspaceDraft());
+    }
+    handleCommandTypeChange();
+    updateEstimate();
+  } finally {
+    document.body.dataset.initialized = "true";
   }
-  setLicenseStatus(stored.licenseActive ? "statusActive" : "statusLocal", stored.licenseActive ? "active" : "");
-  await useCurrentTab();
-  handleCommandTypeChange();
-  updateEstimate();
 }
 
 function browserUiLanguage() {
@@ -767,6 +820,84 @@ async function openExternalTab(url) {
   }
 }
 
+function captureWorkspaceDraft() {
+  const values = Object.fromEntries(
+    WORKSPACE_DRAFT_VALUE_IDS.map((id) => [id, document.getElementById(id)?.value || ""])
+  );
+  const checks = Object.fromEntries(
+    WORKSPACE_DRAFT_CHECKBOX_IDS.map((id) => [id, Boolean(document.getElementById(id)?.checked)])
+  );
+  return {
+    version: 1,
+    values,
+    checks,
+    platforms: selectedPlatforms(),
+    commandOutput: els.commandOutput.value
+  };
+}
+
+function applyWorkspaceDraft(draft) {
+  if (!draft || typeof draft !== "object") {
+    return;
+  }
+  const values = draft.values && typeof draft.values === "object" ? draft.values : {};
+  WORKSPACE_DRAFT_VALUE_IDS.forEach((id) => {
+    const element = document.getElementById(id);
+    if (!element || !Object.hasOwn(values, id)) {
+      return;
+    }
+    const value = String(values[id] ?? "");
+    if (element.tagName === "SELECT" && !Array.from(element.options).some((option) => option.value === value)) {
+      return;
+    }
+    element.value = value;
+  });
+
+  const checks = draft.checks && typeof draft.checks === "object" ? draft.checks : {};
+  WORKSPACE_DRAFT_CHECKBOX_IDS.forEach((id) => {
+    const element = document.getElementById(id);
+    if (element && Object.hasOwn(checks, id)) {
+      element.checked = Boolean(checks[id]);
+    }
+  });
+
+  if (Array.isArray(draft.platforms)) {
+    const selected = new Set(draft.platforms.map(String));
+    document.querySelectorAll("#platforms input").forEach((input) => {
+      input.checked = selected.has(input.value);
+    });
+  }
+  if (typeof draft.commandOutput === "string") {
+    setCommandValue(draft.commandOutput);
+  }
+}
+
+async function persistWorkspaceDraft() {
+  const draft = captureWorkspaceDraft();
+  if (await writeLocalStorage({ [WORKSPACE_DRAFT_KEY]: draft })) {
+    return true;
+  }
+  try {
+    localStorage.setItem(WORKSPACE_DRAFT_KEY, JSON.stringify(draft));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function readWorkspaceDraft() {
+  const stored = await readLocalStorage([WORKSPACE_DRAFT_KEY]);
+  if (stored[WORKSPACE_DRAFT_KEY] && typeof stored[WORKSPACE_DRAFT_KEY] === "object") {
+    return stored[WORKSPACE_DRAFT_KEY];
+  }
+  try {
+    const raw = localStorage.getItem(WORKSPACE_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function normalizeLanguage(value) {
   return String(value || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
@@ -837,7 +968,9 @@ function setView(viewName) {
 function setGuideTab(tabName) {
   const tab = ["features", "usage", "subscription"].includes(tabName) ? tabName : "features";
   document.querySelectorAll("[data-guide-tab]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.guideTab === tab));
+    const selected = button.dataset.guideTab === tab;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
   });
   ["features", "usage", "subscription"].forEach((sectionName) => {
     const section = els[`guide${sectionName[0].toUpperCase()}${sectionName.slice(1)}`];
@@ -845,7 +978,39 @@ function setGuideTab(tabName) {
   });
 }
 
+function focusSelectedGuideTab() {
+  document.querySelector("[data-guide-tab][aria-selected='true']")?.focus();
+}
+
+function handleGuideTabKeydown(event) {
+  const tabs = Array.from(document.querySelectorAll("[data-guide-tab]"));
+  const current = event.target.closest("[data-guide-tab]");
+  const currentIndex = tabs.indexOf(current);
+  if (currentIndex < 0) {
+    return;
+  }
+
+  let nextIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % tabs.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = tabs.length - 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  const next = tabs[nextIndex];
+  setGuideTab(next.dataset.guideTab);
+  next.focus();
+}
+
 async function openWorkspace() {
+  await persistWorkspaceDraft();
   const target = new URL(window.location.href);
   target.search = "";
   target.searchParams.set("view", "workspace");

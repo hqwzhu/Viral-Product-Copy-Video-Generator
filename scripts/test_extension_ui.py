@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 import unittest
+from contextlib import contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -19,6 +20,31 @@ class _IdCollector(HTMLParser):
         element_id = dict(attrs).get("id")
         if element_id:
             self.ids.append(element_id)
+
+
+@contextmanager
+def _chromium_browser(test_case):
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ModuleNotFoundError:
+        test_case.fail(
+            "Install UI test dependencies with `python -m pip install -r requirements-test.txt`, "
+            "then run `python -m playwright install chromium`."
+        )
+
+    with sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except PlaywrightError as error:
+            test_case.fail(
+                "Chromium is required for extension UI tests. Run `python -m playwright install chromium`. "
+                f"Original error: {error}"
+            )
+        try:
+            yield browser
+        finally:
+            browser.close()
 
 
 class ExtensionUiContractTests(unittest.TestCase):
@@ -144,112 +170,160 @@ process.stdout.write(JSON.stringify({{ workspace, guide, returned, popup }}));
         self.assertEqual(observed["returned"], {"layout": "workspace", "view": "main"})
         self.assertEqual(observed["popup"], {"layout": "popup", "view": "main"})
 
-    def test_actual_page_initializes_guide_without_working_chrome_storage(self):
+    def test_actual_page_initializes_responsive_workspace_and_keyboard_guide(self):
         page_url = f"{(EXTENSION / 'popup.html').resolve().as_uri()}?view=workspace"
-        script = f"""
-const {{ chromium }} = require("playwright");
-const pageUrl = {json.dumps(page_url)};
+        viewports = ((360, 844, 1), (768, 900, 1), (1280, 900, 2))
 
-async function inspectPage(browser, storageMode) {{
-  const context = await browser.newContext({{ locale: "en-US", viewport: {{ width: 720, height: 900 }} }});
-  const page = await context.newPage();
-  if (storageMode === "reject") {{
-    await page.addInitScript(() => {{
-      window.chrome = window.chrome || {{}};
-      window.chrome.storage = {{
-        local: {{
-          get: async () => {{ throw new Error("storage get rejected"); }},
-          set: async () => {{ throw new Error("storage set rejected"); }}
-        }}
-      }};
-    }});
-  }}
-  const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto(pageUrl, {{ waitUntil: "load" }});
-  await page.waitForTimeout(50);
+        with _chromium_browser(self) as browser:
+            for width, height, expected_columns in viewports:
+                with self.subTest(viewport=f"{width}x{height}"):
+                    context = browser.new_context(locale="en-US", viewport={"width": width, "height": height})
+                    page = context.new_page()
+                    page_errors = []
+                    page.on("pageerror", lambda error: page_errors.append(str(error)))
+                    page.goto(page_url, wait_until="load")
+                    page.locator('body[data-initialized="true"]').wait_for(timeout=3000)
 
-  const guide = await page.evaluate(() => ({{
-    featureCards: document.querySelectorAll("#guideFeatureList .guide-card").length,
-    advancedDisclosures: document.querySelectorAll("#guideFeatureList .guide-disclosure").length,
-    usageItems: document.querySelectorAll("#guideUsageList .guide-usage-item").length,
-    planRows: document.querySelectorAll("#guidePlans .plan-row").length,
-    planNames: Array.from(document.querySelectorAll("#guidePlans .plan-row-summary strong"), (node) => node.textContent)
-  }}));
+                    observed = page.evaluate(
+                        r"""() => ({
+                          layout: document.body.dataset.layout,
+                          view: document.body.dataset.view,
+                          featureCards: document.querySelectorAll('#guideFeatureList .guide-card').length,
+                          advancedDisclosures: document.querySelectorAll('#guideFeatureList .guide-disclosure').length,
+                          usageItems: document.querySelectorAll('#guideUsageList .guide-usage-item').length,
+                          planRows: document.querySelectorAll('#guidePlans .plan-row').length,
+                          planNames: Array.from(
+                            document.querySelectorAll('#guidePlans .plan-row-summary strong'),
+                            (node) => node.textContent
+                          ),
+                          scrollWidth: document.documentElement.scrollWidth,
+                          innerWidth: window.innerWidth,
+                          columns: getComputedStyle(document.querySelector('.workspace-grid'))
+                            .gridTemplateColumns.trim().split(/\s+/).length
+                        })"""
+                    )
+                    self.assertEqual(observed["layout"], "workspace")
+                    self.assertEqual(observed["view"], "main")
+                    self.assertEqual(observed["featureCards"], 8)
+                    self.assertEqual(observed["advancedDisclosures"], 1)
+                    self.assertEqual(observed["usageItems"], 8)
+                    self.assertEqual(observed["planRows"], 4)
+                    self.assertEqual(observed["planNames"], ["Free", "Starter", "Growth", "Scale"])
+                    self.assertLessEqual(observed["scrollWidth"], observed["innerWidth"])
+                    self.assertEqual(observed["columns"], expected_columns)
 
-  await page.click("#openGuide");
-  const visiblePanels = {{}};
-  for (const tabName of ["features", "usage", "subscription"]) {{
-    await page.click(`[data-guide-tab="${{tabName}}"]`);
-    visiblePanels[tabName] = await page.$$eval(
-      "[role=tabpanel]",
-      (panels) => panels.filter((panel) => !panel.hidden).map((panel) => panel.id)
-    );
-  }}
-  await page.click("#guideBack");
+                    page.click("#openGuide")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "guideTabFeatures")
+                    self.assertEqual(self._visible_guide_panels(page), ["guideFeatures"])
 
-  await page.click("#languageZh");
-  await page.click("#saveLicense");
-  await page.evaluate(() => {{ document.getElementById("commandOutput").value = "test command"; }});
-  await page.click("#copyCommand");
-  await page.click("#useTab");
-  await page.waitForTimeout(50);
+                    page.keyboard.press("ArrowRight")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "guideTabUsage")
+                    self.assertEqual(self._visible_guide_panels(page), ["guideUsage"])
+                    page.keyboard.press("End")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "guideTabSubscription")
+                    self.assertEqual(self._visible_guide_panels(page), ["guideSubscription"])
+                    page.keyboard.press("Home")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "guideTabFeatures")
+                    self.assertEqual(self._visible_guide_panels(page), ["guideFeatures"])
+                    page.keyboard.press("ArrowLeft")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "guideTabSubscription")
+                    self.assertEqual(self._visible_guide_panels(page), ["guideSubscription"])
 
-  const state = await page.evaluate(() => ({{
-    layout: document.body.dataset.layout,
-    view: document.body.dataset.view,
-    mainHidden: document.getElementById("mainView").hidden,
-    guideHidden: document.getElementById("guideView").hidden
-  }}));
-  await context.close();
-  return {{ storageMode, pageErrors, guide, visiblePanels, state }};
-}}
+                    page.click("#guideBack")
+                    self.assertEqual(page.evaluate("document.activeElement.id"), "openGuide")
+                    self.assertEqual(
+                        page.evaluate(
+                            """() => ({
+                              layout: document.body.dataset.layout,
+                              view: document.body.dataset.view,
+                              mainHidden: document.getElementById('mainView').hidden,
+                              guideHidden: document.getElementById('guideView').hidden
+                            })"""
+                        ),
+                        {"layout": "workspace", "view": "main", "mainHidden": False, "guideHidden": True},
+                    )
+                    self.assertEqual(page_errors, [])
+                    context.close()
 
-(async () => {{
-  const browser = await chromium.launch({{ headless: true }});
-  try {{
-    const results = [];
-    for (const storageMode of ["missing", "reject"]) {{
-      results.push(await inspectPage(browser, storageMode));
-    }}
-    process.stdout.write(JSON.stringify(results));
-  }} finally {{
-    await browser.close();
-  }}
-}})().catch((error) => {{
-  console.error(error.stack);
-  process.exit(1);
-}});
-"""
-        result = subprocess.run(
-            ["node", "-e", script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
-            cwd=ROOT,
+    def test_actual_page_handles_rejected_chrome_storage_without_blocking_guide(self):
+        page_url = f"{(EXTENSION / 'popup.html').resolve().as_uri()}?view=workspace"
+        with _chromium_browser(self) as browser:
+            context = browser.new_context(locale="en-US", viewport={"width": 1280, "height": 900})
+            page = context.new_page()
+            page.add_init_script(
+                """window.chrome = window.chrome || {};
+                window.chrome.storage = { local: {
+                  get: async () => { throw new Error('storage get rejected'); },
+                  set: async () => { throw new Error('storage set rejected'); }
+                }};"""
+            )
+            page_errors = []
+            page.on("pageerror", lambda error: page_errors.append(str(error)))
+            page.goto(page_url, wait_until="load")
+            page.locator('body[data-initialized="true"]').wait_for(timeout=3000)
+            self.assertEqual(page.locator("#guideFeatureList .guide-card").count(), 8)
+            self.assertEqual(page.locator("#guideUsageList .guide-usage-item").count(), 8)
+            self.assertEqual(page.locator("#guidePlans .plan-row").count(), 4)
+            self.assertEqual(page_errors, [])
+            context.close()
+
+    def test_workspace_open_restores_non_sensitive_draft_in_new_page(self):
+        page_url = (EXTENSION / "popup.html").resolve().as_uri()
+        secret = "must-not-enter-workspace-draft"
+        with _chromium_browser(self) as browser:
+            context = browser.new_context(locale="en-US", viewport={"width": 1280, "height": 900})
+            popup = context.new_page()
+            popup.goto(page_url, wait_until="load")
+            popup.locator('body[data-initialized="true"]').wait_for(timeout=3000)
+            popup.fill("#productUrl", "https://www.enhe-tech.com.cn/promotion-manager")
+            popup.select_option("#workflowDepth", "research")
+            popup.select_option("#commandType", "skill_entry")
+            popup.fill("#outDir", ".\\saved-promotion-output")
+            popup.select_option("#plan", "growth")
+            popup.fill("#monthlyRuns", "7")
+            popup.check("#deepReview")
+            popup.fill("#licenseKey", secret)
+            for checkbox in popup.locator("#platforms input").all():
+                checkbox.uncheck()
+            popup.check('#platforms input[value="youtube"]')
+            popup.check('#platforms input[value="douyin"]')
+            popup.click("#generate")
+            command = popup.input_value("#commandOutput")
+            self.assertTrue(command)
+
+            with context.expect_page() as workspace_info:
+                popup.click("#openWorkspace")
+            workspace = workspace_info.value
+            workspace.wait_for_load_state("load")
+            workspace.locator('body[data-initialized="true"]').wait_for(timeout=3000)
+
+            self.assertEqual(workspace.get_attribute("body", "data-layout"), "workspace")
+            self.assertEqual(
+                workspace.input_value("#productUrl"),
+                "https://www.enhe-tech.com.cn/promotion-manager",
+            )
+            self.assertEqual(workspace.input_value("#workflowDepth"), "research")
+            self.assertEqual(workspace.input_value("#commandType"), "skill_entry")
+            self.assertEqual(workspace.input_value("#outDir"), ".\\saved-promotion-output")
+            self.assertEqual(workspace.input_value("#plan"), "growth")
+            self.assertEqual(workspace.input_value("#monthlyRuns"), "7")
+            self.assertTrue(workspace.is_checked("#deepReview"))
+            self.assertEqual(
+                workspace.locator("#platforms input:checked").evaluate_all(
+                    "inputs => inputs.map((input) => input.value)"
+                ),
+                ["youtube", "douyin"],
+            )
+            self.assertEqual(workspace.input_value("#commandOutput"), command)
+            self.assertEqual(workspace.input_value("#licenseKey"), "")
+            stored_values = popup.evaluate("Object.values(localStorage).join('\\n')")
+            self.assertNotIn(secret, stored_values)
+            context.close()
+
+    def _visible_guide_panels(self, page):
+        return page.locator("[role=tabpanel]").evaluate_all(
+            "panels => panels.filter((panel) => !panel.hidden).map((panel) => panel.id)"
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for observed in json.loads(result.stdout):
-            with self.subTest(storage_mode=observed["storageMode"]):
-                self.assertEqual(observed["pageErrors"], [])
-                self.assertEqual(
-                    observed["guide"],
-                    {
-                        "featureCards": 8,
-                        "advancedDisclosures": 1,
-                        "usageItems": 8,
-                        "planRows": 4,
-                        "planNames": ["Free", "Starter", "Growth", "Scale"],
-                    },
-                )
-                self.assertEqual(observed["visiblePanels"]["features"], ["guideFeatures"])
-                self.assertEqual(observed["visiblePanels"]["usage"], ["guideUsage"])
-                self.assertEqual(observed["visiblePanels"]["subscription"], ["guideSubscription"])
-                self.assertEqual(
-                    observed["state"],
-                    {"layout": "workspace", "view": "main", "mainHidden": False, "guideHidden": True},
-                )
 
     def test_plan_values_match_product_contract(self):
         for key, credits, price in (("starter", 60, 19), ("growth", 220, 59), ("scale", 800, 199)):
@@ -264,6 +338,8 @@ async function inspectPage(browser, storageMode) {{
         script = f"""
 const calls = [];
 let createCalls = 0;
+let persistCalls = 0;
+async function persistWorkspaceDraft() {{ persistCalls += 1; }}
 global.window = {{
   location: {{ href: "chrome-extension://test/popup.html?view=guide&source=test" }},
   open: (...args) => calls.push(args)
@@ -280,7 +356,7 @@ global.chrome = {{
 {self._function_source("openWorkspaceFallback")}
 (async () => {{
   await openWorkspace();
-  process.stdout.write(JSON.stringify({{ createCalls, calls }}));
+  process.stdout.write(JSON.stringify({{ createCalls, persistCalls, calls }}));
 }})().catch((error) => {{
   console.error(error.stack);
   process.exit(1);
@@ -290,6 +366,7 @@ global.chrome = {{
         self.assertEqual(result.returncode, 0, result.stderr)
         observed = json.loads(result.stdout)
         self.assertEqual(observed["createCalls"], 1)
+        self.assertEqual(observed["persistCalls"], 1)
         self.assertEqual(
             observed["calls"],
             [["chrome-extension://test/popup.html?view=workspace", "_blank", "noopener,noreferrer"]],
