@@ -144,6 +144,113 @@ process.stdout.write(JSON.stringify({{ workspace, guide, returned, popup }}));
         self.assertEqual(observed["returned"], {"layout": "workspace", "view": "main"})
         self.assertEqual(observed["popup"], {"layout": "popup", "view": "main"})
 
+    def test_actual_page_initializes_guide_without_working_chrome_storage(self):
+        page_url = f"{(EXTENSION / 'popup.html').resolve().as_uri()}?view=workspace"
+        script = f"""
+const {{ chromium }} = require("playwright");
+const pageUrl = {json.dumps(page_url)};
+
+async function inspectPage(browser, storageMode) {{
+  const context = await browser.newContext({{ locale: "en-US", viewport: {{ width: 720, height: 900 }} }});
+  const page = await context.newPage();
+  if (storageMode === "reject") {{
+    await page.addInitScript(() => {{
+      window.chrome = window.chrome || {{}};
+      window.chrome.storage = {{
+        local: {{
+          get: async () => {{ throw new Error("storage get rejected"); }},
+          set: async () => {{ throw new Error("storage set rejected"); }}
+        }}
+      }};
+    }});
+  }}
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto(pageUrl, {{ waitUntil: "load" }});
+  await page.waitForTimeout(50);
+
+  const guide = await page.evaluate(() => ({{
+    featureCards: document.querySelectorAll("#guideFeatureList .guide-card").length,
+    advancedDisclosures: document.querySelectorAll("#guideFeatureList .guide-disclosure").length,
+    usageItems: document.querySelectorAll("#guideUsageList .guide-usage-item").length,
+    planRows: document.querySelectorAll("#guidePlans .plan-row").length,
+    planNames: Array.from(document.querySelectorAll("#guidePlans .plan-row-summary strong"), (node) => node.textContent)
+  }}));
+
+  await page.click("#openGuide");
+  const visiblePanels = {{}};
+  for (const tabName of ["features", "usage", "subscription"]) {{
+    await page.click(`[data-guide-tab="${{tabName}}"]`);
+    visiblePanels[tabName] = await page.$$eval(
+      "[role=tabpanel]",
+      (panels) => panels.filter((panel) => !panel.hidden).map((panel) => panel.id)
+    );
+  }}
+  await page.click("#guideBack");
+
+  await page.click("#languageZh");
+  await page.click("#saveLicense");
+  await page.evaluate(() => {{ document.getElementById("commandOutput").value = "test command"; }});
+  await page.click("#copyCommand");
+  await page.click("#useTab");
+  await page.waitForTimeout(50);
+
+  const state = await page.evaluate(() => ({{
+    layout: document.body.dataset.layout,
+    view: document.body.dataset.view,
+    mainHidden: document.getElementById("mainView").hidden,
+    guideHidden: document.getElementById("guideView").hidden
+  }}));
+  await context.close();
+  return {{ storageMode, pageErrors, guide, visiblePanels, state }};
+}}
+
+(async () => {{
+  const browser = await chromium.launch({{ headless: true }});
+  try {{
+    const results = [];
+    for (const storageMode of ["missing", "reject"]) {{
+      results.push(await inspectPage(browser, storageMode));
+    }}
+    process.stdout.write(JSON.stringify(results));
+  }} finally {{
+    await browser.close();
+  }}
+}})().catch((error) => {{
+  console.error(error.stack);
+  process.exit(1);
+}});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+            cwd=ROOT,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for observed in json.loads(result.stdout):
+            with self.subTest(storage_mode=observed["storageMode"]):
+                self.assertEqual(observed["pageErrors"], [])
+                self.assertEqual(
+                    observed["guide"],
+                    {
+                        "featureCards": 8,
+                        "advancedDisclosures": 1,
+                        "usageItems": 8,
+                        "planRows": 4,
+                        "planNames": ["Free", "Starter", "Growth", "Scale"],
+                    },
+                )
+                self.assertEqual(observed["visiblePanels"]["features"], ["guideFeatures"])
+                self.assertEqual(observed["visiblePanels"]["usage"], ["guideUsage"])
+                self.assertEqual(observed["visiblePanels"]["subscription"], ["guideSubscription"])
+                self.assertEqual(
+                    observed["state"],
+                    {"layout": "workspace", "view": "main", "mainHidden": False, "guideHidden": True},
+                )
+
     def test_plan_values_match_product_contract(self):
         for key, credits, price in (("starter", 60, 19), ("growth", 220, 59), ("scale", 800, 199)):
             self.assertRegex(self.js, rf'{key}:\s*\{{[^}}]*credits:\s*{credits}[^}}]*priceCny:\s*{price}')

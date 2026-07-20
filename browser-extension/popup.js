@@ -653,7 +653,8 @@ Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
 
 async function init() {
   initializeViewState(window.location.search);
-  const stored = await chrome.storage.local.get([
+  setLanguage(browserUiLanguage(), false);
+  const stored = await readLocalStorage([
     "licenseKey",
     "licenseEndpoint",
     "usageAuthorizeEndpoint",
@@ -662,7 +663,7 @@ async function init() {
     "licenseActive",
     "uiLanguage"
   ]);
-  await setLanguage(normalizeLanguage(stored.uiLanguage || chrome.i18n.getUILanguage()), !stored.uiLanguage);
+  await setLanguage(stored.uiLanguage || currentLanguage, !stored.uiLanguage);
   els.licenseKey.value = stored.licenseKey || "";
   els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
   els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
@@ -677,6 +678,93 @@ async function init() {
   await useCurrentTab();
   handleCommandTypeChange();
   updateEstimate();
+}
+
+function browserUiLanguage() {
+  if (typeof chrome !== "undefined" && chrome.i18n && typeof chrome.i18n.getUILanguage === "function") {
+    try {
+      return chrome.i18n.getUILanguage();
+    } catch (error) {
+      // Fall back to the browser language when extension i18n is unavailable.
+    }
+  }
+  return typeof navigator !== "undefined" ? navigator.language : "en";
+}
+
+function localStorageApi() {
+  if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+    return null;
+  }
+  return chrome.storage.local;
+}
+
+async function readLocalStorage(keys) {
+  const storage = localStorageApi();
+  if (!storage || typeof storage.get !== "function") {
+    return {};
+  }
+  try {
+    const stored = await storage.get(keys);
+    return stored && typeof stored === "object" ? stored : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+async function writeLocalStorage(values) {
+  const storage = localStorageApi();
+  if (!storage || typeof storage.set !== "function") {
+    return false;
+  }
+  try {
+    await storage.set(values);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function queryActiveTabs() {
+  if (typeof chrome === "undefined" || !chrome.tabs || typeof chrome.tabs.query !== "function") {
+    return [];
+  }
+  try {
+    return await chrome.tabs.query({ active: true, currentWindow: true });
+  } catch (error) {
+    return [];
+  }
+}
+
+async function writeClipboard(value) {
+  if (typeof navigator === "undefined" || !navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function openExternalTab(url) {
+  if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
+    try {
+      await chrome.tabs.create({ url });
+      return true;
+    } catch (error) {
+      // Fall through to a normal browser window when extension tabs are unavailable.
+    }
+  }
+  if (typeof window.open !== "function") {
+    return false;
+  }
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
 function normalizeLanguage(value) {
@@ -697,7 +785,7 @@ async function setLanguage(language, persist = true) {
   document.documentElement.lang = currentLanguage;
   applyTranslations();
   if (persist) {
-    await chrome.storage.local.set({ uiLanguage: currentLanguage });
+    await writeLocalStorage({ uiLanguage: currentLanguage });
   }
 }
 
@@ -869,7 +957,7 @@ function setCommandValue(value) {
 }
 
 async function useCurrentTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabs = await queryActiveTabs();
   const tab = tabs && tabs[0];
   if (!tab) {
     setMessage(els.tabTitle, "noActiveTab");
@@ -1259,7 +1347,9 @@ async function copyCommand() {
   if (!value) {
     return;
   }
-  await navigator.clipboard.writeText(value);
+  if (!(await writeClipboard(value))) {
+    return;
+  }
   els.copyCommand.textContent = t("copied");
   setTimeout(() => {
     els.copyCommand.textContent = t("copyButton");
@@ -1267,14 +1357,16 @@ async function copyCommand() {
 }
 
 async function saveLicense() {
-  await chrome.storage.local.set({
+  const saved = await writeLocalStorage({
     licenseKey: els.licenseKey.value.trim(),
     licenseEndpoint: els.licenseEndpoint.value.trim() || DEFAULT_ENDPOINT,
     usageAuthorizeEndpoint: els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT,
     hostedRunEndpoint: els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
     licensePlan: els.plan.value
   });
-  setMessage(els.licenseMessage, "licenseSaved");
+  if (saved) {
+    setMessage(els.licenseMessage, "licenseSaved");
+  }
 }
 
 async function authorizeUsage() {
@@ -1313,7 +1405,7 @@ async function authorizeUsage() {
       setMessage(els.usageMessage, "usageBlocked", { reason: payload.reason || "not_allowed" });
       return;
     }
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       usageAuthorizeEndpoint: endpoint,
       lastUsageId: payload.usageId || "",
       lastUsageWorkflowType: estimate.workflowType,
@@ -1357,7 +1449,7 @@ async function validateLicense() {
     }
     const payload = await response.json();
     const active = Boolean(payload.active);
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       licenseKey,
       licenseEndpoint: endpoint,
       hostedRunEndpoint: payload.hostedRunEndpoint || els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
@@ -1374,7 +1466,7 @@ async function validateLicense() {
       active ? { plan: payload.plan || els.plan.value, credits: payload.creditsRemaining ?? t("unknownValue") } : {}
     );
   } catch (error) {
-    await chrome.storage.local.set({ licenseActive: false });
+    await writeLocalStorage({ licenseActive: false });
     setLicenseStatus("statusOffline", "error");
     setMessage(els.licenseMessage, "licenseUnavailable", { error: error.message });
   }
@@ -1383,7 +1475,9 @@ async function validateLicense() {
 async function copyHostedPayload() {
   try {
     const payload = await buildHostedRunPayload();
-    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    if (!(await writeClipboard(JSON.stringify(payload, null, 2)))) {
+      throw new Error("Clipboard unavailable");
+    }
     setMessage(els.hostedRunMessage, "hostedPayloadCopied");
   } catch (error) {
     setMessage(els.hostedRunMessage, error.translationKey || "hostedUnavailable", error.translationKey ? {} : { error: error.message });
@@ -1414,7 +1508,7 @@ async function startHostedRun() {
       throw new Error(`HTTP ${response.status}`);
     }
     const result = await response.json();
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       hostedRunEndpoint: endpoint,
       lastHostedRunId: result.runId || "",
       lastHostedRunStatus: result.status || "",
@@ -1467,7 +1561,7 @@ async function buildHostedRunPayload() {
   if (!localCommand) {
     throw localizedError("generateFirst");
   }
-  const stored = await chrome.storage.local.get([
+  const stored = await readLocalStorage([
     "lastUsageId",
     "lastUsageWorkflowType",
     "lastUsageCreditsReserved",
@@ -1556,14 +1650,14 @@ async function openCheckout() {
   url.searchParams.set("credits", String(estimate.credits));
   url.searchParams.set("runs", String(estimate.runs));
   url.searchParams.set("workflow", estimate.workflowType);
-  await chrome.tabs.create({ url: url.toString() });
+  await openExternalTab(url.toString());
 }
 
 async function openPortal() {
-  const stored = await chrome.storage.local.get(["customerPortalUrl"]);
+  const stored = await readLocalStorage(["customerPortalUrl"]);
   const url = new URL(stored.customerPortalUrl || CUSTOMER_PORTAL_URL);
   url.searchParams.set("source", "extension");
-  await chrome.tabs.create({ url: url.toString() });
+  await openExternalTab(url.toString());
 }
 
 function updateEstimate() {
