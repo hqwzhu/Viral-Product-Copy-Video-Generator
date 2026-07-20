@@ -95,36 +95,77 @@ class DistributionContractTest(unittest.TestCase):
         def h2_names(text: str) -> list[str]:
             return [line.removeprefix("## ") for line in text.splitlines() if line.startswith("## ")]
 
-        self.assertEqual(
-            h2_names(zh_readme),
-            [
-                "你提供一个产品网页，我们交付什么",
-                "它解决的不是“写一篇文案”，而是整套推广准备",
-                "Skill 与 Chrome 插件如何配合",
-                "核心功能与用户收益",
-                "五分钟开始使用",
-                "支持的平台和当前边界",
-                "本地优先、安全可审计",
-                "当前版本与下载",
-                "创作者与联系信息",
-                "开源许可与第三方组件",
-            ],
+        zh_sales_headings = [
+            "为什么用户需要它",
+            "用户可以得到什么",
+            "从网页到发布素材",
+            "套餐与适用人群",
+            "信任与边界",
+            "五分钟开始使用",
+            "创作者与联系",
+        ]
+        en_sales_headings = [
+            "Why users need it",
+            "What users get",
+            "From product page to publishing assets",
+            "Plans and audience fit",
+            "Trust and boundaries",
+            "Start in five minutes",
+            "Creator and contact",
+        ]
+        self.assertEqual(h2_names(zh_readme)[: len(zh_sales_headings)], zh_sales_headings)
+        self.assertEqual(h2_names(en_readme)[: len(en_sales_headings)], en_sales_headings)
+        self.assertLess(
+            zh_readme.index("## 创作者与联系"),
+            zh_readme.index("## Skill 与 Chrome 插件如何配合"),
         )
-        self.assertEqual(
-            h2_names(en_readme),
-            [
-                "What you provide and what the product delivers",
-                "More than one piece of copy: a complete promotion-preparation workflow",
-                "How the Skill and Chrome extension work together",
-                "Capabilities and customer benefits",
-                "Start in five minutes",
-                "Supported platforms and current boundaries",
-                "Local-first and auditable by design",
-                "Current version and downloads",
-                "Creator and contact",
-                "License and third-party components",
-            ],
+        self.assertLess(
+            en_readme.index("## Creator and contact"),
+            en_readme.index("## How the Skill and Chrome extension work together"),
         )
+
+        skill_release_url = (
+            "https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/"
+            "enhe-product-promo-maker-skill-0.5.3.zip"
+        )
+        extension_release_url = (
+            "https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/"
+            "enhe-promotion-manager-extension-0.5.3.zip"
+        )
+        for readme in (zh_readme, en_readme):
+            for required in (
+                "huqingwei5942@gmail.com",
+                "https://www.enhe-tech.com.cn/",
+                "https://www.enhe-tech.com.cn/promotion-manager",
+                "https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl",
+                skill_release_url,
+                extension_release_url,
+                "assets/workspace-preview.png",
+            ):
+                self.assertIn(required, readme)
+        for plan_row in (
+            "| Free | ¥0 | 5 点 |",
+            "| Starter | ¥19 | 60 点 |",
+            "| Growth | ¥59 | 220 点 |",
+            "| Scale | ¥199 | 800 点 |",
+        ):
+            self.assertIn(plan_row, zh_readme)
+        for plan_row in (
+            "| Free | ¥0 | 5 credits |",
+            "| Starter | ¥19 | 60 credits |",
+            "| Growth | ¥59 | 220 credits |",
+            "| Scale | ¥199 | 800 credits |",
+        ):
+            self.assertIn(plan_row, en_readme)
+        for required in ("本地优先", "最终发布人工确认", "Hosted Worker 保持关闭"):
+            self.assertIn(required, zh_readme)
+        for required in (
+            "local-first",
+            "final publishing requires manual confirmation",
+            "hosted worker remains disabled",
+        ):
+            self.assertIn(required, en_readme.lower())
+        self.assertTrue((distribution / "assets" / "workspace-preview.png").is_file())
 
         def feature_rows(path: Path, expected_columns: list[str]) -> list[list[str]]:
             table_lines = [
