@@ -4,6 +4,7 @@ const DEFAULT_USAGE_AUTHORIZE_ENDPOINT = "https://www.enhe-tech.com.cn/api/promo
 const DEFAULT_HOSTED_RUN_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/run";
 const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
+const HOSTED_WORKER_ENABLED = false;
 
 const EN_TRANSLATIONS = Object.freeze({
   appTitle: "ENHE Product Promo Maker",
@@ -171,17 +172,18 @@ const EN_TRANSLATIONS = Object.freeze({
   licenseKeyPlaceholder: "Paste ENHE license key",
   licenseEndpointLabel: "License endpoint",
   usageEndpointLabel: "Usage authorization endpoint",
-  hostedRunEndpointLabel: "Hosted run endpoint",
+  hostedRunEndpointLabel: "Hosted run endpoint (off)",
   saveButton: "Save",
   validateButton: "Validate",
-  reserveCreditsButton: "Reserve credits",
-  copyHostedPayloadButton: "Copy hosted payload",
-  startHostedRunButton: "Start hosted run",
+  reserveCreditsButton: "Reserve credits (off)",
+  copyHostedPayloadButton: "Copy hosted payload (off)",
+  startHostedRunButton: "Hosted Worker off",
   openCheckoutButton: "Open checkout",
   billingPortalButton: "Billing portal",
   licenseMessagePrompt: "Use ENHE website billing for production licenses.",
   usageMessagePrompt: "Reserve hosted credits only before a hosted ENHE run.",
   hostedRunMessagePrompt: "Hosted runs require a backend quota check and never click final platform publish.",
+  hostedWorkerOffMessage: "Hosted Worker is currently off. Local Skill runs remain available.",
   codexCommandTitle: "Codex command",
   copyButton: "Copy",
   commandHint: "Run this from the repository root. Publishing still requires credentials and approval.",
@@ -409,17 +411,18 @@ const ZH_TRANSLATIONS = Object.freeze({
   licenseKeyPlaceholder: "粘贴 ENHE 许可证密钥",
   licenseEndpointLabel: "许可证接口",
   usageEndpointLabel: "用量授权接口",
-  hostedRunEndpointLabel: "托管运行接口",
+  hostedRunEndpointLabel: "托管运行接口（已关闭）",
   saveButton: "保存",
   validateButton: "验证",
-  reserveCreditsButton: "预留点数",
-  copyHostedPayloadButton: "复制托管请求",
-  startHostedRunButton: "启动托管运行",
+  reserveCreditsButton: "预留点数（已关闭）",
+  copyHostedPayloadButton: "复制托管请求（已关闭）",
+  startHostedRunButton: "Hosted Worker 已关闭",
   openCheckoutButton: "打开结算页",
   billingPortalButton: "账单中心",
   licenseMessagePrompt: "正式许可证请通过 ENHE 网站购买和管理。",
   usageMessagePrompt: "仅在启动 ENHE 托管任务前预留点数。",
   hostedRunMessagePrompt: "托管任务需经后端额度校验，且不会点击平台的最终发布按钮。",
+  hostedWorkerOffMessage: "Hosted Worker 当前关闭，本地 Skill 可继续使用。",
   codexCommandTitle: "Codex 命令",
   copyButton: "复制",
   commandHint: "请在仓库根目录运行。正式发布仍需要凭据和人工批准。",
@@ -715,6 +718,7 @@ async function init() {
     els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
     els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
     els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
+    applyHostedWorkerState();
     if (stored.licensePlan) {
       const planKey = String(stored.licensePlan).toLowerCase();
       if (PLANS[planKey]) {
@@ -1109,6 +1113,26 @@ function renderGuideContent() {
 function setMessage(element, key, params = {}) {
   messageState.set(element, { key, params });
   element.textContent = t(key, params);
+}
+
+function applyHostedWorkerState() {
+  const disabled = !HOSTED_WORKER_ENABLED;
+  [els.authorizeUsage, els.copyHostedPayload, els.startHostedRun, els.hostedRunEndpoint].forEach((element) => {
+    element.disabled = disabled;
+    element.setAttribute("aria-disabled", String(disabled));
+  });
+  if (disabled) {
+    setMessage(els.usageMessage, "hostedWorkerOffMessage");
+    setMessage(els.hostedRunMessage, "hostedWorkerOffMessage");
+  }
+}
+
+function requireHostedWorker(messageElement) {
+  if (HOSTED_WORKER_ENABLED) {
+    return true;
+  }
+  setMessage(messageElement, "hostedWorkerOffMessage");
+  return false;
 }
 
 function setCommandMessage(key, params = {}) {
@@ -1535,6 +1559,9 @@ async function saveLicense() {
 }
 
 async function authorizeUsage() {
+  if (!requireHostedWorker(els.usageMessage)) {
+    return;
+  }
   const licenseKey = els.licenseKey.value.trim();
   const endpoint = els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
   const estimate = estimateCredits();
@@ -1638,6 +1665,9 @@ async function validateLicense() {
 }
 
 async function copyHostedPayload() {
+  if (!requireHostedWorker(els.hostedRunMessage)) {
+    return;
+  }
   try {
     const payload = await buildHostedRunPayload();
     if (!(await writeClipboard(JSON.stringify(payload, null, 2)))) {
@@ -1650,6 +1680,9 @@ async function copyHostedPayload() {
 }
 
 async function startHostedRun() {
+  if (!requireHostedWorker(els.hostedRunMessage)) {
+    return;
+  }
   const endpoint = els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT;
   let payload;
   try {

@@ -200,6 +200,20 @@ button:active {
   transform: translateY(1px);
 }
 
+button:disabled,
+input:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  background: #11161d;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+button:disabled:active {
+  transform: none;
+}
+
 .language-switch {
   display: inline-flex;
   overflow: hidden;

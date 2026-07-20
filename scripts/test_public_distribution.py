@@ -140,9 +140,12 @@ class DistributionContractTest(unittest.TestCase):
                 "https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl",
                 skill_release_url,
                 extension_release_url,
-                "assets/workspace-preview.png",
             ):
                 self.assertIn(required, readme)
+        self.assertIn("assets/workspace-preview.zh-CN.png", zh_readme)
+        self.assertNotIn("assets/workspace-preview.en.png", zh_readme)
+        self.assertIn("assets/workspace-preview.en.png", en_readme)
+        self.assertNotIn("assets/workspace-preview.zh-CN.png", en_readme)
         for plan_row in (
             "| Free | ¥0 | 5 点 |",
             "| Starter | ¥19 | 60 点 |",
@@ -165,7 +168,6 @@ class DistributionContractTest(unittest.TestCase):
             "hosted worker remains disabled",
         ):
             self.assertIn(required, en_readme.lower())
-        self.assertTrue((distribution / "assets" / "workspace-preview.png").is_file())
 
         def feature_rows(path: Path, expected_columns: list[str]) -> list[list[str]]:
             table_lines = [
@@ -782,6 +784,20 @@ class DistributionContractTest(unittest.TestCase):
                 self.assertIsNone(re.search(r"\b(?:todo|tbd|placeholder)\b", lowered))
                 for banned_claim in banned_claims:
                     self.assertNotIn(banned_claim, lowered)
+
+    def test_distribution_workspace_previews_are_locale_specific_and_desktop_sized(self) -> None:
+        assets = ROOT / "distribution" / "assets"
+        zh_preview = assets / "workspace-preview.zh-CN.png"
+        en_preview = assets / "workspace-preview.en.png"
+        for preview in (zh_preview, en_preview):
+            self.assertTrue(preview.is_file(), preview.name)
+            data = preview.read_bytes()
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(
+                (int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")),
+                (1280, 900),
+            )
+        self.assertNotEqual(contract.sha256_file(zh_preview), contract.sha256_file(en_preview))
 
     def test_distribution_runnable_examples_use_official_product_url(self) -> None:
         distribution = ROOT / "distribution"

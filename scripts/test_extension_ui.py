@@ -89,6 +89,81 @@ class ExtensionUiContractTests(unittest.TestCase):
     def test_manifest_permissions_are_minimal(self):
         self.assertEqual(self.manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
 
+    def test_hosted_worker_disabled_state_is_fail_closed_and_keeps_billing_available(self):
+        self.assertIn("const HOSTED_WORKER_ENABLED = false;", self.js)
+        page_url = f"{(EXTENSION / 'popup.html').resolve().as_uri()}?view=workspace"
+        expected_messages = {
+            "en-US": "Hosted Worker is currently off. Local Skill runs remain available.",
+            "zh-CN": "Hosted Worker 当前关闭，本地 Skill 可继续使用。",
+        }
+
+        with _chromium_browser(self) as browser:
+            for locale, expected_message in expected_messages.items():
+                with self.subTest(locale=locale):
+                    context = browser.new_context(locale=locale, viewport={"width": 1280, "height": 900})
+                    page = context.new_page()
+                    page.add_init_script(
+                        """window.__fetchCalls = 0;
+                        window.__clipboardWrites = 0;
+                        window.fetch = async () => {
+                          window.__fetchCalls += 1;
+                          return { ok: true, json: async () => ({ allowed: true }) };
+                        };
+                        Object.defineProperty(navigator, 'clipboard', {
+                          configurable: true,
+                          value: { writeText: async () => { window.__clipboardWrites += 1; } }
+                        });"""
+                    )
+                    page.goto(page_url, wait_until="load")
+                    page.locator('body[data-initialized="true"]').wait_for(timeout=3000)
+
+                    observed = page.evaluate(
+                        """() => ({
+                          hostedControls: ['startHostedRun', 'authorizeUsage', 'copyHostedPayload', 'hostedRunEndpoint']
+                            .map((id) => {
+                              const element = document.getElementById(id);
+                              return {
+                                id,
+                                disabled: element.disabled,
+                                ariaDisabled: element.getAttribute('aria-disabled'),
+                                primary: element.classList.contains('primary')
+                              };
+                            }),
+                          checkoutDisabled: document.getElementById('openCheckout').disabled,
+                          portalDisabled: document.getElementById('openPortal').disabled,
+                          usageMessage: document.getElementById('usageMessage').textContent,
+                          hostedRunMessage: document.getElementById('hostedRunMessage').textContent
+                        })"""
+                    )
+                    self.assertTrue(all(item["disabled"] for item in observed["hostedControls"]))
+                    self.assertTrue(all(item["ariaDisabled"] == "true" for item in observed["hostedControls"]))
+                    self.assertFalse(
+                        next(item for item in observed["hostedControls"] if item["id"] == "startHostedRun")["primary"]
+                    )
+                    self.assertFalse(observed["checkoutDisabled"])
+                    self.assertFalse(observed["portalDisabled"])
+                    self.assertEqual(observed["usageMessage"], expected_message)
+                    self.assertEqual(observed["hostedRunMessage"], expected_message)
+
+                    invoked = page.evaluate(
+                        """async () => {
+                          await authorizeUsage();
+                          await copyHostedPayload();
+                          await startHostedRun();
+                          return {
+                            fetchCalls: window.__fetchCalls,
+                            clipboardWrites: window.__clipboardWrites,
+                            usageMessage: document.getElementById('usageMessage').textContent,
+                            hostedRunMessage: document.getElementById('hostedRunMessage').textContent
+                          };
+                        }"""
+                    )
+                    self.assertEqual(invoked["fetchCalls"], 0)
+                    self.assertEqual(invoked["clipboardWrites"], 0)
+                    self.assertEqual(invoked["usageMessage"], expected_message)
+                    self.assertEqual(invoked["hostedRunMessage"], expected_message)
+                    context.close()
+
     def test_workspace_markup_groups_primary_and_secondary_content_with_unique_ids(self):
         self.assertRegex(self.html, r'<body[^>]*data-layout=["\']popup["\'][^>]*data-view=["\']main["\']')
         self.assertRegex(self.html, r'class=["\'][^"\']*workspace-grid[^"\']*["\']')

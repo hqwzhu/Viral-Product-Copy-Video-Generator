@@ -8,7 +8,7 @@
 
 **立即开始：** [下载 Skill ZIP](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-product-promo-maker-skill-0.5.3.zip) · [下载 Chrome 插件 ZIP](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-promotion-manager-extension-0.5.3.zip) · [从 Chrome 商店安装](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)
 
-![ENHE 产品推广素材生成器完整工作台](assets/workspace-preview.png)
+![ENHE 产品推广素材生成器完整工作台](assets/workspace-preview.zh-CN.png)
 
 > 真实工作台截图。示例 URL 和接口均为公开地址，截图不包含许可证、Cookie 或密钥。
 

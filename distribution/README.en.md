@@ -8,7 +8,7 @@ Built for independent developers, product teams, content operators, and service 
 
 **Start now:** [Download the Skill ZIP](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-product-promo-maker-skill-0.5.3.zip) · [Download the Chrome extension ZIP](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-promotion-manager-extension-0.5.3.zip) · [Install from the Chrome Web Store](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)
 
-![ENHE Product Promo Maker full workspace](assets/workspace-preview.png)
+![ENHE Product Promo Maker full workspace](assets/workspace-preview.en.png)
 
 > A real workspace screenshot. It contains only an example URL and public endpoints, with no license, Cookie, or secret.
 
