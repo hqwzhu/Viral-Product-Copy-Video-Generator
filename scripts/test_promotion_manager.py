@@ -7028,8 +7028,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Reserve credits", popup)
         self.assertIn("Copy hosted payload", popup)
         self.assertIn("Hosted Worker off", popup)
-        self.assertIn('id="startHostedRun"', popup)
-        self.assertIn('disabled aria-disabled="true"', popup)
+        self.assertRegex(
+            popup,
+            r'<button(?=[^>]*\bid="startHostedRun")(?=[^>]*\bdisabled\b)(?=[^>]*\baria-disabled="true")[^>]*>',
+        )
         self.assertIn("Open checkout", popup)
         self.assertIn("Billing portal", popup)
         self.assertIn("www.enhe-tech.com.cn", popup)
@@ -8530,9 +8532,20 @@ Prompt templates for product copy, SEO content, and video scripts.
             {"ready_review_gated_autonomy", "partial_ready_review_gated_autonomy"},
         )
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
-        self.assertEqual(
-            by_requirement["browser_extension_operator_ui_subscription"]["status"],
-            "partial_ready",
+        extension_requirement = by_requirement["browser_extension_operator_ui_subscription"]
+        self.assertEqual(extension_requirement["status"], "partial_ready")
+        self.assertIn(
+            "browser-extension/popup.js declares HOSTED_WORKER_ENABLED = false; hosted usage reservation and run submission are disabled",
+            extension_requirement["missing"],
+        )
+        self.assertTrue(
+            any("Local Skill runs remain available" in limit for limit in extension_requirement["limits"])
+        )
+        self.assertFalse(
+            any(
+                "reserve hosted usage credits, start hosted runs" in limit
+                for limit in extension_requirement["limits"]
+            )
         )
         self.assertEqual(by_requirement["completion_roadmap_to_100_percent"]["status"], "ready")
         self.assertEqual(by_requirement["zh_cn_operator_action_checklist_to_100_percent"]["status"], "ready")
