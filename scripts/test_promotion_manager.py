@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import argparse
+import hashlib
 import json
 import http.server
 import os
@@ -96,7 +97,13 @@ def load_script_module(path: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load module from {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    original_sys_path = sys.path.copy()
+    script_dir = str(path.resolve().parent)
+    sys.path[:] = [script_dir, *(entry for entry in sys.path if entry != script_dir)]
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_sys_path
     return module
 
 
@@ -189,6 +196,63 @@ def playwright_chromium_available() -> bool:
 
 
 class PromotionManagerScriptTest(unittest.TestCase):
+    def test_load_script_module_prefers_script_dir_and_restores_sys_path(self) -> None:
+        sibling_name = f"_promotion_manager_sibling_{os.getpid()}_{id(self)}"
+        self.assertNotIn(sibling_name, sys.modules)
+
+        with tempfile.TemporaryDirectory(prefix="load-script-module-test-") as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            script_dir = (temp_dir / "script").resolve()
+            shadow_dir = (temp_dir / "shadow").resolve()
+            script_dir.mkdir()
+            shadow_dir.mkdir()
+            target_path = script_dir / "target.py"
+            (script_dir / f"{sibling_name}.py").write_text("VALUE = 'local'\n", encoding="utf-8")
+            (shadow_dir / f"{sibling_name}.py").write_text("VALUE = 'shadow'\n", encoding="utf-8")
+            target_path.write_text(
+                f"from {sibling_name} import VALUE\n"
+                "import sys\n"
+                f"SCRIPT_DIR_FIRST = sys.path[0] == {str(script_dir)!r}\n"
+                f"SCRIPT_DIR_COUNT = sys.path.count({str(script_dir)!r})\n",
+                encoding="utf-8",
+            )
+            original_sys_path = sys.path.copy()
+            load_sys_path = [str(shadow_dir), *original_sys_path, str(script_dir), str(script_dir)]
+            sys.path[:] = load_sys_path
+
+            try:
+                module = load_script_module(target_path)
+                self.assertEqual(module.VALUE, "local")
+                self.assertTrue(module.SCRIPT_DIR_FIRST)
+                self.assertEqual(module.SCRIPT_DIR_COUNT, 1)
+                self.assertEqual(sys.path, load_sys_path)
+            finally:
+                sys.path[:] = original_sys_path
+                sys.modules.pop(sibling_name, None)
+
+    def test_load_script_module_restores_sys_path_after_execution_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="load-script-module-error-test-") as temp_dir_name:
+            script_dir = Path(temp_dir_name).resolve()
+            target_path = script_dir / "target.py"
+            target_path.write_text(
+                "import sys\n"
+                f"if sys.path[0] != {str(script_dir)!r} or sys.path.count({str(script_dir)!r}) != 1:\n"
+                "    raise AssertionError('script dir was not normalized')\n"
+                "sys.path.insert(0, 'target-mutated-path')\n"
+                "raise RuntimeError('target failed')\n",
+                encoding="utf-8",
+            )
+            original_sys_path = sys.path.copy()
+            load_sys_path = ["before-load", str(script_dir), *original_sys_path, str(script_dir)]
+            sys.path[:] = load_sys_path
+
+            try:
+                with self.assertRaisesRegex(RuntimeError, "target failed"):
+                    load_script_module(target_path)
+                self.assertEqual(sys.path, load_sys_path)
+            finally:
+                sys.path[:] = original_sys_path
+
     def run_all(self) -> Path:
         out_dir = Path(tempfile.mkdtemp(prefix="promotion-manager-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -7318,6 +7382,13 @@ Prompt templates for product copy, SEO content, and video scripts.
         package_path = Path(report["package"])
         self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.3.zip")
         self.assertTrue(package_path.exists())
+        archive_sha256 = hashlib.sha256(package_path.read_bytes()).hexdigest().upper()
+        self.assertEqual(report.get("archiveName"), package_path.name)
+        self.assertEqual(report.get("archiveSha256"), archive_sha256)
+        report_markdown = (out_dir / "dist/browser-extension-package-report.md").read_text(encoding="utf-8")
+        self.assertIn(f"- Archive: `{package_path.name}`", report_markdown)
+        self.assertIn(f"- SHA-256: `{archive_sha256}`", report_markdown)
+        self.assertIn("- Version: `0.5.3`", report_markdown)
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])
@@ -8279,6 +8350,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("README.md", files)
         self.assertIn("README.en.md", files)
         self.assertIn("README.zh-CN.md", files)
+        self.assertIn("requirements-youtube.txt", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/zh-CN/installation.md", files)
         self.assertIn("docs/zh-CN/usage.md", files)
@@ -8303,6 +8375,12 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("browser-extension/popup.css", files)
         self.assertIn("browser-extension/popup.js", files)
         self.assertIn("browser-extension/icons/icon128.png", files)
+        self.assertIn("scripts/fixtures/mediacrawler/xiaohongshu-contents.jsonl", files)
+        self.assertIn("scripts/fixtures/mediacrawler/xiaohongshu-comments.jsonl", files)
+        self.assertIn("scripts/fixtures/mediacrawler/douyin-contents.jsonl", files)
+        self.assertIn("scripts/fixtures/mediacrawler/douyin-comments.jsonl", files)
+        self.assertIn("scripts/fixtures/mediacrawler/zhihu-contents.jsonl", files)
+        self.assertIn("scripts/fixtures/mediacrawler/zhihu-comments.jsonl", files)
         self.assertIn("backend/license-service/package.json", files)
         self.assertIn("backend/license-service/package-lock.json", files)
         self.assertIn("backend/license-service/.env.example", files)
@@ -8318,6 +8396,31 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("scripts/billing_contract_simulator.py", files)
         self.assertIn("scripts/package_browser_extension.py", files)
         self.assertIn("scripts/launch_unlock_pack.py", files)
+
+        with tempfile.TemporaryDirectory(prefix="managed-skill-files-test-") as temp_dir:
+            fixture_root = Path(temp_dir)
+            scripts_dir = fixture_root / "scripts"
+            fixture_dir = scripts_dir / "fixtures" / "mediacrawler"
+            fixture_dir.mkdir(parents=True)
+            (scripts_dir / "helper.py").write_text("pass\n", encoding="utf-8")
+            (scripts_dir / "unrelated-output.jsonl").write_text('{"private": true}\n', encoding="utf-8")
+            fixture_names = [
+                "xiaohongshu-contents.jsonl",
+                "xiaohongshu-comments.jsonl",
+                "douyin-contents.jsonl",
+                "douyin-comments.jsonl",
+                "zhihu-contents.jsonl",
+                "zhihu-comments.jsonl",
+            ]
+            for name in fixture_names:
+                (fixture_dir / name).write_text("{}\n", encoding="utf-8")
+
+            modeled_files = {item.as_posix() for item in module.managed_skill_files(fixture_root)}
+
+        self.assertIn("scripts/helper.py", modeled_files)
+        self.assertNotIn("scripts/unrelated-output.jsonl", modeled_files)
+        for name in fixture_names:
+            self.assertIn(f"scripts/fixtures/mediacrawler/{name}", modeled_files)
 
     def test_self_evolution_audit_reports_tool_and_skill_state_without_secret_values(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="self-evolution-audit-test-"))

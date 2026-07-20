@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.venv/
 .DS_Store
 promotion-output/
 .env
@@ -7,3 +8,6 @@ promotion-output/
 !.env.example
 *.log
 .worktrees/
+dist/public-repository-*/
+.playwright-cli/
+output/playwright/

@@ -6,7 +6,7 @@
     <title>ENHE Product Promo Maker</title>
     <link rel="stylesheet" href="popup.css">
   </head>
-  <body>
+  <body data-layout="popup" data-view="main">
     <main class="shell">
       <header class="topbar">
         <div>
@@ -19,10 +19,15 @@
             <button id="languageZh" type="button" class="language-option" aria-pressed="false">中文</button>
             <button id="languageEn" type="button" class="language-option" aria-pressed="true">EN</button>
           </div>
+          <button id="openGuide" type="button" class="icon-button" data-i18n="openGuide" data-i18n-aria-label="openGuideLabel" aria-controls="guideView">?</button>
+          <button id="openWorkspace" type="button" class="secondary" data-i18n="openWorkspace" data-i18n-aria-label="openWorkspaceLabel">Open full workspace</button>
           <span class="status" id="licenseStatus">Local</span>
         </div>
       </header>
 
+      <div id="mainView">
+      <div class="workspace-grid">
+      <div class="workspace-primary">
       <section class="panel">
         <label class="field">
           <span data-i18n="productUrlLabel">Product or website URL</span>
@@ -196,6 +201,9 @@
         </div>
       </section>
 
+      </div>
+
+      <aside class="workspace-secondary">
       <section class="panel">
         <div class="section-head">
           <h2 data-i18n="subscriptionEstimateTitle">Subscription estimate</h2>
@@ -241,25 +249,25 @@
           <input id="usageAuthorizeEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/usage/authorize">
         </label>
         <label class="field">
-          <span data-i18n="hostedRunEndpointLabel">Hosted run endpoint</span>
-          <input id="hostedRunEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/run">
+          <span data-i18n="hostedRunEndpointLabel">Hosted run endpoint (off)</span>
+          <input id="hostedRunEndpoint" type="url" value="https://www.enhe-tech.com.cn/api/promotion-manager/run" disabled aria-disabled="true">
         </label>
         <div class="button-row">
           <button id="saveLicense" type="button" class="secondary" data-i18n="saveButton">Save</button>
           <button id="validateLicense" type="button" class="secondary" data-i18n="validateButton">Validate</button>
-          <button id="authorizeUsage" type="button" class="secondary" data-i18n="reserveCreditsButton">Reserve credits</button>
+          <button id="authorizeUsage" type="button" class="secondary" data-i18n="reserveCreditsButton" disabled aria-disabled="true">Reserve credits (off)</button>
         </div>
         <div class="button-row">
-          <button id="copyHostedPayload" type="button" class="secondary" data-i18n="copyHostedPayloadButton">Copy hosted payload</button>
-          <button id="startHostedRun" type="button" class="primary" data-i18n="startHostedRunButton">Start hosted run</button>
+          <button id="copyHostedPayload" type="button" class="secondary" data-i18n="copyHostedPayloadButton" disabled aria-disabled="true">Copy hosted payload (off)</button>
+          <button id="startHostedRun" type="button" class="secondary" data-i18n="startHostedRunButton" disabled aria-disabled="true">Hosted Worker off</button>
         </div>
         <div class="button-row">
           <button id="openCheckout" type="button" class="primary" data-i18n="openCheckoutButton">Open checkout</button>
           <button id="openPortal" type="button" class="secondary" data-i18n="billingPortalButton">Billing portal</button>
         </div>
         <p id="licenseMessage" class="hint" data-i18n="licenseMessagePrompt">Use ENHE website billing for production licenses.</p>
-        <p id="usageMessage" class="hint" data-i18n="usageMessagePrompt">Reserve hosted credits only before a hosted ENHE run.</p>
-        <p id="hostedRunMessage" class="hint" data-i18n="hostedRunMessagePrompt">Hosted runs require a backend quota check and never click final platform publish.</p>
+        <p id="usageMessage" class="hint">Hosted Worker is currently off. Local Skill runs remain available.</p>
+        <p id="hostedRunMessage" class="hint">Hosted Worker is currently off. Local Skill runs remain available.</p>
       </section>
 
       <section class="panel command-panel">
@@ -270,12 +278,49 @@
         <textarea id="commandOutput" readonly spellcheck="false"></textarea>
         <p class="hint" data-i18n="commandHint">Run this from the repository root. Publishing still requires credentials and approval.</p>
       </section>
+      </aside>
 
       <footer class="footer">
         <a href="https://www.enhe-tech.com.cn/" target="_blank" rel="noreferrer">ENHE AI</a>
         <a href="https://www.enhe-tech.com.cn/promotion-manager" target="_blank" rel="noreferrer" data-i18n="productPageLink">Product page</a>
         <a href="https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git" target="_blank" rel="noreferrer">GitHub</a>
       </footer>
+      </div>
+      </div>
+
+      <section id="guideView" class="guide-view" hidden>
+        <div class="guide-header">
+          <div>
+            <p class="eyebrow" data-i18n="guideEyebrow">IN-EXTENSION GUIDE</p>
+            <h2 data-i18n="guideTitle">Product Promo Maker guide</h2>
+            <p class="hint" data-i18n="guideIntro">A bilingual reference for planning, evidence, and safe publishing.</p>
+          </div>
+          <button id="guideBack" type="button" class="ghost return-button" data-i18n="guideBack">Back to generator</button>
+        </div>
+        <div id="guideTabs" class="guide-tabs" role="tablist" data-i18n-aria-label="guideTabsLabel">
+          <button id="guideTabFeatures" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="guideFeatures" data-guide-tab="features" data-i18n="guideFeaturesTab">Features</button>
+          <button id="guideTabUsage" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="guideUsage" data-guide-tab="usage" data-i18n="guideUsageTab">How to use</button>
+          <button id="guideTabSubscription" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="guideSubscription" data-guide-tab="subscription" data-i18n="guideSubscriptionTab">Subscription</button>
+        </div>
+        <section id="guideFeatures" class="guide-section" role="tabpanel" aria-labelledby="guideTabFeatures">
+          <p class="hint" data-i18n="guideFeaturesIntro">Map each promotion step to a clear outcome and a safe handoff.</p>
+          <div id="guideFeatureList" class="guide-list"></div>
+        </section>
+        <section id="guideUsage" class="guide-section" role="tabpanel" aria-labelledby="guideTabUsage" hidden>
+          <p class="hint" data-i18n="guideUsageIntro">Use the popup as a controlled starting point, then review every external action.</p>
+          <div id="guideUsageList" class="guide-list"></div>
+        </section>
+        <section id="guideSubscription" class="guide-section" role="tabpanel" aria-labelledby="guideTabSubscription" hidden>
+          <p class="hint" data-i18n="guideSubscriptionIntro">Choose a plan by monthly evidence-backed runs. Hosted Worker stays off in this extension.</p>
+          <div id="guidePlans" class="plan-list"></div>
+          <div class="guide-billing">
+            <span data-i18n="guideBillingLinks">Manage billing on the ENHE website:</span>
+            <a href="https://www.enhe-tech.com.cn/promotion-manager/checkout" target="_blank" rel="noreferrer" data-i18n="guideCheckout">Checkout</a>
+            <a href="https://www.enhe-tech.com.cn/promotion-manager/billing" target="_blank" rel="noreferrer" data-i18n="guideBillingPortal">Billing portal</a>
+          </div>
+          <p class="hint" data-i18n="guideHostedWorker">Hosted Worker is off; local runs and human confirmation remain the default.</p>
+        </section>
+      </section>
     </main>
     <script src="popup.js"></script>
   </body>

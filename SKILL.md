@@ -11,9 +11,9 @@ Act as a product promotion manager, not a generic copywriter. Convert a product 
 
 `research -> deconstruct -> generate copy/scripts -> review -> publish pack -> real-data retrospective -> next round`
 
-Never auto-publish, auto-login, save cookies/tokens/passwords, bypass captcha, or fabricate platform metrics.
+Never auto-publish, auto-login, save cookies/tokens/passwords, or fabricate platform metrics. When a captcha appears, the operator must complete it manually; the workflow does not process it.
 
-Current publishing policy: manual publish packages are the primary path; auto-publish ports are reserved for later official API-only upgrades. Generate publish queues, browser/manual payloads, launch unlock packs, and evidence templates first. Keep GitHub and YouTube as dry-run-first official API integration ports. Douyin is currently browser-assisted/manual because operator authorization is unavailable; keep its official executor only as a reserved future port and do not pursue true automatic Douyin publishing unless verified authorization is supplied in a later iteration.
+Current publishing policy: manual publish packages are the primary path; auto-publish ports are reserved for later official API-only upgrades. Generate publish queues, browser/manual payloads, launch unlock packs, and evidence templates first. Keep GitHub and YouTube as dry-run-first official API integration ports. Douyin is currently browser-assisted/manual because operator authorization is unavailable; its final submission remains manual unless a future official API authorization has been verified.
 
 ## Quick Start
 
@@ -224,7 +224,7 @@ python scripts/final_capability_runner.py \
   --out-dir "./promotion-output"
 ```
 
-The final runner builds the launch unlock pack automatically for each product run when a publish queue exists, unless `--skip-launch-unlock-pack` is supplied.
+When a publish queue exists, the final runner internally builds the launch unlock pack for each product run unless `--skip-launch-unlock-pack` is supplied. This generation step does not execute platform publication.
 
 To request official publishing for supported GitHub/YouTube paths from the high-level runner, add the execution gate. Douyin can still be included in the run, but it remains browser-assisted/manual and `--douyin-video-file` only attaches the MP4 asset:
 

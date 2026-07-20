@@ -1,8 +1,10 @@
 {
-  "generatedAt": "2026-07-15",
+  "generatedAt": "2026-07-20",
   "status": "ready",
   "extensionDir": "C:\\Users\\HU\\Documents\\viral-product-copy-video-generator\\.worktrees\\product-promo-maker-rebrand\\browser-extension",
   "package": "dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip",
+  "archiveName": "enhe-promotion-manager-0.5.3.zip",
+  "archiveSha256": "57FC9D39FDC06F0FCD1BFA4071E018FC348CC7FC64C66CD032DE7F0402DFC81F",
   "version": "0.5.3",
   "name": "__MSG_extensionName__",
   "checks": {

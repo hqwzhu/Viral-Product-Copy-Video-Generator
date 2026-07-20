@@ -599,7 +599,7 @@ python scripts/real_evidence_setup.py \
   --out-dir "./promotion-output"
 ```
 
-This writes `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, fillable CSV templates for platform metrics, comments, business attribution, published URLs, a structured snapshot example, and `commands/import-real-evidence.ps1`. The final capability runner invokes this automatically after publish readiness when a publish queue exists. Templates must be filled only with real public, official, screenshot/OCR, structured browser snapshot, or business export evidence.
+This writes `reports/promotion-manager/real-evidence-setup/real-evidence-setup.{json,md}`, `real-evidence-checklist.md`, fillable CSV templates for platform metrics, comments, business attribution, published URLs, a structured snapshot example, and `commands/import-real-evidence.ps1`. When a publish queue exists, the final capability runner invokes this after readiness checks. Templates must be filled only with real public, official, screenshot/OCR, structured browser snapshot, or business export evidence.
 
 Prepare browser-assisted publishing materials for non-official direct-publish platforms:
 

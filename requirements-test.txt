@@ -1,0 +1,2 @@
+# After installing test dependencies, install Chromium with: python -m playwright install chromium
+playwright==1.58.0
