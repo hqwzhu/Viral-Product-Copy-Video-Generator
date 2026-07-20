@@ -7027,7 +7027,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("Hosted run endpoint", popup)
         self.assertIn("Reserve credits", popup)
         self.assertIn("Copy hosted payload", popup)
-        self.assertIn("Start hosted run", popup)
+        self.assertIn("Hosted Worker off", popup)
+        self.assertIn('id="startHostedRun"', popup)
+        self.assertIn('disabled aria-disabled="true"', popup)
         self.assertIn("Open checkout", popup)
         self.assertIn("Billing portal", popup)
         self.assertIn("www.enhe-tech.com.cn", popup)
@@ -7043,6 +7045,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("startHostedRun", script)
         self.assertIn("usageAuthorizeEndpoint", script)
         self.assertIn("hostedRunEndpoint", script)
+        self.assertIn("const HOSTED_WORKER_ENABLED = false;", script)
+        self.assertIn("applyHostedWorkerState", script)
         self.assertIn("idempotencyKey", script)
         self.assertIn("estimatedMonthlyCredits", script)
         self.assertIn("COST_PER_CREDIT", script)
@@ -7127,7 +7131,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("data-i18n-aria-label=", popup)
         self.assertIn("chrome.i18n.getUILanguage", script)
         self.assertIn('"uiLanguage"', script)
-        self.assertIn("chrome.storage.local.set({ uiLanguage", script)
+        self.assertIn("writeLocalStorage({ uiLanguage: currentLanguage })", script)
         self.assertIn("aria-pressed", script)
 
         english_block = script.split("const EN_TRANSLATIONS = Object.freeze({", 1)[1].split("});", 1)[0]
@@ -8526,7 +8530,10 @@ Prompt templates for product copy, SEO content, and video scripts.
             {"ready_review_gated_autonomy", "partial_ready_review_gated_autonomy"},
         )
         self.assertEqual(by_requirement["github_documentation_and_install_tutorial"]["status"], "ready")
-        self.assertEqual(by_requirement["browser_extension_operator_ui_subscription"]["status"], "ready")
+        self.assertEqual(
+            by_requirement["browser_extension_operator_ui_subscription"]["status"],
+            "partial_ready",
+        )
         self.assertEqual(by_requirement["completion_roadmap_to_100_percent"]["status"], "ready")
         self.assertEqual(by_requirement["zh_cn_operator_action_checklist_to_100_percent"]["status"], "ready")
         self.assertEqual(by_requirement["phase_progress_reporting"]["status"], "ready")
