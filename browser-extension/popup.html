@@ -19,10 +19,13 @@
             <button id="languageZh" type="button" class="language-option" aria-pressed="false">中文</button>
             <button id="languageEn" type="button" class="language-option" aria-pressed="true">EN</button>
           </div>
+          <button id="openGuide" type="button" class="icon-button" data-i18n="openGuide" data-i18n-aria-label="openGuideLabel" aria-controls="guideView">?</button>
+          <button id="openWorkspace" type="button" class="secondary" data-i18n="openWorkspace" data-i18n-aria-label="openWorkspaceLabel">Open full workspace</button>
           <span class="status" id="licenseStatus">Local</span>
         </div>
       </header>
 
+      <div id="mainView">
       <section class="panel">
         <label class="field">
           <span data-i18n="productUrlLabel">Product or website URL</span>
@@ -276,6 +279,41 @@
         <a href="https://www.enhe-tech.com.cn/promotion-manager" target="_blank" rel="noreferrer" data-i18n="productPageLink">Product page</a>
         <a href="https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git" target="_blank" rel="noreferrer">GitHub</a>
       </footer>
+      </div>
+
+      <section id="guideView" class="guide-view" hidden>
+        <div class="guide-header">
+          <div>
+            <p class="eyebrow" data-i18n="guideEyebrow">IN-EXTENSION GUIDE</p>
+            <h2 data-i18n="guideTitle">Product Promo Maker guide</h2>
+            <p class="hint" data-i18n="guideIntro">A bilingual reference for planning, evidence, and safe publishing.</p>
+          </div>
+          <button id="guideBack" type="button" class="ghost return-button" data-i18n="guideBack">Back to generator</button>
+        </div>
+        <div id="guideTabs" class="guide-tabs" role="tablist" data-i18n-aria-label="guideTabsLabel">
+          <button id="guideTabFeatures" type="button" role="tab" aria-selected="true" aria-controls="guideFeatures" data-guide-tab="features" data-i18n="guideFeaturesTab">Features</button>
+          <button id="guideTabUsage" type="button" role="tab" aria-selected="false" aria-controls="guideUsage" data-guide-tab="usage" data-i18n="guideUsageTab">How to use</button>
+          <button id="guideTabSubscription" type="button" role="tab" aria-selected="false" aria-controls="guideSubscription" data-guide-tab="subscription" data-i18n="guideSubscriptionTab">Subscription</button>
+        </div>
+        <section id="guideFeatures" class="guide-section" role="tabpanel" aria-labelledby="guideTabFeatures">
+          <p class="hint" data-i18n="guideFeaturesIntro">Map each promotion step to a clear outcome and a safe handoff.</p>
+          <div id="guideFeatureList" class="guide-list"></div>
+        </section>
+        <section id="guideUsage" class="guide-section" role="tabpanel" aria-labelledby="guideTabUsage" hidden>
+          <p class="hint" data-i18n="guideUsageIntro">Use the popup as a controlled starting point, then review every external action.</p>
+          <div id="guideUsageList" class="guide-list"></div>
+        </section>
+        <section id="guideSubscription" class="guide-section" role="tabpanel" aria-labelledby="guideTabSubscription" hidden>
+          <p class="hint" data-i18n="guideSubscriptionIntro">Choose a plan by monthly evidence-backed runs. Hosted Worker stays off in this extension.</p>
+          <div id="guidePlans" class="plan-list"></div>
+          <div class="guide-billing">
+            <span data-i18n="guideBillingLinks">Manage billing on the ENHE website:</span>
+            <a href="https://www.enhe-tech.com.cn/promotion-manager/checkout" target="_blank" rel="noreferrer" data-i18n="guideCheckout">Checkout</a>
+            <a href="https://www.enhe-tech.com.cn/promotion-manager/billing" target="_blank" rel="noreferrer" data-i18n="guideBillingPortal">Billing portal</a>
+          </div>
+          <p class="hint" data-i18n="guideHostedWorker">Hosted Worker is off; local runs and human confirmation remain the default.</p>
+        </section>
+      </section>
     </main>
     <script src="popup.js"></script>
   </body>

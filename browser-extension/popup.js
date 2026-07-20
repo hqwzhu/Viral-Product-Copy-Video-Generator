@@ -9,6 +9,86 @@ const EN_TRANSLATIONS = Object.freeze({
   appTitle: "ENHE Product Promo Maker",
   productPromise: "Turn product pages into promotional copy, video scripts, and publishing assets.",
   languageSwitchLabel: "Interface language",
+  openGuide: "?",
+  openGuideLabel: "Open bilingual usage guide",
+  openWorkspace: "Open full workspace",
+  openWorkspaceLabel: "Open the full workspace in a new tab",
+  guideEyebrow: "IN-EXTENSION GUIDE",
+  guideTitle: "Product Promo Maker guide",
+  guideIntro: "A bilingual reference for planning, evidence, and safe publishing.",
+  guideBack: "Back to generator",
+  guideTabsLabel: "Guide sections",
+  guideFeaturesTab: "Features",
+  guideUsageTab: "How to use",
+  guideSubscriptionTab: "Subscription",
+  guideFeaturesIntro: "Map each promotion step to a clear outcome and a safe handoff.",
+  guideUsageIntro: "Use the popup as a controlled starting point, then review every external action.",
+  guideSubscriptionIntro: "Choose a plan by monthly evidence-backed runs. Hosted Worker stays off in this extension.",
+  guideWhat: "What",
+  guideProblem: "Problem solved",
+  guideBenefit: "Benefit",
+  guideUseCase: "Use case",
+  guideFeatureWeb: "Product web entry",
+  guideFeatureCopy: "Copy and script",
+  guideFeatureEvidence: "Platform evidence",
+  guideFeatureMedia: "Image and video prep",
+  guideFeaturePublish: "Publishing prep",
+  guideFeatureReview: "Real-data review",
+  guideFeatureOptimize: "Next-round optimization",
+  guideFeatureAutomation: "Automation",
+  guideFeatureAdvanced: "Advanced safeguards",
+  guideFeatureWebWhat: "Start from one product or website URL.",
+  guideFeatureWebProblem: "Scattered product context causes inconsistent promotion briefs.",
+  guideFeatureWebBenefit: "Keeps the source page attached to every downstream asset.",
+  guideFeatureWebUseCase: "Paste a product page before generating a first campaign command.",
+  guideFeatureCopyWhat: "Create promotion copy and video script directions.",
+  guideFeatureCopyProblem: "Ideas drift when hooks, proof, and calls to action are written separately.",
+  guideFeatureCopyBenefit: "Turns one brief into a reviewable, repeatable message system.",
+  guideFeatureCopyUseCase: "Use the research-and-copy depth for an early positioning pass.",
+  guideFeatureEvidenceWhat: "Collect platform examples and audience signals.",
+  guideFeatureEvidenceProblem: "Unverified trends make claims brittle and hard to audit.",
+  guideFeatureEvidenceBenefit: "Separates observed evidence from assumptions before publishing.",
+  guideFeatureEvidenceUseCase: "Capture search, detail, or creator evidence for a target platform.",
+  guideFeatureMediaWhat: "Prepare image, video, and asset checklists.",
+  guideFeatureMediaProblem: "Missing dimensions or source files delay final production.",
+  guideFeatureMediaBenefit: "Makes every handoff explicit before a render or upload.",
+  guideFeatureMediaUseCase: "Run the full promotion loop when media needs to be staged together.",
+  guideFeaturePublishWhat: "Build a publish queue and browser handoff.",
+  guideFeaturePublishProblem: "Publishing fails when credentials, fields, and approvals are implicit.",
+  guideFeaturePublishBenefit: "Leaves a visible queue while keeping final clicks human-controlled.",
+  guideFeaturePublishUseCase: "Prepare a browser publish session after the queue is reviewed.",
+  guideFeatureReviewWhat: "Record real post-publish metrics and comments.",
+  guideFeatureReviewProblem: "Without actual outcomes, the next brief repeats guesses.",
+  guideFeatureReviewBenefit: "Creates a feedback loop grounded in audience response.",
+  guideFeatureReviewUseCase: "Return with views, saves, comments, or conversions after a post runs.",
+  guideFeatureOptimizeWhat: "Turn review findings into the next experiment.",
+  guideFeatureOptimizeProblem: "Lessons disappear when they are not attached to a concrete change.",
+  guideFeatureOptimizeBenefit: "Keeps iteration focused on one measurable improvement at a time.",
+  guideFeatureOptimizeUseCase: "Compare hooks or platform choices in the next promotion cycle.",
+  guideFeatureAutomationWhat: "Schedule repeatable local workflows.",
+  guideFeatureAutomationProblem: "Manual repetition hides stale evidence and missed follow-ups.",
+  guideFeatureAutomationBenefit: "Runs checklists on a cadence without silently publishing.",
+  guideFeatureAutomationUseCase: "Create a weekly local job after the first cycle is stable.",
+  guideFeatureAdvancedBody: "Advanced options can collect richer evidence or prepare browser fields, but credentials, CAPTCHA, risk controls, and final publishing always require a person.",
+  guideUsageStep1: "1. Quick start: paste a product URL, choose platforms, and select workflow depth.",
+  guideUsageStep2: "2. Local Skill execution: generate the command and run it from the repository root.",
+  guideUsageStep3: "3. Evidence boundary: label observed sources, assumptions, and missing data before using a claim.",
+  guideUsageStep4: "4. Review and publish: inspect assets, handle CAPTCHA or risk checks manually, then confirm the final publish action.",
+  guideUsageSkill: "The extension prepares a command; it does not replace your local Skill runtime.",
+  guideUsageEvidence: "Treat platform evidence as time-bound observations, not universal truth.",
+  guideUsageCaptcha: "CAPTCHA, account challenges, policy warnings, and other risk controls must be handled manually.",
+  guideUsageConfirm: "No final platform publish should happen without your explicit confirmation.",
+  guidePlanCredits: "{credits} credits",
+  guidePlanPrice: "¥{price}/30 days",
+  guidePlanFree: "Free",
+  guidePlanStarter: "Starter",
+  guidePlanGrowth: "Growth",
+  guidePlanScale: "Scale",
+  guideBillingLinks: "Manage billing on the ENHE website:",
+  guideCheckout: "Checkout",
+  guideBillingPortal: "Billing portal",
+  guideHostedWorker: "Hosted Worker is off; local runs and human confirmation remain the default.",
+  workspacePlaceholder: "Full workspace opens in a new tab in the next release.",
   productUrlLabel: "Product or website URL",
   useCurrentTab: "Use current tab",
   generateCommand: "Generate command",
@@ -157,6 +237,86 @@ const ZH_TRANSLATIONS = Object.freeze({
   appTitle: "ENHE 产品推广素材生成器",
   productPromise: "把产品网页变成推广文案、视频脚本和发布素材",
   languageSwitchLabel: "界面语言",
+  openGuide: "?",
+  openGuideLabel: "打开双语使用说明",
+  openWorkspace: "打开完整工作台",
+  openWorkspaceLabel: "在新标签页打开完整工作台",
+  guideEyebrow: "插件内使用说明",
+  guideTitle: "产品推广素材生成器说明",
+  guideIntro: "用于规划、证据和安全发布的双语参考。",
+  guideBack: "返回生成器",
+  guideTabsLabel: "说明章节",
+  guideFeaturesTab: "功能",
+  guideUsageTab: "如何使用",
+  guideSubscriptionTab: "订阅",
+  guideFeaturesIntro: "把每个推广步骤对应到清晰结果和安全交接。",
+  guideUsageIntro: "把弹窗作为受控起点，然后复核每个外部操作。",
+  guideSubscriptionIntro: "按每月有证据支持的运行次数选择套餐。本插件保持 Hosted Worker 关闭。",
+  guideWhat: "功能",
+  guideProblem: "解决的问题",
+  guideBenefit: "收益",
+  guideUseCase: "使用场景",
+  guideFeatureWeb: "产品网页入口",
+  guideFeatureCopy: "文案与脚本",
+  guideFeatureEvidence: "平台证据",
+  guideFeatureMedia: "图片与视频准备",
+  guideFeaturePublish: "发布准备",
+  guideFeatureReview: "真实数据复盘",
+  guideFeatureOptimize: "下一轮优化",
+  guideFeatureAutomation: "自动化",
+  guideFeatureAdvanced: "高级安全边界",
+  guideFeatureWebWhat: "从一个产品或网站链接开始。",
+  guideFeatureWebProblem: "产品上下文分散会导致推广简报前后不一致。",
+  guideFeatureWebBenefit: "让源页面跟随每个后续素材。",
+  guideFeatureWebUseCase: "生成第一条活动命令前先粘贴产品页面。",
+  guideFeatureCopyWhat: "创建推广文案和视频脚本方向。",
+  guideFeatureCopyProblem: "钩子、证据和行动号召分开书写时容易跑题。",
+  guideFeatureCopyBenefit: "把一份简报变成可复核、可重复的消息体系。",
+  guideFeatureCopyUseCase: "早期定位时选择“调研与文案”深度。",
+  guideFeatureEvidenceWhat: "收集平台案例和受众信号。",
+  guideFeatureEvidenceProblem: "未经核验的趋势让观点脆弱且难以审计。",
+  guideFeatureEvidenceBenefit: "发布前区分观察到的证据和推测。",
+  guideFeatureEvidenceUseCase: "为目标平台采集搜索、详情或创作者证据。",
+  guideFeatureMediaWhat: "准备图片、视频和素材清单。",
+  guideFeatureMediaProblem: "缺少尺寸或源文件会拖延最终制作。",
+  guideFeatureMediaBenefit: "渲染或上传前明确每次交接。",
+  guideFeatureMediaUseCase: "需要一起准备素材时运行完整推广闭环。",
+  guideFeaturePublishWhat: "建立发布队列和浏览器交接。",
+  guideFeaturePublishProblem: "凭据、字段和批准不明确会造成发布失败。",
+  guideFeaturePublishBenefit: "保留可见队列，同时让最终点击由人控制。",
+  guideFeaturePublishUseCase: "复核队列后准备浏览器发布会话。",
+  guideFeatureReviewWhat: "记录发布后的真实指标和评论。",
+  guideFeatureReviewProblem: "没有实际结果，下一份简报仍会重复猜测。",
+  guideFeatureReviewBenefit: "用受众反馈建立反馈闭环。",
+  guideFeatureReviewUseCase: "发布后带回播放、收藏、评论或转化数据。",
+  guideFeatureOptimizeWhat: "把复盘发现转成下一次实验。",
+  guideFeatureOptimizeProblem: "经验不落到具体改变就会消失。",
+  guideFeatureOptimizeBenefit: "每次迭代聚焦一个可衡量的改进。",
+  guideFeatureOptimizeUseCase: "在下一轮推广中比较钩子或平台选择。",
+  guideFeatureAutomationWhat: "安排可重复的本地工作流。",
+  guideFeatureAutomationProblem: "手工重复会掩盖过期证据和遗漏的跟进。",
+  guideFeatureAutomationBenefit: "按节奏运行清单，但不会悄悄发布。",
+  guideFeatureAutomationUseCase: "首轮稳定后创建每周本地任务。",
+  guideFeatureAdvancedBody: "高级选项可以采集更丰富的证据或准备浏览器字段，但凭据、验证码、风险控制和最终发布始终需要人工处理。",
+  guideUsageStep1: "1. 快速开始：粘贴产品链接，选择平台和工作流深度。",
+  guideUsageStep2: "2. 本地 Skill 执行：生成命令，并在仓库根目录运行。",
+  guideUsageStep3: "3. 证据边界：使用观点前标注已观察来源、假设和缺失数据。",
+  guideUsageStep4: "4. 复核并发布：检查素材，人工处理验证码或风险检查，然后确认最终发布。",
+  guideUsageSkill: "插件负责准备命令，不替代本地 Skill 运行环境。",
+  guideUsageEvidence: "平台证据是有时效的观察，不是普遍真理。",
+  guideUsageCaptcha: "验证码、账号挑战、政策警告及其他风险控制必须人工处理。",
+  guideUsageConfirm: "没有你的明确确认，不应执行平台最终发布。",
+  guidePlanCredits: "{credits} 点",
+  guidePlanPrice: "¥{price}/30 天",
+  guidePlanFree: "免费版",
+  guidePlanStarter: "入门版",
+  guidePlanGrowth: "成长版",
+  guidePlanScale: "规模版",
+  guideBillingLinks: "请在 ENHE 网站管理账单：",
+  guideCheckout: "结算页",
+  guideBillingPortal: "账单中心",
+  guideHostedWorker: "Hosted Worker 保持关闭；默认使用本地运行并由人工确认。",
+  workspacePlaceholder: "完整工作台将在下一版本于新标签页打开。",
   productUrlLabel: "产品或网站链接",
   useCurrentTab: "使用当前标签页",
   generateCommand: "生成命令",
@@ -314,6 +474,17 @@ const PLANS = {
   scale: { label: "Scale", credits: 800, priceCny: 199 }
 };
 
+const GUIDE_FEATURES = [
+  ["guideFeatureWeb", "guideFeatureWebWhat", "guideFeatureWebProblem", "guideFeatureWebBenefit", "guideFeatureWebUseCase"],
+  ["guideFeatureCopy", "guideFeatureCopyWhat", "guideFeatureCopyProblem", "guideFeatureCopyBenefit", "guideFeatureCopyUseCase"],
+  ["guideFeatureEvidence", "guideFeatureEvidenceWhat", "guideFeatureEvidenceProblem", "guideFeatureEvidenceBenefit", "guideFeatureEvidenceUseCase"],
+  ["guideFeatureMedia", "guideFeatureMediaWhat", "guideFeatureMediaProblem", "guideFeatureMediaBenefit", "guideFeatureMediaUseCase"],
+  ["guideFeaturePublish", "guideFeaturePublishWhat", "guideFeaturePublishProblem", "guideFeaturePublishBenefit", "guideFeaturePublishUseCase"],
+  ["guideFeatureReview", "guideFeatureReviewWhat", "guideFeatureReviewProblem", "guideFeatureReviewBenefit", "guideFeatureReviewUseCase"],
+  ["guideFeatureOptimize", "guideFeatureOptimizeWhat", "guideFeatureOptimizeProblem", "guideFeatureOptimizeBenefit", "guideFeatureOptimizeUseCase"],
+  ["guideFeatureAutomation", "guideFeatureAutomationWhat", "guideFeatureAutomationProblem", "guideFeatureAutomationBenefit", "guideFeatureAutomationUseCase"]
+];
+
 const COST_PER_CREDIT = 0.35;
 
 const COMMAND_LABELS = {
@@ -335,6 +506,18 @@ const COMMAND_LABELS = {
 const els = {
   languageZh: document.getElementById("languageZh"),
   languageEn: document.getElementById("languageEn"),
+  openGuide: document.getElementById("openGuide"),
+  openWorkspace: document.getElementById("openWorkspace"),
+  mainView: document.getElementById("mainView"),
+  guideView: document.getElementById("guideView"),
+  guideBack: document.getElementById("guideBack"),
+  guideTabs: document.getElementById("guideTabs"),
+  guideFeatures: document.getElementById("guideFeatures"),
+  guideUsage: document.getElementById("guideUsage"),
+  guideSubscription: document.getElementById("guideSubscription"),
+  guideFeatureList: document.getElementById("guideFeatureList"),
+  guideUsageList: document.getElementById("guideUsageList"),
+  guidePlans: document.getElementById("guidePlans"),
   licenseStatus: document.getElementById("licenseStatus"),
   productUrl: document.getElementById("productUrl"),
   tabTitle: document.getElementById("tabTitle"),
@@ -406,6 +589,15 @@ els.copyHostedPayload.addEventListener("click", copyHostedPayload);
 els.startHostedRun.addEventListener("click", startHostedRun);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
+els.openGuide.addEventListener("click", () => setView("guide"));
+els.openWorkspace.addEventListener("click", openWorkspace);
+els.guideBack.addEventListener("click", () => setView("main"));
+els.guideTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-guide-tab]");
+  if (tab) {
+    setGuideTab(tab.dataset.guideTab);
+  }
+});
 els.languageZh.addEventListener("click", () => setLanguage("zh-CN"));
 els.languageEn.addEventListener("click", () => setLanguage("en"));
 els.plan.addEventListener("change", updateEstimate);
@@ -441,6 +633,8 @@ async function init() {
     "uiLanguage"
   ]);
   await setLanguage(normalizeLanguage(stored.uiLanguage || chrome.i18n.getUILanguage()), !stored.uiLanguage);
+  const requestedView = new URLSearchParams(window.location.search).get("view");
+  setView(["guide", "main", "workspace"].includes(requestedView) ? requestedView : "main");
   els.licenseKey.value = stored.licenseKey || "";
   els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
   els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
@@ -500,6 +694,101 @@ function applyTranslations() {
   }
   renderLicenseStatus();
   handleCommandTypeChange();
+  renderGuideContent();
+}
+
+function setView(viewName) {
+  const view = ["guide", "main", "workspace"].includes(viewName) ? viewName : "main";
+  const guideVisible = view === "guide";
+  els.mainView.hidden = guideVisible;
+  els.guideView.hidden = !guideVisible;
+  document.body.dataset.view = view;
+  if (guideVisible) {
+    setGuideTab(document.querySelector("[data-guide-tab][aria-selected='true']")?.dataset.guideTab || "features");
+  }
+}
+
+function setGuideTab(tabName) {
+  const tab = ["features", "usage", "subscription"].includes(tabName) ? tabName : "features";
+  document.querySelectorAll("[data-guide-tab]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.guideTab === tab));
+  });
+  ["features", "usage", "subscription"].forEach((sectionName) => {
+    const section = els[`guide${sectionName[0].toUpperCase()}${sectionName.slice(1)}`];
+    section.hidden = sectionName !== tab;
+  });
+}
+
+function openWorkspace() {
+  const target = new URL(window.location.href);
+  target.search = "";
+  target.searchParams.set("view", "workspace");
+  try {
+    if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
+      chrome.tabs.create({ url: target.toString() });
+      return;
+    }
+  } catch (error) {
+    // Fall through to a normal browser tab when the extension API is unavailable.
+  }
+  if (typeof window.open === "function") {
+    window.open(target.toString(), "_blank", "noopener,noreferrer");
+  }
+}
+
+function renderGuideContent() {
+  if (!els.guideFeatureList || !els.guideUsageList || !els.guidePlans) {
+    return;
+  }
+  els.guideFeatureList.replaceChildren(
+    ...GUIDE_FEATURES.map(([title, what, problem, benefit, useCase]) => {
+      const article = document.createElement("article");
+      article.className = "guide-card";
+      const heading = document.createElement("h3");
+      heading.textContent = t(title);
+      article.append(heading);
+      [["guideWhat", what], ["guideProblem", problem], ["guideBenefit", benefit], ["guideUseCase", useCase]].forEach(([label, key]) => {
+        const paragraph = document.createElement("p");
+        const strong = document.createElement("strong");
+        strong.textContent = `${t(label)}: `;
+        paragraph.append(strong, document.createTextNode(t(key)));
+        article.append(paragraph);
+      });
+      return article;
+    })
+  );
+  const advanced = document.createElement("details");
+  advanced.className = "guide-disclosure";
+  const summary = document.createElement("summary");
+  summary.textContent = t("guideFeatureAdvanced");
+  advanced.append(summary, document.createTextNode(t("guideFeatureAdvancedBody")));
+  els.guideFeatureList.append(advanced);
+
+  const usageItems = ["guideUsageStep1", "guideUsageStep2", "guideUsageStep3", "guideUsageStep4", "guideUsageSkill", "guideUsageEvidence", "guideUsageCaptcha", "guideUsageConfirm"];
+  els.guideUsageList.replaceChildren(
+    ...usageItems.map((key) => {
+      const item = document.createElement("p");
+      item.className = "guide-usage-item";
+      item.textContent = t(key);
+      return item;
+    })
+  );
+
+  const planLabels = { free: "guidePlanFree", starter: "guidePlanStarter", growth: "guidePlanGrowth", scale: "guidePlanScale" };
+  els.guidePlans.replaceChildren(
+    ...Object.entries(PLANS).map(([key, plan]) => {
+      const row = document.createElement("div");
+      row.className = "plan-row";
+      const name = document.createElement("strong");
+      name.textContent = t(planLabels[key]);
+      const credits = document.createElement("span");
+      credits.textContent = t("guidePlanCredits", { credits: plan.credits });
+      const price = document.createElement("span");
+      price.textContent = t("guidePlanPrice", { price: plan.priceCny });
+      row.append(name, credits, price);
+      return row;
+    })
+  );
 }
 
 function setMessage(element, key, params = {}) {

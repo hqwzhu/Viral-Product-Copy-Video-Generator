@@ -56,6 +56,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
@@ -242,6 +243,16 @@ textarea:focus-visible {
   background: transparent;
 }
 
+.icon-button {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--accent);
+  background: transparent;
+  font-weight: 700;
+}
+
 .hint {
   margin: 8px 0 0;
   color: var(--muted);
@@ -307,4 +318,132 @@ textarea:focus-visible {
 
 .footer a:hover {
   color: var(--accent);
+}
+
+.guide-view {
+  display: grid;
+  gap: 12px;
+}
+
+.guide-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.return-button {
+  flex-shrink: 0;
+}
+
+.guide-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.guide-tabs button {
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.guide-tabs button[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.guide-section {
+  display: grid;
+  gap: 10px;
+}
+
+.guide-list,
+.plan-list {
+  display: grid;
+  gap: 8px;
+}
+
+.guide-card,
+.guide-disclosure,
+.plan-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--panel);
+}
+
+.guide-card h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.guide-card p,
+.guide-disclosure,
+.guide-usage-item {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.guide-card p:first-of-type {
+  margin-top: 0;
+}
+
+.guide-card strong {
+  color: var(--text);
+}
+
+.guide-disclosure summary {
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.guide-disclosure summary + * {
+  margin-top: 8px;
+}
+
+.plan-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.plan-row span {
+  color: var(--muted);
+  text-align: right;
+}
+
+.guide-billing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.guide-billing a {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
