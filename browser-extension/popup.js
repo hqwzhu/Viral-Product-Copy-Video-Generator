@@ -652,6 +652,7 @@ Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
 });
 
 async function init() {
+  initializeViewState(window.location.search);
   const stored = await chrome.storage.local.get([
     "licenseKey",
     "licenseEndpoint",
@@ -662,8 +663,6 @@ async function init() {
     "uiLanguage"
   ]);
   await setLanguage(normalizeLanguage(stored.uiLanguage || chrome.i18n.getUILanguage()), !stored.uiLanguage);
-  const requestedView = new URLSearchParams(window.location.search).get("view");
-  setView(["guide", "main", "workspace"].includes(requestedView) ? requestedView : "main");
   els.licenseKey.value = stored.licenseKey || "";
   els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
   els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
@@ -726,8 +725,18 @@ function applyTranslations() {
   renderGuideContent();
 }
 
+function setLayout(layoutName) {
+  document.body.dataset.layout = layoutName === "workspace" ? "workspace" : "popup";
+}
+
+function initializeViewState(search) {
+  const requestedView = new URLSearchParams(search).get("view");
+  setLayout(requestedView === "workspace" ? "workspace" : "popup");
+  setView(requestedView === "guide" ? "guide" : "main");
+}
+
 function setView(viewName) {
-  const view = ["guide", "main", "workspace"].includes(viewName) ? viewName : "main";
+  const view = viewName === "guide" ? "guide" : "main";
   const guideVisible = view === "guide";
   els.mainView.hidden = guideVisible;
   els.guideView.hidden = !guideVisible;

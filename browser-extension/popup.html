@@ -6,7 +6,7 @@
     <title>ENHE Product Promo Maker</title>
     <link rel="stylesheet" href="popup.css">
   </head>
-  <body>
+  <body data-layout="popup" data-view="main">
     <main class="shell">
       <header class="topbar">
         <div>
@@ -26,6 +26,8 @@
       </header>
 
       <div id="mainView">
+      <div class="workspace-grid">
+      <div class="workspace-primary">
       <section class="panel">
         <label class="field">
           <span data-i18n="productUrlLabel">Product or website URL</span>
@@ -199,6 +201,9 @@
         </div>
       </section>
 
+      </div>
+
+      <aside class="workspace-secondary">
       <section class="panel">
         <div class="section-head">
           <h2 data-i18n="subscriptionEstimateTitle">Subscription estimate</h2>
@@ -273,12 +278,14 @@
         <textarea id="commandOutput" readonly spellcheck="false"></textarea>
         <p class="hint" data-i18n="commandHint">Run this from the repository root. Publishing still requires credentials and approval.</p>
       </section>
+      </aside>
 
       <footer class="footer">
         <a href="https://www.enhe-tech.com.cn/" target="_blank" rel="noreferrer">ENHE AI</a>
         <a href="https://www.enhe-tech.com.cn/promotion-manager" target="_blank" rel="noreferrer" data-i18n="productPageLink">Product page</a>
         <a href="https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git" target="_blank" rel="noreferrer">GitHub</a>
       </footer>
+      </div>
       </div>
 
       <section id="guideView" class="guide-view" hidden>

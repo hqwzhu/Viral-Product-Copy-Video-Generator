@@ -2,11 +2,23 @@ import json
 import re
 import subprocess
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSION = ROOT / "browser-extension"
+
+
+class _IdCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids = []
+
+    def handle_starttag(self, _tag, attrs):
+        element_id = dict(attrs).get("id")
+        if element_id:
+            self.ids.append(element_id)
 
 
 class ExtensionUiContractTests(unittest.TestCase):
@@ -50,6 +62,87 @@ class ExtensionUiContractTests(unittest.TestCase):
 
     def test_manifest_permissions_are_minimal(self):
         self.assertEqual(self.manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
+
+    def test_workspace_markup_groups_primary_and_secondary_content_with_unique_ids(self):
+        self.assertRegex(self.html, r'<body[^>]*data-layout=["\']popup["\'][^>]*data-view=["\']main["\']')
+        self.assertRegex(self.html, r'class=["\'][^"\']*workspace-grid[^"\']*["\']')
+        self.assertRegex(self.html, r'class=["\'][^"\']*workspace-primary[^"\']*["\']')
+        self.assertRegex(self.html, r'class=["\'][^"\']*workspace-secondary[^"\']*["\']')
+
+        collector = _IdCollector()
+        collector.feed(self.html)
+        duplicates = sorted({element_id for element_id in collector.ids if collector.ids.count(element_id) > 1})
+        self.assertEqual(duplicates, [])
+
+    def test_workspace_styles_define_desktop_tablet_mobile_and_reduced_motion_contracts(self):
+        self.assertRegex(
+            self.css,
+            re.compile(
+                r'body\[data-layout=["\']workspace["\']\]\s*\{[^}]*width:\s*100%[^}]*min-width:\s*320px[^}]*max-width:\s*none',
+                re.DOTALL,
+            ),
+        )
+        self.assertRegex(
+            self.css,
+            re.compile(
+                r'body\[data-layout=["\']workspace["\']\]\s+\.workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.15fr\)\s+minmax\(300px,\s*\.85fr\)[^}]*gap:\s*16px',
+                re.DOTALL,
+            ),
+        )
+        self.assertRegex(self.css, r'@media\s*\([^)]*max-width:\s*900px[^)]*\)')
+        self.assertRegex(self.css, r'@media\s*\([^)]*max-width:\s*520px[^)]*\)')
+        self.assertRegex(self.css, r'@media\s*\(prefers-reduced-motion:\s*reduce\)')
+
+    def test_hidden_guide_panels_are_not_overridden_by_component_display_rules(self):
+        self.assertRegex(
+            self.css,
+            re.compile(r'\[hidden\]\s*\{[^}]*display:\s*none\s*!important', re.DOTALL),
+        )
+
+    def test_workspace_query_initializes_main_layout_and_guide_round_trip_preserves_it(self):
+        script = f"""
+const els = {{
+  mainView: {{ hidden: false }},
+  guideView: {{ hidden: true }},
+  guideFeatures: {{ hidden: false }},
+  guideUsage: {{ hidden: true }},
+  guideSubscription: {{ hidden: true }}
+}};
+global.document = {{
+  body: {{ dataset: {{}} }},
+  querySelector: () => null,
+  querySelectorAll: () => []
+}};
+{self._function_source("setLayout")}
+{self._function_source("initializeViewState")}
+{self._function_source("setView")}
+{self._function_source("setGuideTab")}
+
+initializeViewState("?view=workspace");
+const workspace = {{
+  layout: document.body.dataset.layout,
+  view: document.body.dataset.view,
+  mainHidden: els.mainView.hidden,
+  guideHidden: els.guideView.hidden
+}};
+setView("guide");
+const guide = {{ layout: document.body.dataset.layout, view: document.body.dataset.view }};
+setView("main");
+const returned = {{ layout: document.body.dataset.layout, view: document.body.dataset.view }};
+initializeViewState("");
+const popup = {{ layout: document.body.dataset.layout, view: document.body.dataset.view }};
+process.stdout.write(JSON.stringify({{ workspace, guide, returned, popup }}));
+"""
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        observed = json.loads(result.stdout)
+        self.assertEqual(
+            observed["workspace"],
+            {"layout": "workspace", "view": "main", "mainHidden": False, "guideHidden": True},
+        )
+        self.assertEqual(observed["guide"], {"layout": "workspace", "view": "guide"})
+        self.assertEqual(observed["returned"], {"layout": "workspace", "view": "main"})
+        self.assertEqual(observed["popup"], {"layout": "popup", "view": "main"})
 
     def test_plan_values_match_product_contract(self):
         for key, credits, price in (("starter", 60, 19), ("growth", 220, 59), ("scale", 800, 199)):

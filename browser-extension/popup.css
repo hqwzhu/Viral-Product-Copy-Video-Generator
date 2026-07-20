@@ -16,8 +16,14 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   width: 420px;
+  min-width: 380px;
+  max-width: 480px;
   min-height: 620px;
   margin: 0;
   background: var(--bg);
@@ -36,6 +42,12 @@ textarea {
   display: grid;
   gap: 10px;
   padding: 14px;
+}
+
+.workspace-grid,
+.workspace-primary,
+.workspace-secondary {
+  display: contents;
 }
 
 .topbar,
@@ -320,6 +332,60 @@ textarea:focus-visible {
   color: var(--accent);
 }
 
+body[data-layout="workspace"] {
+  width: 100%;
+  min-width: 320px;
+  max-width: none;
+  min-height: 100vh;
+}
+
+body[data-layout="workspace"] .shell {
+  width: 100%;
+  max-width: 1440px;
+  min-width: 0;
+  margin: 0 auto;
+  gap: 16px;
+  padding: 24px;
+}
+
+body[data-layout="workspace"] .topbar {
+  padding: 4px 0 8px;
+}
+
+body[data-layout="workspace"] .product-promise {
+  max-width: 560px;
+  font-size: 12px;
+}
+
+body[data-layout="workspace"] #openWorkspace {
+  display: none;
+}
+
+body[data-layout="workspace"] #mainView,
+body[data-layout="workspace"] .workspace-primary,
+body[data-layout="workspace"] .workspace-secondary,
+body[data-layout="workspace"] .panel {
+  min-width: 0;
+}
+
+body[data-layout="workspace"] .workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+body[data-layout="workspace"] .workspace-primary,
+body[data-layout="workspace"] .workspace-secondary {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+body[data-layout="workspace"] .footer {
+  grid-column: 1 / -1;
+}
+
 .guide-view {
   display: grid;
   gap: 12px;
@@ -450,6 +516,59 @@ textarea:focus-visible {
 
 .guide-billing a {
   color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  body[data-layout="workspace"] .workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-layout="workspace"] .footer {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  body[data-layout="workspace"] .shell {
+    padding: 12px;
+  }
+
+  body[data-layout="workspace"] .topbar,
+  body[data-layout="workspace"] .guide-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body[data-layout="workspace"] .topbar-actions,
+  body[data-layout="workspace"] .button-row {
+    width: 100%;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  body[data-layout="workspace"] .button-row > button,
+  body[data-layout="workspace"] .return-button {
+    width: 100%;
+    min-height: 44px;
+    flex: 1 1 100%;
+  }
+
+  body[data-layout="workspace"] .guide-tabs button {
+    min-height: 44px;
+  }
+
+  body[data-layout="workspace"] .estimate-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-layout="workspace"] .estimate-grid .checkline {
+    grid-column: auto;
+  }
+
+  body[data-layout="workspace"] .footer {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
