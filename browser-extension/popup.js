@@ -84,6 +84,16 @@ const EN_TRANSLATIONS = Object.freeze({
   guidePlanStarter: "Starter",
   guidePlanGrowth: "Growth",
   guidePlanScale: "Scale",
+  guidePlanAudienceLabel: "Audience fit",
+  guidePlanIncludedLabel: "Included usage",
+  guidePlanFreeAudience: "Individuals evaluating the workflow before adopting a paid plan.",
+  guidePlanFreeIncluded: "Includes {credits} ENHE hosted credits for evaluating future hosted capabilities; Hosted Worker is disabled here and local Skill runs are separate.",
+  guidePlanStarterAudience: "Solo creators running occasional product campaigns.",
+  guidePlanStarterIncluded: "Includes {credits} ENHE hosted credits for light future hosted usage; Hosted Worker is disabled here and local Skill runs do not consume them.",
+  guidePlanGrowthAudience: "Active creators or small teams running recurring campaigns.",
+  guidePlanGrowthIncluded: "Includes {credits} ENHE hosted credits for recurring future hosted workflows; Hosted Worker is disabled here and local Skill runs do not consume them.",
+  guidePlanScaleAudience: "Teams managing frequent campaigns across products or platforms.",
+  guidePlanScaleIncluded: "Includes {credits} ENHE hosted credits for future high-volume hosted operations; Hosted Worker is disabled here and local Skill runs do not consume them.",
   guideBillingLinks: "Manage billing on the ENHE website:",
   guideCheckout: "Checkout",
   guideBillingPortal: "Billing portal",
@@ -312,6 +322,16 @@ const ZH_TRANSLATIONS = Object.freeze({
   guidePlanStarter: "入门版",
   guidePlanGrowth: "成长版",
   guidePlanScale: "规模版",
+  guidePlanAudienceLabel: "适合人群",
+  guidePlanIncludedLabel: "包含用量",
+  guidePlanFreeAudience: "准备先体验工作流、再决定是否付费的个人用户。",
+  guidePlanFreeIncluded: "包含 {credits} 点 ENHE 托管额度，用于评估未来托管能力；本版 Hosted Worker 已关闭，本地 Skill 运行与额度分开。",
+  guidePlanStarterAudience: "偶尔开展产品推广的独立创作者。",
+  guidePlanStarterIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来轻量托管需求；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
+  guidePlanGrowthAudience: "持续开展推广的活跃创作者或小型团队。",
+  guidePlanGrowthIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来持续托管工作流；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
+  guidePlanScaleAudience: "需要跨产品或跨平台高频推广的团队。",
+  guidePlanScaleIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来高频托管操作；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
   guideBillingLinks: "请在 ENHE 网站管理账单：",
   guideCheckout: "结算页",
   guideBillingPortal: "账单中心",
@@ -485,6 +505,13 @@ const GUIDE_FEATURES = [
   ["guideFeatureAutomation", "guideFeatureAutomationWhat", "guideFeatureAutomationProblem", "guideFeatureAutomationBenefit", "guideFeatureAutomationUseCase"]
 ];
 
+const GUIDE_PLAN_DETAILS = Object.freeze({
+  free: { label: "guidePlanFree", audience: "guidePlanFreeAudience", included: "guidePlanFreeIncluded" },
+  starter: { label: "guidePlanStarter", audience: "guidePlanStarterAudience", included: "guidePlanStarterIncluded" },
+  growth: { label: "guidePlanGrowth", audience: "guidePlanGrowthAudience", included: "guidePlanGrowthIncluded" },
+  scale: { label: "guidePlanScale", audience: "guidePlanScaleAudience", included: "guidePlanScaleIncluded" }
+});
+
 const COST_PER_CREDIT = 0.35;
 
 const COMMAND_LABELS = {
@@ -590,7 +617,9 @@ els.startHostedRun.addEventListener("click", startHostedRun);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
 els.openGuide.addEventListener("click", () => setView("guide"));
-els.openWorkspace.addEventListener("click", openWorkspace);
+els.openWorkspace.addEventListener("click", () => {
+  openWorkspace().catch(() => {});
+});
 els.guideBack.addEventListener("click", () => setView("main"));
 els.guideTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-guide-tab]");
@@ -719,20 +748,31 @@ function setGuideTab(tabName) {
   });
 }
 
-function openWorkspace() {
+async function openWorkspace() {
   const target = new URL(window.location.href);
   target.search = "";
   target.searchParams.set("view", "workspace");
-  try {
-    if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
-      chrome.tabs.create({ url: target.toString() });
+  const targetUrl = target.toString();
+  if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
+    try {
+      await chrome.tabs.create({ url: targetUrl });
+      return;
+    } catch (error) {
+      openWorkspaceFallback(targetUrl);
       return;
     }
-  } catch (error) {
-    // Fall through to a normal browser tab when the extension API is unavailable.
   }
-  if (typeof window.open === "function") {
-    window.open(target.toString(), "_blank", "noopener,noreferrer");
+  openWorkspaceFallback(targetUrl);
+}
+
+function openWorkspaceFallback(targetUrl) {
+  if (typeof window.open !== "function") {
+    return;
+  }
+  try {
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    // Keep the popup usable when both tab-opening paths are unavailable.
   }
 }
 
@@ -774,18 +814,31 @@ function renderGuideContent() {
     })
   );
 
-  const planLabels = { free: "guidePlanFree", starter: "guidePlanStarter", growth: "guidePlanGrowth", scale: "guidePlanScale" };
   els.guidePlans.replaceChildren(
     ...Object.entries(PLANS).map(([key, plan]) => {
+      const details = GUIDE_PLAN_DETAILS[key];
       const row = document.createElement("div");
       row.className = "plan-row";
+      const summary = document.createElement("div");
+      summary.className = "plan-row-summary";
       const name = document.createElement("strong");
-      name.textContent = t(planLabels[key]);
+      name.textContent = t(details.label);
       const credits = document.createElement("span");
       credits.textContent = t("guidePlanCredits", { credits: plan.credits });
       const price = document.createElement("span");
       price.textContent = t("guidePlanPrice", { price: plan.priceCny });
-      row.append(name, credits, price);
+      summary.append(name, credits, price);
+      const audience = document.createElement("p");
+      audience.className = "plan-audience";
+      const audienceLabel = document.createElement("strong");
+      audienceLabel.textContent = `${t("guidePlanAudienceLabel")}: `;
+      audience.append(audienceLabel, document.createTextNode(t(details.audience)));
+      const included = document.createElement("p");
+      included.className = "plan-included";
+      const includedLabel = document.createElement("strong");
+      includedLabel.textContent = `${t("guidePlanIncludedLabel")}: `;
+      included.append(includedLabel, document.createTextNode(t(details.included, { credits: plan.credits })));
+      row.append(summary, audience, included);
       return row;
     })
   );
