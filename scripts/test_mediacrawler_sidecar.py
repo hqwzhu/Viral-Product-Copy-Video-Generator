@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest import mock
 
 
@@ -224,19 +224,15 @@ class SidecarCommandTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
-    def test_zhihu_phase_hooks_record_detail_and_comment_transitions_once(self) -> None:
-        class FakeTelemetry:
-            def __init__(self) -> None:
-                self.phases: list[str] = []
-
-            def begin(self, phase: str) -> None:
-                self.phases.append(phase)
-
+    def test_zhihu_phase_hooks_record_http_detail_and_comment_transitions_once(self) -> None:
         class FakeManager:
             async def launch_and_connect(self) -> str:
                 return "context"
 
         class FakeClient:
+            async def get_note_by_keyword(self) -> str:
+                return "search"
+
             async def get_root_comments(self) -> str:
                 return "roots"
 
@@ -247,19 +243,75 @@ class BootstrapTests(unittest.TestCase):
             async def get_note_detail(self) -> str:
                 return "detail"
 
-        telemetry = FakeTelemetry()
-        bootstrap.patch_zhihu_phase_telemetry(FakeClient, FakeCrawler, FakeManager, telemetry)
-        asyncio.run(FakeManager().launch_and_connect())
-        asyncio.run(FakeCrawler().get_note_detail())
-        client = FakeClient()
-        asyncio.run(client.get_root_comments())
-        asyncio.run(client.get_root_comments())
-        asyncio.run(client.get_child_comments())
+        with tempfile.TemporaryDirectory() as temp:
+            telemetry_path = Path(temp) / "phase-telemetry.json"
+            telemetry = bootstrap.PhaseTelemetry(telemetry_path)
+            bootstrap.patch_zhihu_phase_telemetry(FakeClient, FakeCrawler, FakeManager, telemetry)
+            asyncio.run(FakeManager().launch_and_connect())
+            client = FakeClient()
+            asyncio.run(client.get_note_by_keyword())
+            asyncio.run(FakeCrawler().get_note_detail())
+            asyncio.run(client.get_root_comments())
+            asyncio.run(client.get_root_comments())
+            asyncio.run(client.get_child_comments())
+            asyncio.run(client.get_child_comments())
+            phases = json.loads(telemetry_path.read_text(encoding="utf-8"))["phases"]
 
         self.assertEqual(
-            telemetry.phases,
-            ["cdp_initialization", "detail_content", "root_comments", "root_comments", "sub_comments"],
+            [item["phase"] for item in phases],
+            ["cdp_initialization", "upstream_http_api", "detail_content", "root_comments", "sub_comments"],
         )
+        for item in phases:
+            self.assertEqual(set(item), {"phase", "startedAt", "durationSeconds", "status", "reason"})
+
+    def test_bootstrap_main_only_installs_zhihu_telemetry_hooks(self) -> None:
+        class FakeManager:
+            async def cleanup(self, force: bool = False) -> None:
+                return None
+
+        async def upstream_main() -> None:
+            return None
+
+        async def upstream_cleanup() -> None:
+            return None
+
+        cmd_arg = ModuleType("cmd_arg")
+        cmd_arg.parse_cmd = lambda *args, **kwargs: None
+        config = ModuleType("config")
+        config.CDP_CONNECT_EXISTING = False
+        modules = {
+            "cmd_arg": cmd_arg,
+            "config": config,
+            "media_platform.douyin.client": SimpleNamespace(DouYinClient=type("DouYinClient", (), {})),
+            "media_platform.xhs.client": SimpleNamespace(XiaoHongShuClient=type("XiaoHongShuClient", (), {})),
+            "media_platform.zhihu.client": SimpleNamespace(ZhiHuClient=type("ZhiHuClient", (), {})),
+            "media_platform.zhihu.core": SimpleNamespace(ZhihuCrawler=type("ZhihuCrawler", (), {})),
+            "tools.cdp_browser": SimpleNamespace(CDPBrowserManager=FakeManager),
+            "main": SimpleNamespace(main=upstream_main, async_cleanup=upstream_cleanup),
+        }
+        no_op_patchers = [
+            "patch_safe_cdp_cleanup",
+            "patch_douyin_creator_limit",
+            "patch_zhihu_creator_limit",
+            "patch_zhihu_search_limit",
+            "patch_xiaohongshu_search_limit",
+            "patch_douyin_search_limit",
+            "patch_xiaohongshu_comment_limit",
+            "patch_douyin_comment_limit",
+            "patch_zhihu_comment_limit",
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp)
+            (checkout / "main.py").write_text("", encoding="utf-8")
+            with (
+                mock.patch.dict(sys.modules, modules),
+                mock.patch.multiple(bootstrap, **{name: mock.DEFAULT for name in no_op_patchers}),
+                mock.patch.object(bootstrap, "patch_zhihu_phase_telemetry") as install_hooks,
+            ):
+                for platform in ("xhs", "dy", "zhihu"):
+                    bootstrap.main(["--checkout", str(checkout), "--", "--platform", platform])
+
+        self.assertEqual(install_hooks.call_count, 1)
 
     def test_bootstrap_parser_accepts_an_internal_telemetry_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1609,6 +1661,88 @@ class CliTests(unittest.TestCase):
         self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "error")
         self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
         self.assertNotIn(b"private-user-id", manifest_bytes)
+
+    def test_zhihu_ready_and_timeout_manifests_preserve_terminal_telemetry_and_cleanup(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        original_run_sidecar = sidecar.run_sidecar
+
+        def ready_runner(install: sidecar.SidecarInstall, request: sidecar.CollectRequest, run_dir: Path, **kwargs: object) -> sidecar.RunResult:
+            def executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+                raw_dir = Path(command[command.index("--save_data_path") + 1])
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                (raw_dir / "row.jsonl").write_text("{}\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+            kwargs.pop("raw_consumer", None)
+            return original_run_sidecar(
+                install,
+                request,
+                run_dir,
+                executor=executor,
+                raw_consumer=lambda _: {"status": "ready", "counts": platform_data_manager.empty_counts()},
+                **kwargs,
+            )
+
+        def timeout_runner(install: sidecar.SidecarInstall, request: sidecar.CollectRequest, run_dir: Path, **kwargs: object) -> sidecar.RunResult:
+            def executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+                telemetry_path = Path(command[command.index("--telemetry-path") + 1])
+                telemetry_path.write_text(
+                    json.dumps(
+                        {
+                            "schemaVersion": 1,
+                            "phases": [
+                                {
+                                    "phase": "cdp_initialization",
+                                    "startedAt": "2026-07-22T00:00:00Z",
+                                    "durationSeconds": None,
+                                    "status": "started",
+                                    "reason": "",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                raise subprocess.TimeoutExpired(command, timeout)
+
+            return original_run_sidecar(install, request, run_dir, executor=executor, **kwargs)
+
+        for label, runner, expected_status, expected_phase, expected_terminal in (
+            ("ready", ready_runner, "ready", "normalization", "success"),
+            ("timeout", timeout_runner, "error", "cdp_initialization", "timeout"),
+        ):
+            with self.subTest(label=label):
+                with (
+                    mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+                    mock.patch.object(platform_data_manager.mediacrawler_sidecar, "run_sidecar", side_effect=runner),
+                ):
+                    report = self.run_main(
+                        [
+                            "collect",
+                            "--platform",
+                            "zhihu",
+                            "--mode",
+                            "search",
+                            "--query",
+                            "query-sentinel",
+                            "--sidecar-root",
+                            str(sidecar_root),
+                            "--out-dir",
+                            str(out_dir),
+                        ]
+                    )
+                    run_dir = Path(report["runDir"])
+                    manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+                    self.assertEqual(manifest["status"], expected_status)
+                    self.assertEqual(manifest["telemetry"]["lastPhase"], expected_phase)
+                    self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], expected_terminal)
+                    self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], expected_terminal)
+                    self.assertNotIn("query-sentinel", json.dumps(manifest["telemetry"]))
+                    self.assertNotIn("Cookie", json.dumps(manifest["telemetry"]))
+                    self.assertFalse((run_dir / "phase-telemetry.json").exists())
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"
