@@ -875,6 +875,15 @@ class CliTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return platform_data_manager.main(argv)
 
+    def assert_creator_target_is_absent(self, manifest_bytes: bytes, target: str) -> None:
+        manifest = json.loads(manifest_bytes)
+        self.assertEqual(manifest["target"], "")
+        self.assertTrue(manifest["targetRedacted"])
+        self.assertEqual(manifest["targetType"], "creator")
+        self.assertFalse(manifest["redaction"]["creatorTargetPersisted"])
+        for marker in (target, "/user/profile/creator-privacy-sentinel-7349", "creator-privacy-sentinel-7349"):
+            self.assertNotIn(marker.encode("utf-8"), manifest_bytes)
+
     def test_collect_parser_applies_safe_defaults_and_rejects_cookie_arguments(self) -> None:
         args = platform_data_manager.parse_args(
             ["collect", "--platform", "xiaohongshu", "--mode", "search", "--query", "AI 工具"]
@@ -961,6 +970,83 @@ class CliTests(unittest.TestCase):
         self.assertFalse((run_dir / "raw").exists())
         self.assertTrue(Path(manifest["artifacts"]["viralContentLibrary"]).exists())
         self.assertTrue(Path(manifest["artifacts"]["commentEvidence"]).exists())
+
+    def test_creator_fixture_manifest_never_persists_target_at_initial_or_ready_write(self) -> None:
+        out_dir = self.root / "promotion-output"
+        target = "https://www.xiaohongshu.com/user/profile/creator-privacy-sentinel-7349?xsec_token=not-for-output"
+        manifest_writes: list[bytes] = []
+        original_write_manifest = platform_data_manager.write_manifest
+
+        def capture_manifest_write(run_dir: Path, manifest: dict[str, object]) -> None:
+            original_write_manifest(run_dir, manifest)
+            manifest_writes.append((run_dir / "run-manifest.json").read_bytes())
+
+        with mock.patch.object(platform_data_manager, "write_manifest", side_effect=capture_manifest_write):
+            report = self.run_main(
+                [
+                    "collect",
+                    "--platform",
+                    "xiaohongshu",
+                    "--mode",
+                    "creator",
+                    "--target",
+                    target,
+                    "--fixture-dir",
+                    str(FIXTURES),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
+
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(len(manifest_writes), 2)
+        for manifest_bytes in manifest_writes:
+            self.assert_creator_target_is_absent(manifest_bytes, target)
+
+    def test_creator_timeout_manifest_never_persists_target_at_initial_or_final_write(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        target = "creator-privacy-sentinel-7349"
+        manifest_writes: list[bytes] = []
+        original_write_manifest = platform_data_manager.write_manifest
+
+        def capture_manifest_write(run_dir: Path, manifest: dict[str, object]) -> None:
+            original_write_manifest(run_dir, manifest)
+            manifest_writes.append((run_dir / "run-manifest.json").read_bytes())
+
+        with (
+            mock.patch.object(platform_data_manager, "write_manifest", side_effect=capture_manifest_write),
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+            mock.patch.object(
+                platform_data_manager.mediacrawler_sidecar,
+                "run_sidecar",
+                return_value=sidecar.RunResult(status="error", reason="timeout"),
+            ) as run_sidecar,
+        ):
+            report = self.run_main(
+                [
+                    "collect",
+                    "--platform",
+                    "douyin",
+                    "--mode",
+                    "creator",
+                    "--target",
+                    target,
+                    "--sidecar-root",
+                    str(sidecar_root),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
+
+        self.assertEqual(report["status"], "error")
+        self.assertEqual(report["reason"], "timeout")
+        self.assertEqual(run_sidecar.call_args.args[1].target, target)
+        self.assertEqual(len(manifest_writes), 2)
+        for manifest_bytes in manifest_writes:
+            self.assert_creator_target_is_absent(manifest_bytes, target)
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"
