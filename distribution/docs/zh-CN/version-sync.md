@@ -4,7 +4,7 @@
 
 公开仓库/Skill/扩展源码版本：0.5.3
 
-Chrome 商店当前公开版本（发布前）：0.5.2
+已发布的 Chrome 商店版本：0.5.3
 
 非支付命令引用：11/11 已在随包 Skill 中存在
 
@@ -32,7 +32,7 @@ Hosted Worker：关闭
 
 ## 商店与源码版本关系
 
-Chrome 商店条目 https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl 在本次公开发行准备阶段显示公开版本 `0.5.2`。公开仓库和发行候选使用 `0.5.3`；只有完成打包、商店提交和平台审核后，商店用户才会获得对应更新。文档不会把尚未完成的商店审核描述为已发布。
+已发布的 Chrome 商店条目 https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl、公开仓库和发行包均使用版本 `0.5.3`。
 
 ## 同步结论不包含什么
 

@@ -24,7 +24,7 @@ Use this path when you need only current-page task creation and command generati
 3. Open a public product page. Complete any login or page preparation yourself, then explicitly click the extension icon.
 4. Click "Use current tab," choose the platforms, workflow depth, and command type, then copy the command to run in the local repository.
 
-The current public store version before update is `0.5.2`; the public repository source and release package are `0.5.3`. After installation, use the version displayed by the extension and the [version synchronization guide](version-sync.md) as the reference.
+The published Chrome Web Store version, public repository source, and release package are `0.5.3`. After installation, use the version displayed by the extension and the [version synchronization guide](version-sync.md) as the reference.
 
 ## Path 2: Unpacked extension
 

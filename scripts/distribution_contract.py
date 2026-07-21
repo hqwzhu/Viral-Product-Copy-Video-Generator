@@ -11,8 +11,12 @@ from pathlib import Path
 
 
 VERSION = "0.5.3"
-PUBLISHED_STORE_VERSION = "0.5.2"
+PUBLISHED_STORE_VERSION = "0.5.3"
 STORE_ITEM_ID = "dloklkbnmoigemnfigbkibogmgbieppl"
+STORE_LISTING_URL = (
+    "https://chromewebstore.google.com/detail/enhe-promotion-manager/"
+    f"{STORE_ITEM_ID}"
+)
 PUBLIC_REPOSITORY = "hqwzhu/enhe-promotion-manager"
 PRODUCT_EN = "ENHE Product Promo Maker"
 PRODUCT_ZH = "ENHE 产品推广素材生成器"

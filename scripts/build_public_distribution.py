@@ -149,7 +149,8 @@ def _write_manifests(target: Path, source_commit: str) -> None:
                 "itemId": contract.STORE_ITEM_ID,
                 "publishedVersion": contract.PUBLISHED_STORE_VERSION,
                 "submittedVersion": None,
-                "status": "not_submitted",
+                "status": "published",
+                "listingUrl": contract.STORE_LISTING_URL,
             },
             "syncAudit": {
                 "scope": "non-payment extension commands to shipped Skill scripts",

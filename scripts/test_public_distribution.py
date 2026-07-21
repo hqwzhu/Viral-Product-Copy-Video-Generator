@@ -13,11 +13,14 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from scripts import build_public_distribution as builder
 from scripts import distribution_contract as contract
 
 
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_NAMES = {
     "douyin-comments.jsonl",
     "douyin-contents.jsonl",
@@ -491,7 +494,6 @@ class DistributionContractTest(unittest.TestCase):
             "extension-guide.md": {
                 "zh": (
                     contract.STORE_ITEM_ID,
-                    "`0.5.2`",
                     "`0.5.3`",
                     "捕获必须由用户发起",
                     "Chrome 登录配置",
@@ -503,7 +505,6 @@ class DistributionContractTest(unittest.TestCase):
                 ),
                 "en": (
                     contract.STORE_ITEM_ID,
-                    "`0.5.2`",
                     "`0.5.3`",
                     "Capture must be initiated by the user",
                     "Chrome login profiles",
@@ -617,7 +618,7 @@ class DistributionContractTest(unittest.TestCase):
             "version-sync.md": {
                 "zh": (
                     "公开仓库/Skill/扩展源码版本：0.5.3",
-                    "Chrome 商店当前公开版本（发布前）：0.5.2",
+                    "已发布的 Chrome 商店版本：0.5.3",
                     "非支付命令引用：11/11 已在随包 Skill 中存在",
                     "支付与订阅：不纳入功能同步结论，但扩展原有 UI 和 billing-contract.json 保留",
                     "Hosted Worker：关闭",
@@ -626,7 +627,7 @@ class DistributionContractTest(unittest.TestCase):
                 ),
                 "en": (
                     "Public repository / Skill / extension source version: 0.5.3",
-                    "Current public Chrome Web Store version (before update): 0.5.2",
+                    "Published Chrome Web Store version: 0.5.3",
                     "Non-payment command references: 11/11 exist in the bundled Skill",
                     "Payment and subscriptions: excluded from the feature parity conclusion; the existing extension UI and billing-contract.json remain included",
                     "Hosted Worker: disabled",
@@ -694,14 +695,14 @@ class DistributionContractTest(unittest.TestCase):
         )
         for fact in (
             "公开仓库/Skill/扩展源码版本：0.5.3",
-            "Chrome 商店当前公开版本（发布前）：0.5.2",
+            "已发布的 Chrome 商店版本：0.5.3",
             "非支付命令引用：11/11 已在随包 Skill 中存在",
             "Hosted Worker：关闭",
         ):
             self.assertIn(fact, zh_corpus)
         for fact in (
             "Public repository / Skill / extension source version: 0.5.3",
-            "Current public Chrome Web Store version (before update): 0.5.2",
+            "Published Chrome Web Store version: 0.5.3",
             "Non-payment command references: 11/11 exist in the bundled Skill",
             "Hosted Worker: disabled",
         ):
@@ -982,6 +983,8 @@ class DistributionContractTest(unittest.TestCase):
             self.assertTrue((skill / "SKILL.md").is_file())
             self.assertTrue((skill / "requirements-youtube.txt").is_file())
             self.assertTrue((extension / "manifest.json").is_file())
+            self.assertTrue((target / ".github" / "workflows" / "tests.yml").is_file())
+            self.assertTrue((target / "requirements-test.txt").is_file())
             self.assertFalse((target / "backend").exists())
             self.assertFalse((target / "deploy").exists())
             self.assertEqual(contract.scan_forbidden(target), [])
@@ -1019,6 +1022,9 @@ class DistributionContractTest(unittest.TestCase):
             )
             self.assertEqual(release["version"], "0.5.3")
             self.assertEqual(release["sourceCommit"], "test-source-commit")
+            self.assertEqual(release["chromeWebStore"]["publishedVersion"], "0.5.3")
+            self.assertEqual(release["chromeWebStore"]["status"], "published")
+            self.assertEqual(release["chromeWebStore"]["listingUrl"], contract.STORE_LISTING_URL)
             self.assertEqual(release["syncAudit"]["status"], "ready")
             self.assertEqual(
                 release["syncAudit"]["commands"],
@@ -1070,7 +1076,7 @@ class DistributionContractTest(unittest.TestCase):
 
     def test_public_identity_constants_are_exact(self) -> None:
         self.assertEqual(contract.VERSION, "0.5.3")
-        self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.2")
+        self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.3")
         self.assertEqual(contract.STORE_ITEM_ID, "dloklkbnmoigemnfigbkibogmgbieppl")
         self.assertEqual(contract.PUBLIC_REPOSITORY, "hqwzhu/enhe-promotion-manager")
         self.assertEqual(contract.PRODUCT_EN, "ENHE Product Promo Maker")
@@ -1082,6 +1088,58 @@ class DistributionContractTest(unittest.TestCase):
         self.assertEqual(contract.PRODUCT_PROMISE_ZH, "把产品网页变成推广文案、视频脚本和发布素材。")
         self.assertEqual(contract.NON_PAYMENT_COMMANDS, EXPECTED_COMMANDS)
         self.assertEqual(tuple(sorted(contract.NON_PAYMENT_COMMANDS)), contract.NON_PAYMENT_COMMANDS)
+
+    def test_public_distribution_ci_and_store_contract_are_exact(self) -> None:
+        distribution = ROOT / "distribution"
+        listing_url = (
+            "https://chromewebstore.google.com/detail/enhe-promotion-manager/"
+            "dloklkbnmoigemnfigbkibogmgbieppl"
+        )
+        gitignore = (distribution / ".gitignore").read_text(encoding="utf-8").splitlines()
+        for rule in (".env", ".env.*", "!.env.example"):
+            self.assertIn(rule, gitignore)
+        self.assertFalse(
+            any(
+                path.name != ".env.example"
+                for path in distribution.rglob(".env*")
+                if path.is_file()
+            )
+        )
+        workflow_path = distribution / ".github" / "workflows" / "tests.yml"
+        self.assertTrue(workflow_path.is_file())
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for required in (
+            "push:",
+            "pull_request:",
+            "windows-latest",
+            "ubuntu-latest",
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+            "python-version: '3.12'",
+            "pip install -r requirements-test.txt",
+            "python scripts/verify_distribution.py",
+            "python -m unittest discover -s tests -v",
+        ):
+            self.assertIn(required, workflow)
+        self.assertTrue((distribution / "requirements-test.txt").is_file())
+        self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.3")
+        self.assertEqual(contract.STORE_ITEM_ID, "dloklkbnmoigemnfigbkibogmgbieppl")
+        for path in (
+            distribution / "README.md",
+            distribution / "README.en.md",
+            distribution / "docs" / "zh-CN" / "extension-guide.md",
+            distribution / "docs" / "zh-CN" / "installation.md",
+            distribution / "docs" / "zh-CN" / "version-sync.md",
+            distribution / "docs" / "en" / "extension-guide.md",
+            distribution / "docs" / "en" / "installation.md",
+            distribution / "docs" / "en" / "version-sync.md",
+        ):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(contract.PRODUCT_EN if path.name == "README.en.md" else "0.5.3", text)
+            self.assertIn(listing_url, text)
+            self.assertNotIn("0.5.2", text)
+            self.assertNotIn("pending_review", text)
+            self.assertNotIn("not_submitted", text)
 
     def test_extension_commands_match_the_approved_non_payment_contract(self) -> None:
         popup = (ROOT / "browser-extension" / "popup.js").read_text(encoding="utf-8")

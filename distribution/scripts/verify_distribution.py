@@ -40,6 +40,9 @@ REQUIRED_FILES = (
     "NOTICE.md",
     "SECURITY.md",
     "CHANGELOG.md",
+    ".gitignore",
+    "requirements-test.txt",
+    ".github/workflows/tests.yml",
     "release-manifest.json",
     "skill/viral-product-copy-video-generator/SKILL.md",
     "skill/viral-product-copy-video-generator/requirements-youtube.txt",
@@ -86,6 +89,19 @@ EXPECTED_SKILL_ARCHIVE = f"enhe-product-promo-maker-skill-{VERSION}.zip"
 EXPECTED_EXTENSION_ARCHIVE = f"enhe-promotion-manager-extension-{VERSION}.zip"
 EXPECTED_VALIDATOR_COMMANDS = (
     f"python scripts/build_release.py --validated-extension-zip dist/validated/enhe-promotion-manager-{VERSION}.zip",
+    "python scripts/verify_distribution.py",
+    "python -m unittest discover -s tests -v",
+)
+EXPECTED_GITIGNORE_RULES = (".env", ".env.*", "!.env.example")
+EXPECTED_CI_WORKFLOW_MARKERS = (
+    "push:",
+    "pull_request:",
+    "windows-latest",
+    "ubuntu-latest",
+    "actions/checkout@v4",
+    "actions/setup-python@v5",
+    "python-version: '3.12'",
+    "pip install -r requirements-test.txt",
     "python scripts/verify_distribution.py",
     "python -m unittest discover -s tests -v",
 )
@@ -136,6 +152,22 @@ def verify_required_files(root: Path) -> list[str]:
     ]
 
 
+def verify_ci_contract(root: Path) -> list[str]:
+    errors: list[str] = []
+    gitignore = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    for rule in EXPECTED_GITIGNORE_RULES:
+        if rule not in gitignore:
+            errors.append(f".gitignore is missing required rule: {rule}")
+    for path in root.rglob(".env*"):
+        if path.is_file() and path.name != ".env.example":
+            errors.append(f"environment file is not allowed in public distribution: {path.relative_to(root).as_posix()}")
+    workflow = (root / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    for marker in EXPECTED_CI_WORKFLOW_MARKERS:
+        if marker not in workflow:
+            errors.append(f"GitHub Actions workflow is missing: {marker}")
+    return errors
+
+
 def verify_identity_and_links(root: Path, release: dict) -> list[str]:
     errors: list[str] = []
     zh = (root / "README.md").read_text(encoding="utf-8")
@@ -167,7 +199,11 @@ def verify_identity_and_links(root: Path, release: dict) -> list[str]:
         errors.append("Chrome Web Store item ID is incorrect")
     if store.get("publishedVersion") != contract.PUBLISHED_STORE_VERSION:
         errors.append("Chrome Web Store published version is incorrect")
-    if store.get("submittedVersion") is not None or store.get("status") != "not_submitted":
+    if (
+        store.get("submittedVersion") is not None
+        or store.get("status") != "published"
+        or store.get("listingUrl") != contract.STORE_LISTING_URL
+    ):
         errors.append("Chrome Web Store submission state is incorrect")
     if release.get("skillArchive") != EXPECTED_SKILL_ARCHIVE:
         errors.append("release Skill archive name is incorrect")
@@ -503,6 +539,7 @@ def validate(root: Path, check_checksums: bool = True) -> list[str]:
         elif verification_status not in {"built", "ready"}:
             errors.append("release verification status is not built or ready")
         errors.extend(verify_identity_and_links(root, release))
+        errors.extend(verify_ci_contract(root))
         errors.extend(verify_versions(root, release))
         errors.extend(verify_extension_boundary(root))
         errors.extend(verify_non_payment_sync(root, release))

@@ -89,6 +89,36 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
             content = "Hosted Worker: disabled\n"
         write_text(root, relative, content)
 
+    write_text(root, ".gitignore", ".env\n.env.*\n!.env.example\ndist/\n")
+    write_text(root, "requirements-test.txt", "# stdlib-only distribution tests\n")
+    write_text(
+        root,
+        ".github/workflows/tests.yml",
+        "\n".join(
+            (
+                "name: tests",
+                "on:",
+                "  push:",
+                "  pull_request:",
+                "jobs:",
+                "  test:",
+                "    strategy:",
+                "      matrix:",
+                "        os: [windows-latest, ubuntu-latest]",
+                "    runs-on: ${{ matrix.os }}",
+                "    steps:",
+                "      - uses: actions/checkout@v4",
+                "      - uses: actions/setup-python@v5",
+                "        with:",
+                "          python-version: '3.12'",
+                "      - run: python -m pip install -r requirements-test.txt",
+                "      - run: python scripts/verify_distribution.py",
+                "      - run: python -m unittest discover -s tests -v",
+            )
+            + ("",)
+        ),
+    )
+
     skill = "skill/viral-product-copy-video-generator"
     write_text(root, f"{skill}/SKILL.md", "# Synthetic Skill\n")
     write_text(root, f"{skill}/requirements-youtube.txt", "requests==2.32.0\n")
@@ -164,7 +194,8 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
                 "itemId": contract.STORE_ITEM_ID,
                 "publishedVersion": contract.PUBLISHED_STORE_VERSION,
                 "submittedVersion": None,
-                "status": "not_submitted",
+                "status": "published",
+                "listingUrl": store_url,
             },
             "syncAudit": {
                 "scope": "non-payment extension commands to shipped Skill scripts",
@@ -196,6 +227,21 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
 
 
 class PublicDistributionTest(unittest.TestCase):
+    def test_ci_and_store_contract_reject_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = create_public_repository(Path(temp))
+            self.assertEqual(verify_distribution.verify_required_files(root), [])
+            self.assertTrue(hasattr(verify_distribution, "verify_ci_contract"))
+            self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+            self.assertEqual(
+                verify_distribution.verify_identity_and_links(
+                    root, verify_distribution.read_json(root / "release-manifest.json")
+                ),
+                [],
+            )
+            write_text(root, ".gitignore", "dist/\n")
+            self.assertTrue(verify_distribution.verify_ci_contract(root))
+
     def test_release_rolls_back_existing_publication_after_prevalidation_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

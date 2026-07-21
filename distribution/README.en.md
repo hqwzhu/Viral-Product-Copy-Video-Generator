@@ -128,7 +128,7 @@ Research uses only public, browser-visible, officially authorized, or user-provi
 ## Current version and downloads
 
 - Public repository, Skill, and extension source: `0.5.3`
-- Current public Chrome Web Store version before this update: `0.5.2`
+- Current public Chrome Web Store version: `0.5.3` (published)
 - [Download Skill v0.5.3](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-product-promo-maker-skill-0.5.3.zip)
 - [Download Chrome extension v0.5.3](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-promotion-manager-extension-0.5.3.zip)
 - [View all GitHub Releases](https://github.com/hqwzhu/enhe-promotion-manager/releases)
