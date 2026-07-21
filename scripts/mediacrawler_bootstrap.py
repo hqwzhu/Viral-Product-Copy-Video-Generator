@@ -47,6 +47,52 @@ def patch_zhihu_search_limit(client_class: type[Any], requested_max_contents: in
     client_class.get_note_by_keyword = limited_get_note_by_keyword
 
 
+def patch_douyin_creator_limit(client_class: type[Any], requested_max_contents: int) -> None:
+    limit = max(1, requested_max_contents)
+
+    async def limited_get_all_user_aweme_posts(
+        self: Any,
+        sec_user_id: str,
+        callback: Any = None,
+    ) -> list[Any]:
+        posts_has_more = 1
+        max_cursor = ""
+        result: list[Any] = []
+        while posts_has_more == 1 and len(result) < limit:
+            response = await self.get_user_aweme_posts(sec_user_id, max_cursor)
+            posts_has_more = response.get("has_more", 0)
+            max_cursor = response.get("max_cursor")
+            rows = list(response.get("aweme_list") or [])[: limit - len(result)]
+            if callback:
+                await callback(rows)
+            result.extend(rows)
+            if not rows:
+                break
+        return result
+
+    client_class.get_all_user_aweme_posts = limited_get_all_user_aweme_posts
+
+
+def patch_zhihu_creator_limit(client_class: type[Any], requested_max_contents: int) -> None:
+    original = client_class.get_creator_answers
+    limit = max(1, requested_max_contents)
+
+    async def limited_get_creator_answers(self: Any, url_token: str, offset: int, page_limit: int) -> Any:
+        response = await original(self, url_token, offset, min(page_limit, limit))
+        if not isinstance(response, dict):
+            return response
+        result = dict(response)
+        rows = result.get("data")
+        if isinstance(rows, list):
+            result["data"] = rows[:limit]
+        paging = dict(result.get("paging") or {})
+        paging["is_end"] = True
+        result["paging"] = paging
+        return result
+
+    client_class.get_creator_answers = limited_get_creator_answers
+
+
 def apply_xiaohongshu_detail_context(config: Any, parsed: Any, query: str, target_id: str) -> None:
     if (
         getattr(parsed, "platform", "") not in {"xhs", "xiaohongshu"}
@@ -127,12 +173,15 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     import cmd_arg  # type: ignore[import-not-found]
     import config  # type: ignore[import-not-found]
+    from media_platform.douyin.client import DouYinClient  # type: ignore[import-not-found]
     from media_platform.xhs.client import XiaoHongShuClient  # type: ignore[import-not-found]
     from media_platform.zhihu.client import ZhiHuClient  # type: ignore[import-not-found]
     from tools.cdp_browser import CDPBrowserManager  # type: ignore[import-not-found]
 
     apply_cdp_port_override(config, os.environ.get("ENHE_MEDIACRAWLER_CDP_PORT"))
     patch_safe_cdp_cleanup(config, CDPBrowserManager)
+    patch_douyin_creator_limit(DouYinClient, overrides.requested_max_contents)
+    patch_zhihu_creator_limit(ZhiHuClient, overrides.requested_max_contents)
     patch_zhihu_search_limit(ZhiHuClient, overrides.requested_max_contents)
     if overrides.xhs_detail_query and overrides.xhs_detail_target:
         patch_xiaohongshu_detail_search(XiaoHongShuClient, overrides.xhs_detail_target)

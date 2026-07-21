@@ -264,6 +264,91 @@ class BootstrapTests(unittest.TestCase):
         rows = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI 内容生产"))
         self.assertEqual([item["content_id"] for item in rows], ["answer-0", "answer-1", "answer-2"])
 
+    def test_douyin_creator_limit_stops_pagination_before_callbacks(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_creator_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.page_calls = 0
+
+            async def get_user_aweme_posts(self, sec_user_id: str, max_cursor: str) -> dict[str, object]:
+                start = self.page_calls * 2
+                self.page_calls += 1
+                return {
+                    "has_more": 1,
+                    "max_cursor": str(self.page_calls),
+                    "aweme_list": [{"aweme_id": f"video-{index}"} for index in range(start, start + 2)],
+                }
+
+            async def get_all_user_aweme_posts(self, sec_user_id: str, callback: object = None) -> list[dict[str, str]]:
+                raise AssertionError("the unbounded upstream implementation must be replaced")
+
+        callback_batches: list[list[str]] = []
+
+        async def callback(rows: list[dict[str, str]]) -> None:
+            callback_batches.append([row["aweme_id"] for row in rows])
+
+        patcher(FakeClient, 3)
+        client = FakeClient()
+        rows = asyncio.run(client.get_all_user_aweme_posts("creator", callback=callback))
+
+        self.assertEqual([row["aweme_id"] for row in rows], ["video-0", "video-1", "video-2"])
+        self.assertEqual(callback_batches, [["video-0", "video-1"], ["video-2"]])
+        self.assertEqual(client.page_calls, 2)
+
+    def test_zhihu_creator_limit_stops_after_the_requested_first_page(self) -> None:
+        patcher = getattr(bootstrap, "patch_zhihu_creator_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeExtractor:
+            def extract_content_list_from_creator(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+                return rows
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.page_calls = 0
+                self._extractor = FakeExtractor()
+
+            async def get_creator_answers(self, url_token: str, offset: int, limit: int) -> dict[str, object]:
+                self.page_calls += 1
+                return {
+                    "paging": {"is_end": False},
+                    "data": [{"content_id": f"answer-{index}"} for index in range(20)],
+                }
+
+            async def get_all_anwser_by_creator(
+                self,
+                url_token: str,
+                crawl_interval: float = 1.0,
+                callback: object = None,
+            ) -> list[dict[str, str]]:
+                rows: list[dict[str, str]] = []
+                offset = 0
+                is_end = False
+                while not is_end:
+                    response = await self.get_creator_answers(url_token, offset, 20)
+                    is_end = bool(response["paging"]["is_end"])
+                    page_rows = self._extractor.extract_content_list_from_creator(response["data"])
+                    if callback:
+                        await callback(page_rows)
+                    rows.extend(page_rows)
+                    offset += 20
+                return rows
+
+        callback_batches: list[list[str]] = []
+
+        async def callback(rows: list[dict[str, str]]) -> None:
+            callback_batches.append([row["content_id"] for row in rows])
+
+        patcher(FakeClient, 3)
+        client = FakeClient()
+        rows = asyncio.run(client.get_all_anwser_by_creator("creator", callback=callback))
+
+        self.assertEqual([row["content_id"] for row in rows], ["answer-0", "answer-1", "answer-2"])
+        self.assertEqual(callback_batches, [["answer-0", "answer-1", "answer-2"]])
+        self.assertEqual(client.page_calls, 1)
+
     def test_xiaohongshu_detail_context_switches_to_filtered_search(self) -> None:
         config = SimpleNamespace(CRAWLER_TYPE="detail", KEYWORDS="")
         parsed = SimpleNamespace(platform="xhs", type="detail")
