@@ -956,6 +956,107 @@ class SidecarRuntimeTests(unittest.TestCase):
         self.assertFalse((self.run_dir / "raw").exists())
         self.assertFalse(sidecar.lock_path(self.install).exists())
 
+    def test_acquire_lock_removes_created_file_and_closes_descriptor_when_write_fails(self) -> None:
+        opened_descriptors: list[int] = []
+        real_open = sidecar.os.open
+
+        class BrokenStream:
+            def __init__(self, descriptor: int) -> None:
+                self.descriptor = descriptor
+
+            def __enter__(self) -> BrokenStream:
+                return self
+
+            def __exit__(self, *args: object) -> bool:
+                return False
+
+            def write(self, value: str) -> None:
+                raise OSError("lock write denied")
+
+            def close(self) -> None:
+                sidecar.os.close(self.descriptor)
+
+        def tracked_open(path: Path, flags: int) -> int:
+            descriptor = real_open(path, flags)
+            opened_descriptors.append(descriptor)
+            return descriptor
+
+        with (
+            mock.patch.object(sidecar.os, "open", side_effect=tracked_open),
+            mock.patch.object(sidecar.os, "fdopen", side_effect=lambda descriptor, *args, **kwargs: BrokenStream(descriptor)),
+            self.assertRaises(OSError),
+        ):
+            sidecar.acquire_lock(self.install)
+
+        self.assertEqual(len(opened_descriptors), 1)
+        try:
+            self.assertFalse(sidecar.lock_path(self.install).exists())
+            with self.assertRaises(OSError):
+                sidecar.os.fstat(opened_descriptors[0])
+        finally:
+            try:
+                sidecar.os.close(opened_descriptors[0])
+            except OSError:
+                pass
+            sidecar.lock_path(self.install).unlink(missing_ok=True)
+
+    def test_runner_reports_cleanup_error_when_raw_delete_permanently_fails(self) -> None:
+        sensitive_error = f"cannot delete {self.root / 'private-raw-path'}"
+        real_rmtree = sidecar.shutil.rmtree
+
+        def success_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raw_dir = Path(command[command.index("--save_data_path") + 1])
+            (raw_dir / "row.jsonl").write_text("{}\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        def blocked_rmtree(path: Path, *args: object, **kwargs: object) -> None:
+            if Path(path) == self.run_dir / "raw":
+                raise PermissionError(sensitive_error)
+            real_rmtree(path, *args, **kwargs)
+
+        with mock.patch.object(sidecar.shutil, "rmtree", side_effect=blocked_rmtree) as remove_raw:
+            result = sidecar.run_sidecar(
+                self.install,
+                self.zhihu_request,
+                self.run_dir,
+                executor=success_executor,
+                raw_consumer=lambda _: {"status": "ready"},
+            )
+
+        self.assertEqual(remove_raw.call_count, 3)
+        self.assertEqual(result.status, "cleanup_error")
+        self.assertEqual(result.reason, "cleanup_error")
+        self.assertEqual(result.warning, "cleanup_incomplete")
+        self.assertNotIn(sensitive_error, json.dumps(vars(result), default=str))
+        self.assertTrue((self.run_dir / "raw").exists())
+        self.assertFalse(sidecar.lock_path(self.install).exists())
+
+    def test_runner_reports_cleanup_error_when_lock_delete_permanently_fails(self) -> None:
+        sensitive_error = f"cannot delete {self.root / 'private-lock-path'}"
+
+        def success_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raw_dir = Path(command[command.index("--save_data_path") + 1])
+            (raw_dir / "row.jsonl").write_text("{}\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+        with mock.patch.object(sidecar, "release_lock", side_effect=PermissionError(sensitive_error)) as remove_lock:
+            result = sidecar.run_sidecar(
+                self.install,
+                self.zhihu_request,
+                self.run_dir,
+                executor=success_executor,
+                raw_consumer=lambda _: {"status": "ready"},
+            )
+
+        self.assertEqual(remove_lock.call_count, 3)
+        self.assertEqual(result.status, "cleanup_error")
+        self.assertEqual(result.reason, "cleanup_error")
+        self.assertEqual(result.warning, "cleanup_incomplete")
+        self.assertNotIn(sensitive_error, json.dumps(vars(result), default=str))
+        self.assertFalse((self.run_dir / "raw").exists())
+        self.assertTrue(sidecar.lock_path(self.install).exists())
+        sidecar.lock_path(self.install).unlink()
+
     def test_runner_converts_ordinary_execution_error_to_safe_telemetry(self) -> None:
         sensitive_error = f"cannot open {self.root / 'secret-user-id'} https://private.example.test/path?token=secret"
 
@@ -1661,6 +1762,52 @@ class CliTests(unittest.TestCase):
         self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "error")
         self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
         self.assertNotIn(b"private-user-id", manifest_bytes)
+
+    def test_cleanup_error_manifest_uses_fixed_warning_without_sensitive_details(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        sensitive_error = str(self.root / "private-cleanup-path")
+
+        def cleanup_failed(install: sidecar.SidecarInstall, request: sidecar.CollectRequest, run_dir: Path, **kwargs: object) -> sidecar.RunResult:
+            (run_dir / "raw").mkdir(exist_ok=True)
+            return sidecar.RunResult(
+                status="cleanup_error",
+                reason="cleanup_error",
+                warning="cleanup_incomplete",
+                telemetry=sidecar.summarize_phase_telemetry([], "cleanup_error", "cleanup_error"),
+            )
+
+        with (
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "run_sidecar", side_effect=cleanup_failed),
+        ):
+            report = self.run_main(
+                [
+                    "collect",
+                    "--platform",
+                    "zhihu",
+                    "--mode",
+                    "search",
+                    "--query",
+                    "safe query",
+                    "--sidecar-root",
+                    str(sidecar_root),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
+
+        manifest_bytes = (Path(report["runDir"]) / "run-manifest.json").read_bytes()
+        manifest = json.loads(manifest_bytes)
+        self.assertEqual(manifest["status"], "cleanup_error")
+        self.assertEqual(manifest["reason"], "cleanup_error")
+        self.assertEqual(manifest["raw"]["warning"], "cleanup_incomplete")
+        self.assertFalse(manifest["raw"]["cleaned"])
+        self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "cleanup_error")
+        self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], "cleanup_error")
+        self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
 
     def test_zhihu_ready_and_timeout_manifests_preserve_terminal_telemetry_and_cleanup(self) -> None:
         out_dir = self.root / "promotion-output"

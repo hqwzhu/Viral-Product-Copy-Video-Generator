@@ -27,6 +27,8 @@ MAX_COMMENTS = 30
 MAX_TIMEOUT_SECONDS = 3600
 DEFAULT_TIMEOUT_SECONDS = 900
 RAW_WARNING = "Raw MediaCrawler output may contain sensitive tokens or identifiers. Keep it only for local debugging and never upload it."
+CLEANUP_WARNING = "cleanup_incomplete"
+CLEANUP_RETRY_ATTEMPTS = 3
 BOOTSTRAP_PATH = Path(__file__).with_name("mediacrawler_bootstrap.py")
 TELEMETRY_SCHEMA_VERSION = 1
 TELEMETRY_PHASES = {
@@ -404,10 +406,13 @@ def run_sidecar(
         start_phase_telemetry(telemetry_path, "sidecar_process_start")
     acquired = False
     retry_count = 0
+    final_result: RunResult | None = None
 
     def completed_result(result: RunResult) -> RunResult:
+        nonlocal final_result
         if telemetry_path:
             result.telemetry = finalize_phase_telemetry(telemetry_path, result.status, result.reason)
+        final_result = result
         return result
 
     try:
@@ -501,21 +506,34 @@ def run_sidecar(
         ))
     finally:
         if telemetry_path:
-            try:
-                telemetry_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+            retry_cleanup(lambda: telemetry_path.unlink(missing_ok=True))
+        cleanup_failed = False
+        if not keep_raw and raw_dir.exists():
+            cleanup_failed = not retry_cleanup(lambda: shutil.rmtree(raw_dir))
+        if acquired and not retry_cleanup(lambda: release_lock(install)):
+            cleanup_failed = True
+        if cleanup_failed and final_result:
+            mark_cleanup_error(final_result)
+
+
+def retry_cleanup(action: Callable[[], Any]) -> bool:
+    for _ in range(CLEANUP_RETRY_ATTEMPTS):
         try:
-            if not keep_raw and raw_dir.exists():
-                shutil.rmtree(raw_dir)
+            action()
+            return True
         except OSError:
-            pass
-        finally:
-            if acquired:
-                try:
-                    release_lock(install)
-                except OSError:
-                    pass
+            continue
+    return False
+
+
+def mark_cleanup_error(result: RunResult) -> None:
+    result.status = "cleanup_error"
+    result.reason = "cleanup_error"
+    result.warning = f"{result.warning} {CLEANUP_WARNING}".strip()
+    phases = result.telemetry.get("phases") if isinstance(result.telemetry, dict) else None
+    if isinstance(phases, list) and phases:
+        phases[-1]["status"] = "cleanup_error"
+        phases[-1]["reason"] = "cleanup_error"
 
 
 def start_phase_telemetry(path: Path, phase: str) -> None:
@@ -590,6 +608,8 @@ def phase_telemetry_reason(status: str, reason: str) -> str:
         return "no_results"
     if status == "normalization_error" or reason == "normalization_error":
         return "normalization_error"
+    if status == "cleanup_error" or reason == "cleanup_error":
+        return "cleanup_error"
     if status == "provider_unavailable":
         return "provider_unavailable"
     if status in {"waiting_login", "manual_verification_required", "blocked_by_platform"}:
@@ -637,12 +657,32 @@ def lock_path(install: SidecarInstall) -> Path:
 def acquire_lock(install: SidecarInstall) -> None:
     path = lock_path(install)
     path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor: int | None = None
+    stream: Any = None
     try:
         descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError as exc:
         raise RuntimeError("another_mediacrawler_task_is_running") from exc
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        stream.write(json.dumps({"pid": os.getpid(), "createdAt": utc_now()}) + "\n")
+    try:
+        stream = os.fdopen(descriptor, "w", encoding="utf-8")
+        descriptor = None
+        with stream:
+            stream.write(json.dumps({"pid": os.getpid(), "createdAt": utc_now()}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        retry_cleanup(lambda: path.unlink(missing_ok=True))
+        raise
 
 
 def release_lock(install: SidecarInstall) -> None:
