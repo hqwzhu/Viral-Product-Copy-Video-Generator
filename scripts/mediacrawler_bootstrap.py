@@ -77,20 +77,20 @@ def patch_zhihu_creator_limit(client_class: type[Any], requested_max_contents: i
     limit = max(1, requested_max_contents)
 
     def make_limited_creator_method(original: Any) -> Any:
-        async def limited_creator_method(self: Any, creator_url: str, *args: Any, **kwargs: Any) -> Any:
+        async def limited_creator_method(self: Any, *args: Any, **kwargs: Any) -> Any:
             call_args = list(args)
             call_kwargs = dict(kwargs)
             effective_limit = limit
             if "limit" in call_kwargs:
                 effective_limit = min(call_kwargs["limit"], limit)
                 call_kwargs["limit"] = effective_limit
-            elif len(call_args) >= 2:
-                effective_limit = min(call_args[1], limit)
-                call_args[1] = effective_limit
+            elif len(call_args) >= 3:
+                effective_limit = min(call_args[2], limit)
+                call_args[2] = effective_limit
             else:
                 call_kwargs["limit"] = limit
 
-            response = await original(self, creator_url, *call_args, **call_kwargs)
+            response = await original(self, *call_args, **call_kwargs)
             if not isinstance(response, dict):
                 return response
             result = dict(response)

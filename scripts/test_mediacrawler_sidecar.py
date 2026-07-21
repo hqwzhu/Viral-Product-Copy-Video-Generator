@@ -413,6 +413,34 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(default_response["paging"]["is_end"])
         self.assertTrue(keyword_response["paging"]["is_end"])
 
+    def test_zhihu_creator_answers_preserves_url_token_keyword(self) -> None:
+        patcher = getattr(bootstrap, "patch_zhihu_creator_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, int, int]] = []
+
+            async def get_creator_answers(
+                self,
+                url_token: str,
+                offset: int = 0,
+                limit: int = 20,
+            ) -> dict[str, object]:
+                self.calls.append((url_token, offset, limit))
+                return {
+                    "paging": {"is_end": False},
+                    "data": [{"content_id": f"answer-{index}"} for index in range(20)],
+                }
+
+        patcher(FakeClient, 7)
+        client = FakeClient()
+        response = asyncio.run(client.get_creator_answers(url_token="creator", limit=2))
+
+        self.assertEqual(client.calls, [("creator", 0, 2)])
+        self.assertEqual(len(response["data"]), 2)
+        self.assertTrue(response["paging"]["is_end"])
+
     def test_xiaohongshu_detail_context_switches_to_filtered_search(self) -> None:
         config = SimpleNamespace(CRAWLER_TYPE="detail", KEYWORDS="")
         parsed = SimpleNamespace(platform="xhs", type="detail")
