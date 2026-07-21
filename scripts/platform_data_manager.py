@@ -271,15 +271,25 @@ def normalize_rows(
         limited_comments += len(normalized_comments) - len(kept_comments)
         normalized_comments = kept_comments
     if comments_per_content_limit is not None:
-        comment_counts: dict[str, int] = {}
-        kept_comments = []
+        root_comment_counts: dict[str, int] = {}
+        kept_root_ids: set[tuple[str, str]] = set()
         for record in normalized_comments:
-            content_id = record["contentId"]
-            if comment_counts.get(content_id, 0) >= comments_per_content_limit:
-                limited_comments += 1
+            if record.get("parentCommentId") is not None:
                 continue
-            comment_counts[content_id] = comment_counts.get(content_id, 0) + 1
-            kept_comments.append(record)
+            content_id = record["contentId"]
+            if root_comment_counts.get(content_id, 0) >= comments_per_content_limit:
+                continue
+            root_comment_counts[content_id] = root_comment_counts.get(content_id, 0) + 1
+            kept_root_ids.add((content_id, record["commentId"]))
+        kept_comments = [
+            record
+            for record in normalized_comments
+            if (
+                (record["contentId"], record["commentId"]) in kept_root_ids
+                or (record["contentId"], record.get("parentCommentId")) in kept_root_ids
+            )
+        ]
+        limited_comments += len(normalized_comments) - len(kept_comments)
         normalized_comments = kept_comments
     for index, record in enumerate(normalized_comments, start=1):
         record["evidencePath"] = f"comments.jsonl#L{index}"

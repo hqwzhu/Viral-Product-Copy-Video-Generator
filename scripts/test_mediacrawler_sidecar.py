@@ -127,7 +127,7 @@ class SidecarCommandTests(unittest.TestCase):
             mode="search",
             query="AI 工具",
             max_contents=20,
-            max_comments=30,
+            max_comments=5,
             include_sub_comments=False,
             timeout_seconds=900,
         )
@@ -141,7 +141,9 @@ class SidecarCommandTests(unittest.TestCase):
         self.assertEqual(command[command.index("--save_data_option") + 1], "jsonl")
         self.assertEqual(command[command.index("--max_concurrency_num") + 1], "1")
         self.assertEqual(command[command.index("--crawler_max_notes_count") + 1], "20")
-        self.assertEqual(command[command.index("--max_comments_count_singlenotes") + 1], "30")
+        self.assertIn("--requested-max-comments", command)
+        self.assertEqual(command[command.index("--requested-max-comments") + 1], "5")
+        self.assertEqual(command[command.index("--max_comments_count_singlenotes") + 1], "5")
         self.assertEqual(command[command.index("--enable_ip_proxy") + 1], "false")
         self.assertEqual(command[command.index("--headless") + 1], "false")
         self.assertEqual(command[command.index("--get_sub_comment") + 1], "false")
@@ -237,6 +239,24 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(parsed_checkout, checkout.resolve())
         self.assertEqual(upstream_args, ["--platform", "dy"])
         self.assertEqual(overrides.requested_max_contents, 20)
+        self.assertEqual(getattr(overrides, "requested_max_comments", None), 30)
+
+    def test_bootstrap_parser_enforces_requested_comment_boundary(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mediacrawler-bootstrap-test-") as temp_dir:
+            checkout = Path(temp_dir)
+            (checkout / "main.py").touch()
+
+            try:
+                _, _, overrides = bootstrap.parse_bootstrap_args(
+                    ["--checkout", str(checkout), "--requested-max-comments", "0", "--", "--platform", "dy"]
+                )
+            except SystemExit as exc:
+                self.fail(f"requested comment boundary must accept zero: {exc}")
+            self.assertEqual(getattr(overrides, "requested_max_comments", None), 0)
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                bootstrap.parse_bootstrap_args(
+                    ["--checkout", str(checkout), "--requested-max-comments", "31", "--", "--platform", "dy"]
+                )
 
     def test_cdp_port_can_follow_current_authenticated_chrome(self) -> None:
         config = SimpleNamespace(CDP_DEBUG_PORT=9222)
@@ -263,6 +283,118 @@ class BootstrapTests(unittest.TestCase):
         patcher(FakeClient, 3)
         rows = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI 内容生产"))
         self.assertEqual([item["content_id"] for item in rows], ["answer-0", "answer-1", "answer-2"])
+
+    def test_xiaohongshu_search_limits_response_before_detail_collection(self) -> None:
+        patcher = getattr(bootstrap, "patch_xiaohongshu_search_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_note_by_keyword(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": True,
+                    "items": [{"id": f"note-{index}"} for index in range(20)],
+                }
+
+        patcher(FakeClient, 3)
+        response = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI"))
+
+        self.assertEqual([item["id"] for item in response["items"]], ["note-0", "note-1", "note-2"])
+
+    def test_douyin_search_limits_response_before_persistence_callback(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_search_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def search_info_by_keyword(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "data": [{"aweme_info": {"aweme_id": f"video-{index}"}} for index in range(10)],
+                    "extra": {"logid": "safe-log-id"},
+                }
+
+        patcher(FakeClient, 3)
+        response = asyncio.run(FakeClient().search_info_by_keyword(keyword="AI"))
+
+        self.assertEqual(
+            [item["aweme_info"]["aweme_id"] for item in response["data"]],
+            ["video-0", "video-1", "video-2"],
+        )
+
+    def test_xiaohongshu_sub_comments_are_bounded_to_one_page(self) -> None:
+        patcher = getattr(bootstrap, "patch_xiaohongshu_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_note_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": True,
+                    "cursor": "next-page",
+                    "comments": [{"id": f"comment-{index}"} for index in range(10)],
+                }
+
+        patcher(FakeClient, 5)
+        response = asyncio.run(FakeClient().get_note_sub_comments("note", "root", "token"))
+
+        self.assertEqual([item["id"] for item in response["comments"]], [f"comment-{index}" for index in range(5)])
+        self.assertFalse(response["has_more"])
+
+    def test_douyin_sub_comments_are_bounded_to_one_page(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": 1,
+                    "cursor": 20,
+                    "comments": [{"cid": f"comment-{index}"} for index in range(20)],
+                }
+
+        patcher(FakeClient, 5)
+        response = asyncio.run(FakeClient().get_sub_comments("video", "root"))
+
+        self.assertEqual([item["cid"] for item in response["comments"]], [f"comment-{index}" for index in range(5)])
+        self.assertEqual(response["has_more"], 0)
+
+    def test_douyin_empty_sub_comment_page_ends_pagination(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {"has_more": 1, "cursor": 20, "comments": []}
+
+        patcher(FakeClient, 5)
+        response = asyncio.run(FakeClient().get_sub_comments("video", "root"))
+
+        self.assertEqual(response["comments"], [])
+        self.assertEqual(response["has_more"], 0)
+
+    def test_zhihu_root_and_child_comments_are_bounded_to_one_page(self) -> None:
+        patcher = getattr(bootstrap, "patch_zhihu_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            async def get_root_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "paging": {"is_end": False, "next": "root-next"},
+                    "data": [{"id": f"root-{index}"} for index in range(10)],
+                }
+
+            async def get_child_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "paging": {"is_end": False, "next": "child-next"},
+                    "data": [{"id": f"child-{index}"} for index in range(10)],
+                }
+
+        patcher(FakeClient, 5)
+        client = FakeClient()
+        for response, prefix in (
+            (asyncio.run(client.get_root_comments("content", "answer")), "root"),
+            (asyncio.run(client.get_child_comments("root")), "child"),
+        ):
+            with self.subTest(prefix=prefix):
+                self.assertEqual([item["id"] for item in response["data"]], [f"{prefix}-{index}" for index in range(5)])
+                self.assertTrue(response["paging"]["is_end"])
 
     def test_douyin_creator_limit_stops_pagination_before_callbacks(self) -> None:
         patcher = getattr(bootstrap, "patch_douyin_creator_limit", None)
@@ -467,6 +599,30 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(parsed.type, "search")
         self.assertEqual([item["id"] for item in response["items"]], ["target-note"])
         self.assertTrue(response["has_more"])
+
+    def test_xiaohongshu_detail_filter_sees_full_page_before_search_limit(self) -> None:
+        detail_patcher = getattr(bootstrap, "patch_xiaohongshu_detail_search", None)
+        limit_patcher = getattr(bootstrap, "patch_xiaohongshu_search_limit", None)
+        self.assertIsNotNone(detail_patcher)
+        self.assertIsNotNone(limit_patcher)
+
+        class FakeClient:
+            async def get_note_by_keyword(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": True,
+                    "items": [
+                        {"id": "other-0"},
+                        {"id": "other-1"},
+                        {"id": "other-2"},
+                        {"id": "target-note"},
+                    ],
+                }
+
+        detail_patcher(FakeClient, "target-note")
+        limit_patcher(FakeClient, 3)
+        response = asyncio.run(FakeClient().get_note_by_keyword(keyword="AI"))
+
+        self.assertEqual([item["id"] for item in response["items"]], ["target-note"])
 
     def test_existing_cdp_cleanup_drops_references_without_closing_context(self) -> None:
         calls: list[str] = []
@@ -757,6 +913,63 @@ class NormalizationLimitTests(unittest.TestCase):
         self.assertEqual(payload["counts"]["normalizedComments"], 1)
         self.assertEqual(payload["counts"]["limitedComments"], 2)
         self.assertEqual(len((self.run_dir / "comments.jsonl").read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_comment_limit_keeps_children_of_selected_root_comments(self) -> None:
+        content = self.load_fixture("xiaohongshu-contents.jsonl")[0]
+        template = self.load_fixture("xiaohongshu-comments.jsonl")
+        comments = []
+        for index in range(6):
+            root_id = f"root-{index}"
+            comments.extend(
+                [
+                    {
+                        **template[0],
+                        "comment_id": root_id,
+                        "note_id": content["note_id"],
+                        "parent_comment_id": "",
+                    },
+                    {
+                        **template[1],
+                        "comment_id": f"child-{index}",
+                        "note_id": content["note_id"],
+                        "parent_comment_id": root_id,
+                    },
+                ]
+            )
+
+        payload = platform_data_manager.normalize_rows(
+            "xiaohongshu",
+            [content],
+            comments,
+            self.run_dir,
+            self.salt,
+            content_limit=1,
+            comments_per_content_limit=5,
+        )
+
+        self.assertEqual(
+            [record["commentId"] for record in payload["comments"]],
+            [comment_id for index in range(5) for comment_id in (f"root-{index}", f"child-{index}")],
+        )
+        self.assertEqual(payload["counts"]["normalizedComments"], 10)
+        self.assertEqual(payload["counts"]["limitedComments"], 2)
+
+    def test_zero_comment_limit_removes_roots_and_children(self) -> None:
+        content = self.load_fixture("xiaohongshu-contents.jsonl")[0]
+        comments = self.load_fixture("xiaohongshu-comments.jsonl")
+
+        payload = platform_data_manager.normalize_rows(
+            "xiaohongshu",
+            [content],
+            comments,
+            self.run_dir,
+            self.salt,
+            content_limit=1,
+            comments_per_content_limit=0,
+        )
+
+        self.assertEqual(payload["comments"], [])
+        self.assertEqual(payload["counts"]["limitedComments"], 2)
 
 
 class DownstreamTests(unittest.TestCase):

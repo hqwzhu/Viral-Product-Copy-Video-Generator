@@ -114,6 +114,8 @@ def build_mediacrawler_command(install: SidecarInstall, request: CollectRequest,
         str(install.checkout),
         "--requested-max-contents",
         str(request.max_contents),
+        "--requested-max-comments",
+        str(request.max_comments),
     ]
     if request.platform == "xiaohongshu" and request.mode == "detail" and request.detail_context_query.strip():
         command.extend(

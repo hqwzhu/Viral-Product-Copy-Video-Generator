@@ -15,6 +15,7 @@ from typing import Any, Sequence
 @dataclass(frozen=True)
 class BootstrapOverrides:
     requested_max_contents: int
+    requested_max_comments: int
     xhs_detail_query: str = ""
     xhs_detail_target: str = ""
 
@@ -45,6 +46,86 @@ def patch_zhihu_search_limit(client_class: type[Any], requested_max_contents: in
         return list(rows or [])[:limit]
 
     client_class.get_note_by_keyword = limited_get_note_by_keyword
+
+
+def patch_xiaohongshu_search_limit(client_class: type[Any], requested_max_contents: int) -> None:
+    original = client_class.get_note_by_keyword
+
+    async def limited_get_note_by_keyword(self: Any, *args: Any, **kwargs: Any) -> Any:
+        response = await original(self, *args, **kwargs)
+        if not isinstance(response, dict) or not isinstance(response.get("items"), list):
+            return response
+        result = dict(response)
+        result["items"] = response["items"][:requested_max_contents]
+        return result
+
+    client_class.get_note_by_keyword = limited_get_note_by_keyword
+
+
+def patch_douyin_search_limit(client_class: type[Any], requested_max_contents: int) -> None:
+    original = client_class.search_info_by_keyword
+
+    async def limited_search_info_by_keyword(self: Any, *args: Any, **kwargs: Any) -> Any:
+        response = await original(self, *args, **kwargs)
+        if not isinstance(response, dict) or not isinstance(response.get("data"), list):
+            return response
+        result = dict(response)
+        result["data"] = response["data"][:requested_max_contents]
+        return result
+
+    client_class.search_info_by_keyword = limited_search_info_by_keyword
+
+
+def patch_xiaohongshu_comment_limit(client_class: type[Any], requested_max_comments: int) -> None:
+    original = client_class.get_note_sub_comments
+
+    async def limited_get_note_sub_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
+        response = await original(self, *args, **kwargs)
+        if not isinstance(response, dict):
+            return response
+        result = dict(response)
+        if isinstance(response.get("comments"), list):
+            result["comments"] = response["comments"][:requested_max_comments]
+        result["has_more"] = False
+        return result
+
+    client_class.get_note_sub_comments = limited_get_note_sub_comments
+
+
+def patch_douyin_comment_limit(client_class: type[Any], requested_max_comments: int) -> None:
+    original = client_class.get_sub_comments
+
+    async def limited_get_sub_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
+        response = await original(self, *args, **kwargs)
+        if not isinstance(response, dict):
+            return response
+        result = dict(response)
+        if isinstance(response.get("comments"), list):
+            result["comments"] = response["comments"][:requested_max_comments]
+        result["has_more"] = 0
+        return result
+
+    client_class.get_sub_comments = limited_get_sub_comments
+
+
+def patch_zhihu_comment_limit(client_class: type[Any], requested_max_comments: int) -> None:
+    def make_limited_comment_method(original: Any) -> Any:
+        async def limited_comment_method(self: Any, *args: Any, **kwargs: Any) -> Any:
+            response = await original(self, *args, **kwargs)
+            if not isinstance(response, dict):
+                return response
+            result = dict(response)
+            if isinstance(response.get("data"), list):
+                result["data"] = response["data"][:requested_max_comments]
+            paging = dict(response.get("paging") or {})
+            paging["is_end"] = True
+            result["paging"] = paging
+            return result
+
+        return limited_comment_method
+
+    client_class.get_root_comments = make_limited_comment_method(client_class.get_root_comments)
+    client_class.get_child_comments = make_limited_comment_method(client_class.get_child_comments)
 
 
 def patch_douyin_creator_limit(client_class: type[Any], requested_max_contents: int) -> None:
@@ -167,6 +248,7 @@ def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], Bootstra
     parser = argparse.ArgumentParser(description="Run a pinned MediaCrawler checkout safely.")
     parser.add_argument("--checkout", required=True)
     parser.add_argument("--requested-max-contents", type=int, default=20)
+    parser.add_argument("--requested-max-comments", type=int, default=30)
     parser.add_argument("--xhs-detail-query", default="")
     parser.add_argument("--xhs-detail-target", default="")
     args = parser.parse_args(values[:separator])
@@ -175,8 +257,11 @@ def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], Bootstra
         raise SystemExit(f"Pinned MediaCrawler main.py is missing: {checkout}")
     if not 1 <= args.requested_max_contents <= 20:
         raise SystemExit("requested max contents must be between 1 and 20")
+    if not 0 <= args.requested_max_comments <= 30:
+        raise SystemExit("requested max comments must be between 0 and 30")
     overrides = BootstrapOverrides(
         requested_max_contents=args.requested_max_contents,
+        requested_max_comments=args.requested_max_comments,
         xhs_detail_query=args.xhs_detail_query.strip(),
         xhs_detail_target=args.xhs_detail_target.strip(),
     )
@@ -201,6 +286,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     patch_zhihu_search_limit(ZhiHuClient, overrides.requested_max_contents)
     if overrides.xhs_detail_query and overrides.xhs_detail_target:
         patch_xiaohongshu_detail_search(XiaoHongShuClient, overrides.xhs_detail_target)
+    patch_xiaohongshu_search_limit(XiaoHongShuClient, overrides.requested_max_contents)
+    patch_douyin_search_limit(DouYinClient, overrides.requested_max_contents)
+    patch_xiaohongshu_comment_limit(XiaoHongShuClient, overrides.requested_max_comments)
+    patch_douyin_comment_limit(DouYinClient, overrides.requested_max_comments)
+    patch_zhihu_comment_limit(ZhiHuClient, overrides.requested_max_comments)
     original_parse_cmd = cmd_arg.parse_cmd
 
     async def parse_cmd_with_overrides(parsed_argv: Sequence[str] | None = None) -> Any:
