@@ -1763,6 +1763,98 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
         self.assertNotIn(b"private-user-id", manifest_bytes)
 
+    def test_lock_write_and_cleanup_failure_manifest_reports_fixed_cleanup_error(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        install = sidecar.SidecarInstall(sidecar_root)
+        lock_path = sidecar.lock_path(install)
+        private_path = self.root / "private-lock-user-id"
+        write_error = f"lock-write-sensitive-sentinel {private_path} https://private.example.test/private-item-id?token=secret"
+        cleanup_error = f"lock-cleanup-sensitive-sentinel {private_path}"
+        opened_descriptors: list[int] = []
+        close_calls: list[int] = []
+        lock_unlink_attempts = 0
+        real_open = sidecar.os.open
+        original_unlink = Path.unlink
+
+        class BrokenStream:
+            def __init__(self, descriptor: int) -> None:
+                self.descriptor = descriptor
+
+            def __enter__(self) -> BrokenStream:
+                return self
+
+            def __exit__(self, *args: object) -> bool:
+                return False
+
+            def write(self, value: str) -> None:
+                raise OSError(write_error)
+
+            def close(self) -> None:
+                close_calls.append(self.descriptor)
+                sidecar.os.close(self.descriptor)
+
+        def tracked_open(path: Path, flags: int) -> int:
+            descriptor = real_open(path, flags)
+            opened_descriptors.append(descriptor)
+            return descriptor
+
+        def selective_unlink(path: Path, *args: object, **kwargs: object) -> None:
+            nonlocal lock_unlink_attempts
+            if path == lock_path:
+                lock_unlink_attempts += 1
+                raise PermissionError(cleanup_error)
+            original_unlink(path, *args, **kwargs)
+
+        try:
+            with (
+                mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+                mock.patch.object(sidecar, "execute_process", side_effect=AssertionError("executor must not run")),
+                mock.patch.object(sidecar.os, "open", side_effect=tracked_open),
+                mock.patch.object(sidecar.os, "fdopen", side_effect=lambda descriptor, *args, **kwargs: BrokenStream(descriptor)),
+                mock.patch.object(Path, "unlink", new=selective_unlink),
+            ):
+                report = self.run_main(
+                    [
+                        "collect",
+                        "--platform",
+                        "zhihu",
+                        "--mode",
+                        "search",
+                        "--query",
+                        "safe query",
+                        "--sidecar-root",
+                        str(sidecar_root),
+                        "--out-dir",
+                        str(out_dir),
+                    ]
+                )
+
+            run_dir = Path(report["runDir"])
+            manifest_bytes = (run_dir / "run-manifest.json").read_bytes()
+            manifest = json.loads(manifest_bytes)
+            self.assertEqual(lock_unlink_attempts, 3)
+            self.assertEqual(opened_descriptors, close_calls)
+            with self.assertRaises(OSError):
+                sidecar.os.fstat(opened_descriptors[0])
+            self.assertTrue(lock_path.exists())
+            self.assertFalse((run_dir / "phase-telemetry.json").exists())
+            self.assertFalse((run_dir / "raw").exists())
+            self.assertEqual(report["status"], "cleanup_error")
+            self.assertEqual(report["reason"], "cleanup_error")
+            self.assertEqual(manifest["status"], "cleanup_error")
+            self.assertEqual(manifest["reason"], "cleanup_error")
+            self.assertEqual(manifest["raw"]["warning"], "cleanup_incomplete")
+            self.assertTrue(manifest["raw"]["cleaned"])
+            self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "cleanup_error")
+            self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], "cleanup_error")
+            for sensitive_value in (write_error, cleanup_error, str(private_path), "private-item-id"):
+                self.assertNotIn(sensitive_value.encode("utf-8"), manifest_bytes)
+        finally:
+            lock_path.unlink(missing_ok=True)
+
     def test_cleanup_error_manifest_uses_fixed_warning_without_sensitive_details(self) -> None:
         out_dir = self.root / "promotion-output"
         sidecar_root = self.root / "sidecar"

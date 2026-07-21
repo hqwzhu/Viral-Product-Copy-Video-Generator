@@ -41,6 +41,12 @@ TELEMETRY_PHASES = {
     "sub_comments",
     "normalization",
 }
+
+
+class _CleanupError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SidecarInstall:
     root: Path
@@ -418,6 +424,13 @@ def run_sidecar(
     try:
         try:
             acquire_lock(install)
+        except _CleanupError:
+            return completed_result(RunResult(
+                status="cleanup_error",
+                reason="cleanup_error",
+                keep_raw=keep_raw,
+                warning=CLEANUP_WARNING,
+            ))
         except RuntimeError:
             return completed_result(RunResult(status="provider_unavailable", reason="provider_unavailable", keep_raw=keep_raw))
         except OSError:
@@ -681,7 +694,8 @@ def acquire_lock(install: SidecarInstall) -> None:
                 os.close(descriptor)
             except OSError:
                 pass
-        retry_cleanup(lambda: path.unlink(missing_ok=True))
+        if not retry_cleanup(lambda: path.unlink(missing_ok=True)):
+            raise _CleanupError from None
         raise
 
 
