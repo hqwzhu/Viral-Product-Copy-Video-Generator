@@ -74,23 +74,39 @@ def patch_douyin_creator_limit(client_class: type[Any], requested_max_contents: 
 
 
 def patch_zhihu_creator_limit(client_class: type[Any], requested_max_contents: int) -> None:
-    original = client_class.get_creator_answers
     limit = max(1, requested_max_contents)
 
-    async def limited_get_creator_answers(self: Any, url_token: str, offset: int, page_limit: int) -> Any:
-        response = await original(self, url_token, offset, min(page_limit, limit))
-        if not isinstance(response, dict):
-            return response
-        result = dict(response)
-        rows = result.get("data")
-        if isinstance(rows, list):
-            result["data"] = rows[:limit]
-        paging = dict(result.get("paging") or {})
-        paging["is_end"] = True
-        result["paging"] = paging
-        return result
+    def make_limited_creator_method(original: Any) -> Any:
+        async def limited_creator_method(self: Any, creator_url: str, *args: Any, **kwargs: Any) -> Any:
+            call_args = list(args)
+            call_kwargs = dict(kwargs)
+            effective_limit = limit
+            if "limit" in call_kwargs:
+                effective_limit = min(call_kwargs["limit"], limit)
+                call_kwargs["limit"] = effective_limit
+            elif len(call_args) >= 2:
+                effective_limit = min(call_args[1], limit)
+                call_args[1] = effective_limit
+            else:
+                call_kwargs["limit"] = limit
 
-    client_class.get_creator_answers = limited_get_creator_answers
+            response = await original(self, creator_url, *call_args, **call_kwargs)
+            if not isinstance(response, dict):
+                return response
+            result = dict(response)
+            rows = result.get("data")
+            if isinstance(rows, list):
+                result["data"] = rows[:effective_limit]
+            paging = dict(result.get("paging") or {})
+            paging["is_end"] = True
+            result["paging"] = paging
+            return result
+
+        return limited_creator_method
+
+    for method_name in ("get_creator_content_list_async", "get_creator_answers"):
+        if hasattr(client_class, method_name):
+            setattr(client_class, method_name, make_limited_creator_method(getattr(client_class, method_name)))
 
 
 def apply_xiaohongshu_detail_context(config: Any, parsed: Any, query: str, target_id: str) -> None:

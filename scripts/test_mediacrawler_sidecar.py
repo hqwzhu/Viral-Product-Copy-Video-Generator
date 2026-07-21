@@ -349,6 +349,70 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(callback_batches, [["answer-0", "answer-1", "answer-2"]])
         self.assertEqual(client.page_calls, 1)
 
+    def test_douyin_creator_limit_keeps_product_limit_above_formal_smoke_cap(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_creator_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.page_calls = 0
+
+            async def get_user_aweme_posts(self, sec_user_id: str, max_cursor: str) -> dict[str, object]:
+                start = self.page_calls * 4
+                self.page_calls += 1
+                return {
+                    "has_more": 1,
+                    "max_cursor": str(self.page_calls),
+                    "aweme_list": [{"aweme_id": f"video-{index}"} for index in range(start, start + 4)],
+                }
+
+            async def get_all_user_aweme_posts(self, sec_user_id: str, callback: object = None) -> list[dict[str, str]]:
+                raise AssertionError("the unbounded upstream implementation must be replaced")
+
+        callback_batches: list[list[str]] = []
+
+        async def callback(rows: list[dict[str, str]]) -> None:
+            callback_batches.append([row["aweme_id"] for row in rows])
+
+        patcher(FakeClient, 7)
+        client = FakeClient()
+        rows = asyncio.run(client.get_all_user_aweme_posts("creator", callback=callback))
+
+        self.assertEqual([row["aweme_id"] for row in rows], [f"video-{index}" for index in range(7)])
+        self.assertEqual(callback_batches, [["video-0", "video-1", "video-2", "video-3"], ["video-4", "video-5", "video-6"]])
+        self.assertEqual(client.page_calls, 2)
+
+    def test_zhihu_creator_limit_preserves_defaults_and_keyword_limit(self) -> None:
+        patcher = getattr(bootstrap, "patch_zhihu_creator_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, int, int]] = []
+
+            async def get_creator_content_list_async(
+                self,
+                creator_url: str,
+                offset: int = 0,
+                limit: int = 20,
+            ) -> dict[str, object]:
+                self.calls.append((creator_url, offset, limit))
+                return {
+                    "paging": {"is_end": False},
+                    "data": [{"content_id": f"answer-{index}"} for index in range(20)],
+                }
+
+        patcher(FakeClient, 7)
+        client = FakeClient()
+        default_response = asyncio.run(client.get_creator_content_list_async("creator"))
+        keyword_response = asyncio.run(client.get_creator_content_list_async("creator", offset=5, limit=4))
+
+        self.assertEqual(client.calls, [("creator", 0, 7), ("creator", 5, 4)])
+        self.assertEqual(len(default_response["data"]), 7)
+        self.assertEqual(len(keyword_response["data"]), 4)
+        self.assertTrue(default_response["paging"]["is_end"])
+        self.assertTrue(keyword_response["paging"]["is_end"])
+
     def test_xiaohongshu_detail_context_switches_to_filtered_search(self) -> None:
         config = SimpleNamespace(CRAWLER_TYPE="detail", KEYWORDS="")
         parsed = SimpleNamespace(platform="xhs", type="detail")

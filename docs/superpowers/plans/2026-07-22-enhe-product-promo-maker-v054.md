@@ -13,7 +13,8 @@
 - Hosted Worker remains disabled.
 - Cookies, Chrome profiles, `.env` files, secrets, raw Sidecar output, and original user IDs must not enter either GitHub repository or a Release asset.
 - The Sidecar remains pinned to `3bde9e2015f912f2e19ee63b615a0f48b9a90315`.
-- Each real smoke run keeps at most 3 contents and 5 first-level comments per retained content, uses concurrency 1, waits at least 2 seconds between pages, and cleans raw output by default.
+- Every formal real Sidecar smoke command must explicitly pass `--max-contents 3`; those acceptance runs retain at most 3 contents and 5 first-level comments per retained content, use concurrency 1, wait at least 2 seconds between pages, and clean raw output by default.
+- The general product `--max-contents` API remains configurable from 1 through 20; the formal smoke cap of 3 must not become a global creator-collection cap.
 - Login, CAPTCHA, account verification, and platform risk confirmation are completed only by the user in a visible local browser.
 - v0.5.3 assets are immutable; all post-PR-#5 fixes ship as v0.5.4.
 - The public product name is `ENHE 产品推广素材生成器 / ENHE Product Promo Maker`.
