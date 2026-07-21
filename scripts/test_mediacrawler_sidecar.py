@@ -224,6 +224,43 @@ class SidecarCommandTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_zhihu_phase_hooks_record_detail_and_comment_transitions_once(self) -> None:
+        class FakeTelemetry:
+            def __init__(self) -> None:
+                self.phases: list[str] = []
+
+            def begin(self, phase: str) -> None:
+                self.phases.append(phase)
+
+        class FakeManager:
+            async def launch_and_connect(self) -> str:
+                return "context"
+
+        class FakeClient:
+            async def get_root_comments(self) -> str:
+                return "roots"
+
+            async def get_child_comments(self) -> str:
+                return "children"
+
+        class FakeCrawler:
+            async def get_note_detail(self) -> str:
+                return "detail"
+
+        telemetry = FakeTelemetry()
+        bootstrap.patch_zhihu_phase_telemetry(FakeClient, FakeCrawler, FakeManager, telemetry)
+        asyncio.run(FakeManager().launch_and_connect())
+        asyncio.run(FakeCrawler().get_note_detail())
+        client = FakeClient()
+        asyncio.run(client.get_root_comments())
+        asyncio.run(client.get_root_comments())
+        asyncio.run(client.get_child_comments())
+
+        self.assertEqual(
+            telemetry.phases,
+            ["cdp_initialization", "detail_content", "root_comments", "root_comments", "sub_comments"],
+        )
+
     def test_bootstrap_parser_accepts_an_internal_telemetry_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             checkout = Path(temp)
@@ -805,6 +842,7 @@ class SidecarRuntimeTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.install = sidecar.SidecarInstall(self.root / "install")
         self.request = sidecar.CollectRequest(platform="xiaohongshu", mode="search", query="AI 工具")
+        self.zhihu_request = sidecar.CollectRequest(platform="zhihu", mode="search", query="AI")
         self.run_dir = self.root / "run"
 
     def tearDown(self) -> None:
@@ -832,7 +870,7 @@ class SidecarRuntimeTests(unittest.TestCase):
             )
             raise subprocess.TimeoutExpired(command, timeout)
 
-        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=timeout_executor)
+        result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=timeout_executor)
         self.assertEqual(result.status, "error")
         self.assertEqual(result.reason, "timeout")
         self.assertEqual(result.telemetry["lastPhase"], "cdp_initialization")
@@ -846,15 +884,79 @@ class SidecarRuntimeTests(unittest.TestCase):
         self.assertFalse(sidecar.lock_path(self.install).exists())
         self.assertFalse((self.run_dir / "raw").exists())
 
+    def test_runner_cleans_raw_and_lock_when_telemetry_delete_fails(self) -> None:
+        original_unlink = Path.unlink
+        telemetry_path = self.run_dir / "phase-telemetry.json"
+
+        def selective_unlink(path: Path, *args: object, **kwargs: object) -> None:
+            if path == telemetry_path:
+                raise PermissionError("telemetry delete denied")
+            original_unlink(path, *args, **kwargs)
+
+        def timeout_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(command, timeout)
+
+        with mock.patch.object(Path, "unlink", new=selective_unlink):
+            result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=timeout_executor)
+
+        self.assertEqual(result.reason, "timeout")
+        self.assertTrue(telemetry_path.exists())
+        self.assertFalse((self.run_dir / "raw").exists())
+        self.assertFalse(sidecar.lock_path(self.install).exists())
+
+    def test_runner_converts_ordinary_execution_error_to_safe_telemetry(self) -> None:
+        sensitive_error = f"cannot open {self.root / 'secret-user-id'} https://private.example.test/path?token=secret"
+
+        def broken_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            raise OSError(sensitive_error)
+
+        result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=broken_executor)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "error")
+        self.assertEqual(result.telemetry["lastPhase"], "sidecar_process_start")
+        self.assertEqual(result.telemetry["phases"][-1]["status"], "error")
+        self.assertNotIn(sensitive_error, json.dumps(result.telemetry))
+        self.assertFalse(sidecar.lock_path(self.install).exists())
+        self.assertFalse((self.run_dir / "raw").exists())
+
     def test_runner_converts_keyboard_interrupt_to_cancelled_and_releases_resources(self) -> None:
         def cancelled_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
             raise KeyboardInterrupt
 
-        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=cancelled_executor)
+        result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=cancelled_executor)
         self.assertEqual(result.status, "cancelled")
         self.assertEqual(result.reason, "user_cancelled")
+        self.assertEqual(result.telemetry["lastPhase"], "sidecar_process_start")
+        self.assertEqual(result.telemetry["phases"][-1]["status"], "cancelled")
         self.assertFalse(sidecar.lock_path(self.install).exists())
         self.assertFalse((self.run_dir / "raw").exists())
+
+    def test_xiaohongshu_run_does_not_create_phase_telemetry(self) -> None:
+        for platform in ("xiaohongshu", "douyin"):
+            with self.subTest(platform=platform):
+                seen_command: list[str] = []
+
+                def empty_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+                    seen_command.extend(command)
+                    return subprocess.CompletedProcess(command, 0, stdout="completed", stderr="")
+
+                request = sidecar.CollectRequest(platform=platform, mode="search", query="AI")
+                run_dir = self.root / platform
+                result = sidecar.run_sidecar(self.install, request, run_dir, executor=empty_executor)
+
+                self.assertNotIn("--telemetry-path", seen_command)
+                self.assertEqual(result.telemetry, {})
+                self.assertFalse((run_dir / "phase-telemetry.json").exists())
+
+    def test_repeated_phase_records_only_one_transition(self) -> None:
+        telemetry_path = self.run_dir / "phase-telemetry.json"
+        self.run_dir.mkdir()
+
+        sidecar.record_phase_telemetry(telemetry_path, "root_comments")
+        sidecar.record_phase_telemetry(telemetry_path, "root_comments")
+
+        self.assertEqual([item["phase"] for item in sidecar.load_phase_telemetry(telemetry_path)["phases"]], ["root_comments"])
 
     def test_runner_consumes_output_then_cleans_raw(self) -> None:
         consumed: list[Path] = []
@@ -870,7 +972,7 @@ class SidecarRuntimeTests(unittest.TestCase):
             consumed.extend(raw_dir.rglob("*.jsonl"))
             return {"contentCount": 1, "commentCount": 0}
 
-        result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=success_executor, raw_consumer=consumer)
+        result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=success_executor, raw_consumer=consumer)
         self.assertEqual(result.status, "ready")
         self.assertEqual(result.payload["contentCount"], 1)
         self.assertEqual(result.telemetry["lastPhase"], "normalization")
@@ -1351,6 +1453,8 @@ class CliTests(unittest.TestCase):
         manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
         self.assertEqual(manifest["captureMode"], "fixture")
+        self.assertEqual(manifest["telemetry"]["phases"], [])
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "")
         self.assertEqual(manifest["counts"]["normalizedContents"], 1)
         self.assertEqual(manifest["counts"]["normalizedComments"], 2)
         self.assertTrue((run_dir / "contents.jsonl").exists())
@@ -1459,9 +1563,52 @@ class CliTests(unittest.TestCase):
                 query,
             )
         manifest = json.loads(manifest_writes[-1])
-        self.assertEqual(manifest["telemetry"]["lastPhase"], "sidecar_process_start")
-        self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "timeout")
+        self.assertEqual(manifest["telemetry"]["phases"], [])
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "")
         self.assertNotIn(target, json.dumps(manifest["telemetry"]))
+
+    def test_collect_persists_safe_error_telemetry_when_sidecar_execution_raises(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        sensitive_error = f"cannot open {self.root / 'private-user-id'} https://private.example.test/item?token=secret"
+        original_run_sidecar = sidecar.run_sidecar
+
+        def execute_with_os_error(install: sidecar.SidecarInstall, request: sidecar.CollectRequest, run_dir: Path, **kwargs: object) -> sidecar.RunResult:
+            def broken_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+                raise OSError(sensitive_error)
+
+            return original_run_sidecar(install, request, run_dir, executor=broken_executor, **kwargs)
+
+        with (
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "run_sidecar", side_effect=execute_with_os_error),
+        ):
+            report = self.run_main(
+                [
+                    "collect",
+                    "--platform",
+                    "zhihu",
+                    "--mode",
+                    "search",
+                    "--query",
+                    "safe query",
+                    "--sidecar-root",
+                    str(sidecar_root),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
+
+        manifest_bytes = (Path(report["runDir"]) / "run-manifest.json").read_bytes()
+        manifest = json.loads(manifest_bytes)
+        self.assertEqual(manifest["status"], "error")
+        self.assertEqual(manifest["reason"], "error")
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "sidecar_process_start")
+        self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "error")
+        self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
+        self.assertNotIn(b"private-user-id", manifest_bytes)
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"
@@ -1508,6 +1655,56 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(report["status"], "provider_unavailable")
         self.assertIn("existing Firecrawl", " ".join(report["nextActions"]))
+        manifest = json.loads((Path(report["runDir"]) / "run-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["telemetry"]["phases"], [])
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "")
+
+    def test_collect_persists_cancelled_sidecar_telemetry(self) -> None:
+        out_dir = self.root / "promotion-output"
+        sidecar_root = self.root / "sidecar"
+        sidecar_root.mkdir()
+        (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
+        telemetry = {
+            "schemaVersion": 1,
+            "phases": [
+                {
+                    "phase": "cdp_initialization",
+                    "startedAt": "2026-07-22T00:00:00Z",
+                    "durationSeconds": 1.0,
+                    "status": "cancelled",
+                    "reason": "cancelled",
+                }
+            ],
+            "lastPhase": "cdp_initialization",
+        }
+        with (
+            mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
+            mock.patch.object(
+                platform_data_manager.mediacrawler_sidecar,
+                "run_sidecar",
+                return_value=sidecar.RunResult(status="cancelled", reason="user_cancelled", telemetry=telemetry),
+            ),
+        ):
+            report = self.run_main(
+                [
+                    "collect",
+                    "--platform",
+                    "zhihu",
+                    "--mode",
+                    "search",
+                    "--query",
+                    "safe query",
+                    "--sidecar-root",
+                    str(sidecar_root),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
+
+        manifest = json.loads((Path(report["runDir"]) / "run-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "cancelled")
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "cdp_initialization")
+        self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "cancelled")
 
     def test_promotion_manager_delegates_platform_data_before_product_arguments(self) -> None:
         result = subprocess.run(

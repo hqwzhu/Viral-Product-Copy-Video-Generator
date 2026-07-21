@@ -397,15 +397,17 @@ def run_sidecar(
 ) -> RunResult:
     execute = executor or execute_process
     raw_dir = run_dir / "raw"
-    telemetry_path = run_dir / "phase-telemetry.json"
+    telemetry_path = run_dir / "phase-telemetry.json" if request.platform == "zhihu" else None
     run_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
-    start_phase_telemetry(telemetry_path, "sidecar_process_start")
+    if telemetry_path:
+        start_phase_telemetry(telemetry_path, "sidecar_process_start")
     acquired = False
     retry_count = 0
 
     def completed_result(result: RunResult) -> RunResult:
-        result.telemetry = finalize_phase_telemetry(telemetry_path, result.status, result.reason)
+        if telemetry_path:
+            result.telemetry = finalize_phase_telemetry(telemetry_path, result.status, result.reason)
         return result
 
     try:
@@ -413,6 +415,8 @@ def run_sidecar(
             acquire_lock(install)
         except RuntimeError:
             return completed_result(RunResult(status="provider_unavailable", reason="provider_unavailable", keep_raw=keep_raw))
+        except OSError:
+            return completed_result(RunResult(status="error", reason="error", keep_raw=keep_raw))
         acquired = True
         command = build_mediacrawler_command(install, request, raw_dir, telemetry_path)
         try:
@@ -421,6 +425,8 @@ def run_sidecar(
             return completed_result(RunResult(status="error", reason="timeout", keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else ""))
         except KeyboardInterrupt:
             return completed_result(RunResult(status="cancelled", reason="user_cancelled", keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else ""))
+        except OSError:
+            return completed_result(RunResult(status="error", reason="error", keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else ""))
 
         if completed.returncode != 0 and is_transient_network_error(completed.stderr or completed.stdout):
             retry_count = 1
@@ -436,6 +442,8 @@ def run_sidecar(
                     keep_raw=keep_raw,
                     warning=RAW_WARNING if keep_raw else "",
                 ))
+            except OSError:
+                return completed_result(RunResult(status="error", reason="error", retry_count=retry_count, keep_raw=keep_raw, warning=RAW_WARNING if keep_raw else ""))
 
         stdout_tail = safe_tail(completed.stdout)
         stderr_tail = safe_tail(completed.stderr)
@@ -466,7 +474,8 @@ def run_sidecar(
         payload: dict[str, Any] = {}
         if raw_consumer:
             try:
-                record_phase_telemetry(telemetry_path, "normalization")
+                if telemetry_path:
+                    record_phase_telemetry(telemetry_path, "normalization")
                 payload = raw_consumer(raw_dir)
             except Exception as exc:  # noqa: BLE001 - caller receives a sanitized boundary error.
                 return completed_result(RunResult(
@@ -491,11 +500,22 @@ def run_sidecar(
             payload=payload,
         ))
     finally:
-        telemetry_path.unlink(missing_ok=True)
-        if not keep_raw and raw_dir.exists():
-            shutil.rmtree(raw_dir)
-        if acquired:
-            release_lock(install)
+        if telemetry_path:
+            try:
+                telemetry_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        try:
+            if not keep_raw and raw_dir.exists():
+                shutil.rmtree(raw_dir)
+        except OSError:
+            pass
+        finally:
+            if acquired:
+                try:
+                    release_lock(install)
+                except OSError:
+                    pass
 
 
 def start_phase_telemetry(path: Path, phase: str) -> None:
@@ -508,23 +528,20 @@ def record_phase_telemetry(path: Path, phase: str) -> None:
     payload = load_phase_telemetry(path)
     now = utc_now()
     phases = payload["phases"]
+    if phases and phases[-1]["phase"] == phase and phases[-1]["status"] == "started":
+        return
     if phases and phases[-1]["status"] == "started":
         phases[-1].update({"durationSeconds": elapsed_seconds(phases[-1]["startedAt"]), "status": "completed", "reason": "success"})
     phases.append({"phase": phase, "startedAt": now, "durationSeconds": None, "status": "started", "reason": ""})
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    try:
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def finalize_phase_telemetry(path: Path, status: str, reason: str) -> dict[str, Any]:
     payload = load_phase_telemetry(path)
     return summarize_phase_telemetry(payload["phases"], status, reason)
-
-
-def fallback_phase_telemetry(status: str, reason: str) -> dict[str, Any]:
-    return summarize_phase_telemetry(
-        [{"phase": "sidecar_process_start", "startedAt": utc_now(), "durationSeconds": None, "status": "started", "reason": ""}],
-        status,
-        reason,
-    )
 
 
 def summarize_phase_telemetry(phases: list[dict[str, Any]], status: str, reason: str) -> dict[str, Any]:

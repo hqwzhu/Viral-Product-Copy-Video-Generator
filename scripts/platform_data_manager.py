@@ -168,7 +168,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             "durationSeconds": round(time.monotonic() - started_monotonic, 3),
             "counts": payload.get("counts", empty_counts()),
             "retryCount": retry_count,
-            "telemetry": telemetry or mediacrawler_sidecar.fallback_phase_telemetry(status, reason),
+            "telemetry": telemetry or manifest["telemetry"],
             "raw": {
                 "keepRequested": bool(args.keep_raw),
                 "kept": raw_kept,

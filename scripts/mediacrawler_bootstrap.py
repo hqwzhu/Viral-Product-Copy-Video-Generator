@@ -49,10 +49,15 @@ class PhaseTelemetry:
         phases = source.get("phases", []) if isinstance(source, dict) else []
         phases = [item for item in phases if isinstance(item, dict) and item.get("phase") in TELEMETRY_PHASES]
         now = utc_now()
+        if phases and phases[-1].get("phase") == phase and phases[-1].get("status") == "started":
+            return
         if phases and phases[-1].get("status") == "started":
             phases[-1].update({"durationSeconds": duration_seconds(str(phases[-1].get("startedAt") or now)), "status": "completed", "reason": "success"})
         phases.append({"phase": phase, "startedAt": now, "durationSeconds": None, "status": "started", "reason": ""})
-        self.path.write_text(json.dumps({"schemaVersion": 1, "phases": phases}, ensure_ascii=False), encoding="utf-8")
+        try:
+            self.path.write_text(json.dumps({"schemaVersion": 1, "phases": phases}, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
 
 
 def utc_now() -> str:
@@ -421,7 +426,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     apply_cdp_port_override(config, os.environ.get("ENHE_MEDIACRAWLER_CDP_PORT"))
     patch_safe_cdp_cleanup(config, CDPBrowserManager)
-    patch_zhihu_phase_telemetry(ZhiHuClient, ZhihuCrawler, CDPBrowserManager, telemetry)
+    if upstream_platform(upstream_args) == "zhihu":
+        patch_zhihu_phase_telemetry(ZhiHuClient, ZhihuCrawler, CDPBrowserManager, telemetry)
     patch_douyin_creator_limit(DouYinClient, overrides.requested_max_contents)
     patch_zhihu_creator_limit(ZhiHuClient, overrides.requested_max_contents)
     patch_zhihu_search_limit(ZhiHuClient, overrides.requested_max_contents)
@@ -456,6 +462,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             await upstream_main.async_cleanup()
 
     asyncio.run(run())
+
+
+def upstream_platform(upstream_args: Sequence[str]) -> str:
+    try:
+        return str(upstream_args[upstream_args.index("--platform") + 1])
+    except (ValueError, IndexError):
+        return ""
 
 
 if __name__ == "__main__":
