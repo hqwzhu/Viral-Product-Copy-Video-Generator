@@ -337,6 +337,96 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in response["comments"]], [f"comment-{index}" for index in range(5)])
         self.assertFalse(response["has_more"])
 
+    def test_xiaohongshu_inline_and_later_sub_comments_share_one_root_limit(self) -> None:
+        patcher = getattr(bootstrap, "patch_xiaohongshu_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.sub_page_calls = 0
+
+            async def get_note_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "has_more": False,
+                    "comments": [
+                        {
+                            "id": "root-comment",
+                            "note_id": "note",
+                            "sub_comments": [{"id": f"inline-{index}"} for index in range(2)],
+                            "sub_comment_has_more": True,
+                            "sub_comment_cursor": "next",
+                        }
+                    ],
+                }
+
+            async def get_note_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                self.sub_page_calls += 1
+                return {
+                    "has_more": True,
+                    "comments": [{"id": f"later-{index}"} for index in range(5)],
+                }
+
+            async def collect_sub_comments(self, callback: object) -> None:
+                response = await self.get_note_comments("note", "token")
+                comment = response["comments"][0]
+                await callback("note", comment["sub_comments"])
+                has_more = comment["sub_comment_has_more"]
+                while has_more:
+                    page = await self.get_note_sub_comments("note", comment["id"], "token")
+                    has_more = page["has_more"]
+                    await callback("note", page["comments"])
+
+        callback_ids: list[str] = []
+
+        async def callback(note_id: str, rows: list[dict[str, str]]) -> None:
+            callback_ids.extend(row["id"] for row in rows)
+
+        patcher(FakeClient, 5)
+        client = FakeClient()
+        asyncio.run(client.collect_sub_comments(callback))
+
+        self.assertEqual(callback_ids, ["inline-0", "inline-1", "later-0", "later-1", "later-2"])
+        self.assertEqual(client.sub_page_calls, 1)
+
+    def test_xiaohongshu_inline_sub_comments_close_at_or_above_root_limit(self) -> None:
+        patcher = getattr(bootstrap, "patch_xiaohongshu_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        def run_case(limit: int) -> tuple[list[str], int]:
+            class FakeClient:
+                def __init__(self) -> None:
+                    self.sub_page_calls = 0
+
+                async def get_note_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                    return {
+                        "comments": [
+                            {
+                                "id": "root-comment",
+                                "note_id": "note",
+                                "sub_comments": [{"id": f"inline-{index}"} for index in range(7)],
+                                "sub_comment_has_more": True,
+                            }
+                        ]
+                    }
+
+                async def get_note_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                    self.sub_page_calls += 1
+                    return {"has_more": True, "comments": [{"id": "later"}]}
+
+            patcher(FakeClient, limit)
+            client = FakeClient()
+            response = asyncio.run(client.get_note_comments("note", "token"))
+            comment = response["comments"][0]
+            if comment["sub_comment_has_more"]:
+                asyncio.run(client.get_note_sub_comments("note", comment["id"], "token"))
+            return [row["id"] for row in comment["sub_comments"]], client.sub_page_calls
+
+        for limit, expected_ids in ((5, [f"inline-{index}" for index in range(5)]), (0, [])):
+            with self.subTest(limit=limit):
+                inline_ids, page_calls = run_case(limit)
+                self.assertEqual(inline_ids, expected_ids)
+                self.assertEqual(page_calls, 0)
+
     def test_douyin_sub_comments_are_bounded_to_one_page(self) -> None:
         patcher = getattr(bootstrap, "patch_douyin_comment_limit", None)
         self.assertIsNotNone(patcher)
@@ -368,6 +458,42 @@ class BootstrapTests(unittest.TestCase):
 
         self.assertEqual(response["comments"], [])
         self.assertEqual(response["has_more"], 0)
+
+    def test_douyin_empty_root_comment_page_ends_upstream_loop(self) -> None:
+        patcher = getattr(bootstrap, "patch_douyin_comment_limit", None)
+        self.assertIsNotNone(patcher)
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.root_page_calls = 0
+
+            async def get_aweme_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                self.root_page_calls += 1
+                return {"has_more": 1, "cursor": self.root_page_calls, "comments": []}
+
+            async def get_sub_comments(self, *args: object, **kwargs: object) -> dict[str, object]:
+                return {"has_more": 0, "comments": []}
+
+            async def get_aweme_all_comments(self, max_count: int = 5) -> list[dict[str, object]]:
+                result = []
+                has_more = 1
+                cursor = 0
+                while has_more and len(result) < max_count and self.root_page_calls < 3:
+                    response = await self.get_aweme_comments("video", cursor)
+                    has_more = response["has_more"]
+                    cursor = response["cursor"]
+                    comments = response["comments"]
+                    if not comments:
+                        continue
+                    result.extend(comments)
+                return result
+
+        patcher(FakeClient, 5)
+        client = FakeClient()
+        comments = asyncio.run(client.get_aweme_all_comments())
+
+        self.assertEqual(comments, [])
+        self.assertEqual(client.root_page_calls, 1)
 
     def test_zhihu_root_and_child_comments_are_bounded_to_one_page(self) -> None:
         patcher = getattr(bootstrap, "patch_zhihu_comment_limit", None)

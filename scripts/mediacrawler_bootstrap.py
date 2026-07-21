@@ -77,15 +77,53 @@ def patch_douyin_search_limit(client_class: type[Any], requested_max_contents: i
 
 
 def patch_xiaohongshu_comment_limit(client_class: type[Any], requested_max_comments: int) -> None:
-    original = client_class.get_note_sub_comments
+    original_sub_comments = client_class.get_note_sub_comments
+    retained_by_root: dict[tuple[int, str], int] = {}
+
+    if hasattr(client_class, "get_note_comments"):
+        original_root_comments = client_class.get_note_comments
+
+        async def limited_get_note_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
+            response = await original_root_comments(self, *args, **kwargs)
+            if not isinstance(response, dict) or not isinstance(response.get("comments"), list):
+                return response
+            result = dict(response)
+            limited_comments = []
+            for comment in response["comments"]:
+                if not isinstance(comment, dict):
+                    limited_comments.append(comment)
+                    continue
+                limited_comment = dict(comment)
+                inline_comments = comment.get("sub_comments")
+                retained = 0
+                if isinstance(inline_comments, list):
+                    limited_comment["sub_comments"] = inline_comments[:requested_max_comments]
+                    retained = len(limited_comment["sub_comments"])
+                root_comment_id = str(comment.get("id") or "")
+                if root_comment_id:
+                    retained_by_root[(id(self), root_comment_id)] = retained
+                if retained >= requested_max_comments:
+                    limited_comment["sub_comment_has_more"] = False
+                limited_comments.append(limited_comment)
+            result["comments"] = limited_comments
+            return result
+
+        client_class.get_note_comments = limited_get_note_comments
 
     async def limited_get_note_sub_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
-        response = await original(self, *args, **kwargs)
+        response = await original_sub_comments(self, *args, **kwargs)
         if not isinstance(response, dict):
             return response
         result = dict(response)
+        root_comment_id = kwargs.get("root_comment_id")
+        if root_comment_id is None and len(args) >= 2:
+            root_comment_id = args[1]
+        state_key = (id(self), str(root_comment_id or ""))
+        retained = retained_by_root.get(state_key, 0)
+        remaining = max(0, requested_max_comments - retained)
         if isinstance(response.get("comments"), list):
-            result["comments"] = response["comments"][:requested_max_comments]
+            result["comments"] = response["comments"][:remaining]
+            retained_by_root[state_key] = retained + len(result["comments"])
         result["has_more"] = False
         return result
 
@@ -93,10 +131,23 @@ def patch_xiaohongshu_comment_limit(client_class: type[Any], requested_max_comme
 
 
 def patch_douyin_comment_limit(client_class: type[Any], requested_max_comments: int) -> None:
-    original = client_class.get_sub_comments
+    original_sub_comments = client_class.get_sub_comments
+
+    if hasattr(client_class, "get_aweme_comments"):
+        original_root_comments = client_class.get_aweme_comments
+
+        async def safe_get_aweme_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
+            response = await original_root_comments(self, *args, **kwargs)
+            if not isinstance(response, dict) or response.get("comments"):
+                return response
+            result = dict(response)
+            result["has_more"] = 0
+            return result
+
+        client_class.get_aweme_comments = safe_get_aweme_comments
 
     async def limited_get_sub_comments(self: Any, *args: Any, **kwargs: Any) -> Any:
-        response = await original(self, *args, **kwargs)
+        response = await original_sub_comments(self, *args, **kwargs)
         if not isinstance(response, dict):
             return response
         result = dict(response)
