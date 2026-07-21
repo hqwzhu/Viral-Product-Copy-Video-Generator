@@ -875,13 +875,16 @@ class CliTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return platform_data_manager.main(argv)
 
-    def assert_creator_target_is_absent(self, manifest_bytes: bytes, target: str) -> None:
+    def assert_creator_request_is_absent(self, manifest_bytes: bytes, *markers: str) -> None:
         manifest = json.loads(manifest_bytes)
         self.assertEqual(manifest["target"], "")
+        self.assertEqual(manifest["query"], "")
         self.assertTrue(manifest["targetRedacted"])
+        self.assertTrue(manifest["queryRedacted"])
         self.assertEqual(manifest["targetType"], "creator")
         self.assertFalse(manifest["redaction"]["creatorTargetPersisted"])
-        for marker in (target, "/user/profile/creator-privacy-sentinel-7349", "creator-privacy-sentinel-7349"):
+        self.assertFalse(manifest["redaction"]["creatorQueryPersisted"])
+        for marker in markers:
             self.assertNotIn(marker.encode("utf-8"), manifest_bytes)
 
     def test_collect_parser_applies_safe_defaults_and_rejects_cookie_arguments(self) -> None:
@@ -971,9 +974,12 @@ class CliTests(unittest.TestCase):
         self.assertTrue(Path(manifest["artifacts"]["viralContentLibrary"]).exists())
         self.assertTrue(Path(manifest["artifacts"]["commentEvidence"]).exists())
 
-    def test_creator_fixture_manifest_never_persists_target_at_initial_or_ready_write(self) -> None:
+    def test_creator_fixture_manifest_never_persists_target_or_combined_query_at_initial_or_ready_write(self) -> None:
         out_dir = self.root / "promotion-output"
-        target = "https://www.xiaohongshu.com/user/profile/creator-privacy-sentinel-7349?xsec_token=not-for-output"
+        target = "creator-target-id-sentinel-7349"
+        query_url = "https://www.xiaohongshu.com/user/profile/creator-query-url-sentinel-8462?xsec_token=not-for-output"
+        query_id = "creator-query-id-sentinel-8462"
+        query = f"{query_url} {query_id}"
         manifest_writes: list[bytes] = []
         original_write_manifest = platform_data_manager.write_manifest
 
@@ -991,6 +997,8 @@ class CliTests(unittest.TestCase):
                     "creator",
                     "--target",
                     target,
+                    "--query",
+                    query,
                     "--fixture-dir",
                     str(FIXTURES),
                     "--out-dir",
@@ -1001,14 +1009,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(report["status"], "ready")
         self.assertEqual(len(manifest_writes), 2)
         for manifest_bytes in manifest_writes:
-            self.assert_creator_target_is_absent(manifest_bytes, target)
+            self.assert_creator_request_is_absent(
+                manifest_bytes,
+                target,
+                query_url,
+                "/user/profile/creator-query-url-sentinel-8462",
+                "creator-query-url-sentinel-8462",
+                query_id,
+            )
 
-    def test_creator_timeout_manifest_never_persists_target_at_initial_or_final_write(self) -> None:
+    def test_creator_timeout_manifest_never_persists_target_or_individual_query_at_initial_or_final_write(self) -> None:
         out_dir = self.root / "promotion-output"
         sidecar_root = self.root / "sidecar"
         sidecar_root.mkdir()
         (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
-        target = "creator-privacy-sentinel-7349"
+        target = "https://www.douyin.com/user/creator-target-url-sentinel-7349?sec_uid=not-for-output"
+        query = "creator-query-id-sentinel-8462"
         manifest_writes: list[bytes] = []
         original_write_manifest = platform_data_manager.write_manifest
 
@@ -1034,6 +1050,8 @@ class CliTests(unittest.TestCase):
                     "creator",
                     "--target",
                     target,
+                    "--query",
+                    query,
                     "--sidecar-root",
                     str(sidecar_root),
                     "--out-dir",
@@ -1044,9 +1062,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         self.assertEqual(report["reason"], "timeout")
         self.assertEqual(run_sidecar.call_args.args[1].target, target)
+        self.assertEqual(run_sidecar.call_args.args[1].query, query)
         self.assertEqual(len(manifest_writes), 2)
         for manifest_bytes in manifest_writes:
-            self.assert_creator_target_is_absent(manifest_bytes, target)
+            self.assert_creator_request_is_absent(
+                manifest_bytes,
+                target,
+                "/user/creator-target-url-sentinel-7349",
+                "creator-target-url-sentinel-7349",
+                query,
+            )
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"

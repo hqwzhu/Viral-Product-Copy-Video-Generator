@@ -177,6 +177,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
                 "removedFieldNames": REMOVED_FIELD_NAMES,
                 "rawUserIdsPersisted": False,
                 **({"creatorTargetPersisted": False} if request.mode == "creator" else {}),
+                **({"creatorQueryPersisted": False} if request.mode == "creator" else {}),
             },
             "artifacts": artifacts,
             "nextActions": next_actions(status),
@@ -367,6 +368,7 @@ def base_manifest(
 ) -> dict[str, Any]:
     creator_target = request.mode == "creator"
     target = "" if creator_target else request.target.strip()
+    query = "" if creator_target else request.query.strip()
     if not creator_target and target.lower().startswith(("http://", "https://")):
         target = mediacrawler_contract.sanitize_url(target)
     manifest = {
@@ -378,7 +380,7 @@ def base_manifest(
         "platform": request.platform,
         "mode": request.mode,
         "captureMode": capture_mode,
-        "query": request.query.strip(),
+        "query": query,
         "target": target,
         "limits": {
             "maxContents": request.max_contents,
@@ -402,12 +404,13 @@ def base_manifest(
             "removedFieldNames": REMOVED_FIELD_NAMES,
             "rawUserIdsPersisted": False,
             **({"creatorTargetPersisted": False} if creator_target else {}),
+            **({"creatorQueryPersisted": False} if creator_target else {}),
         },
         "artifacts": {},
         "nextActions": [],
     }
     if creator_target:
-        manifest.update({"targetRedacted": True, "targetType": "creator"})
+        manifest.update({"targetRedacted": True, "queryRedacted": True, "targetType": "creator"})
     return manifest
 
 
