@@ -406,9 +406,14 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(youtube["video"]["status"], "ready")
         self.assertEqual(Path(youtube["video"]["path"]), video_path)
         for item in publish_pack:
-            self.assertTrue(Path(item["cover"]["path"]).exists(), item["platform"])
+            cover_path = Path(item["cover"]["path"])
+            self.assertTrue(cover_path.exists(), item["platform"])
+            self.assertEqual(cover_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n", item["platform"])
             self.assertTrue(item["detailImages"], item["platform"])
-            self.assertTrue(all(Path(image["path"]).exists() for image in item["detailImages"]), item["platform"])
+            for image in item["detailImages"]:
+                image_path = Path(image["path"])
+                self.assertTrue(image_path.exists(), item["platform"])
+                self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n", item["platform"])
             self.assertTrue(item["assets"], item["platform"])
             self.assertTrue(item["firstBatch"]["pinnedComment"], item["platform"])
 
@@ -7422,28 +7427,51 @@ Prompt templates for product copy, SEO content, and video scripts.
     def test_browser_extension_package_defaults_to_versioned_dist_without_touching_v052_artifacts(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-default-package-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        project_dir = out_dir / "mini-project"
+        package_script = project_dir / "scripts" / "package_browser_extension.py"
+        extension_dir = project_dir / "browser-extension"
+        package_script.parent.mkdir(parents=True)
+        shutil.copy2(PACKAGE_BROWSER_EXTENSION, package_script)
+        for relative_path in [
+            "manifest.json",
+            "popup.html",
+            "popup.css",
+            "popup.js",
+            "billing-contract.json",
+            "icons/icon16.png",
+            "icons/icon48.png",
+            "icons/icon128.png",
+        ]:
+            destination = extension_dir / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(BROWSER_EXTENSION / relative_path, destination)
+
         historical_paths = [
-            ROOT / "dist" / "enhe-promotion-manager-0.5.2.zip",
-            ROOT / "dist" / "browser-extension-package-report.json",
-            ROOT / "dist" / "browser-extension-package-report.md",
+            project_dir / "dist" / "enhe-promotion-manager-0.5.2.zip",
+            project_dir / "dist" / "browser-extension-package-report.json",
+            project_dir / "dist" / "browser-extension-package-report.md",
         ]
-        historical_contents = {path: path.read_bytes() for path in historical_paths}
+        historical_contents = {
+            path: f"controlled historical sentinel: {path.name}".encode("utf-8")
+            for path in historical_paths
+        }
+        for path, contents in historical_contents.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
 
         subprocess.run(
-            [sys.executable, str(PACKAGE_BROWSER_EXTENSION)],
+            [sys.executable, str(package_script)],
             check=True,
-            cwd=out_dir,
+            cwd=project_dir,
         )
 
-        versioned_dir = out_dir / "dist" / "v0.5.3"
+        versioned_dir = project_dir / "dist" / "v0.5.3"
         report_path = versioned_dir / "browser-extension-package-report.json"
         self.assertTrue(report_path.exists())
         report = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["version"], "0.5.3")
         self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.3.zip").exists())
-        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.json").exists())
-        self.assertFalse((out_dir / "dist" / "browser-extension-package-report.md").exists())
         for path, expected in historical_contents.items():
             self.assertEqual(path.read_bytes(), expected, str(path))
 
