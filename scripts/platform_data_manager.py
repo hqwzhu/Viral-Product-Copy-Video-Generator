@@ -103,6 +103,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
     retry_count = 0
     raw_kept = False
     warning = ""
+    telemetry: dict[str, Any] = {}
     if args.fixture_dir:
         payload = normalize_fixture_dir(Path(args.fixture_dir), request.platform, run_dir)
         status = payload["status"]
@@ -143,6 +144,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             retry_count = result.retry_count
             raw_kept = result.keep_raw and (run_dir / "raw").exists()
             warning = result.warning
+            telemetry = result.telemetry
 
     contents = payload.pop("contents", [])
     comments = payload.pop("comments", [])
@@ -166,6 +168,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             "durationSeconds": round(time.monotonic() - started_monotonic, 3),
             "counts": payload.get("counts", empty_counts()),
             "retryCount": retry_count,
+            "telemetry": telemetry or mediacrawler_sidecar.fallback_phase_telemetry(status, reason),
             "raw": {
                 "keepRequested": bool(args.keep_raw),
                 "kept": raw_kept,
@@ -408,6 +411,7 @@ def base_manifest(
         "runDirectory": str(run_dir),
         "counts": empty_counts(),
         "retryCount": 0,
+        "telemetry": {"schemaVersion": mediacrawler_sidecar.TELEMETRY_SCHEMA_VERSION, "phases": [], "lastPhase": ""},
         "raw": {"keepRequested": False, "kept": False, "cleaned": False, "warning": ""},
         "redaction": {
             "schemaVersion": 1,

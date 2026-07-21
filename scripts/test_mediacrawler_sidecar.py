@@ -224,6 +224,25 @@ class SidecarCommandTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_bootstrap_parser_accepts_an_internal_telemetry_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp)
+            (checkout / "main.py").write_text("", encoding="utf-8")
+            telemetry_path = checkout / "phase-telemetry.json"
+            _, _, overrides = bootstrap.parse_bootstrap_args(
+                [
+                    "--checkout",
+                    str(checkout),
+                    "--telemetry-path",
+                    str(telemetry_path),
+                    "--",
+                    "--platform",
+                    "zhihu",
+                ]
+            )
+
+        self.assertEqual(overrides.telemetry_path, telemetry_path.resolve())
+
     def test_bootstrap_parser_defaults_requested_max_contents_when_omitted(self) -> None:
         with tempfile.TemporaryDirectory(prefix="mediacrawler-bootstrap-test-") as temp_dir:
             checkout = Path(temp_dir)
@@ -793,11 +812,37 @@ class SidecarRuntimeTests(unittest.TestCase):
 
     def test_runner_times_out_releases_lock_and_removes_raw_by_default(self) -> None:
         def timeout_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            telemetry_path = Path(command[command.index("--telemetry-path") + 1])
+            telemetry_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "phases": [
+                            {
+                                "phase": "cdp_initialization",
+                                "startedAt": "2026-07-22T00:00:00Z",
+                                "durationSeconds": None,
+                                "status": "started",
+                                "reason": "",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             raise subprocess.TimeoutExpired(command, timeout)
 
         result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=timeout_executor)
         self.assertEqual(result.status, "error")
         self.assertEqual(result.reason, "timeout")
+        self.assertEqual(result.telemetry["lastPhase"], "cdp_initialization")
+        self.assertEqual(result.telemetry["phases"][-1]["status"], "timeout")
+        self.assertEqual(result.telemetry["phases"][-1]["reason"], "timeout")
+        self.assertEqual(
+            set(result.telemetry["phases"][-1]),
+            {"phase", "startedAt", "durationSeconds", "status", "reason"},
+        )
+        self.assertFalse((self.run_dir / "phase-telemetry.json").exists())
         self.assertFalse(sidecar.lock_path(self.install).exists())
         self.assertFalse((self.run_dir / "raw").exists())
 
@@ -828,6 +873,8 @@ class SidecarRuntimeTests(unittest.TestCase):
         result = sidecar.run_sidecar(self.install, self.request, self.run_dir, executor=success_executor, raw_consumer=consumer)
         self.assertEqual(result.status, "ready")
         self.assertEqual(result.payload["contentCount"], 1)
+        self.assertEqual(result.telemetry["lastPhase"], "normalization")
+        self.assertEqual(result.telemetry["phases"][-1]["status"], "success")
         self.assertEqual(len(consumed), 1)
         self.assertFalse((self.run_dir / "raw").exists())
 
@@ -1411,6 +1458,10 @@ class CliTests(unittest.TestCase):
                 "creator-target-url-sentinel-7349",
                 query,
             )
+        manifest = json.loads(manifest_writes[-1])
+        self.assertEqual(manifest["telemetry"]["lastPhase"], "sidecar_process_start")
+        self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "timeout")
+        self.assertNotIn(target, json.dumps(manifest["telemetry"]))
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"

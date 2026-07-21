@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -18,6 +20,51 @@ class BootstrapOverrides:
     requested_max_comments: int
     xhs_detail_query: str = ""
     xhs_detail_target: str = ""
+    telemetry_path: Path | None = None
+
+
+TELEMETRY_PHASES = {
+    "sidecar_process_start",
+    "bootstrap_start",
+    "cdp_initialization",
+    "upstream_http_api",
+    "detail_content",
+    "root_comments",
+    "sub_comments",
+    "normalization",
+}
+
+
+class PhaseTelemetry:
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+
+    def begin(self, phase: str) -> None:
+        if not self.path or phase not in TELEMETRY_PHASES:
+            return
+        try:
+            source = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            source = {}
+        phases = source.get("phases", []) if isinstance(source, dict) else []
+        phases = [item for item in phases if isinstance(item, dict) and item.get("phase") in TELEMETRY_PHASES]
+        now = utc_now()
+        if phases and phases[-1].get("status") == "started":
+            phases[-1].update({"durationSeconds": duration_seconds(str(phases[-1].get("startedAt") or now)), "status": "completed", "reason": "success"})
+        phases.append({"phase": phase, "startedAt": now, "durationSeconds": None, "status": "started", "reason": ""})
+        self.path.write_text(json.dumps({"schemaVersion": 1, "phases": phases}, ensure_ascii=False), encoding="utf-8")
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def duration_seconds(started_at: str) -> float:
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    return round(max(0.0, (datetime.now(timezone.utc) - started).total_seconds()), 3)
 
 
 def apply_cdp_port_override(config: Any, raw_port: str | None) -> None:
@@ -291,6 +338,43 @@ def patch_safe_cdp_cleanup(config: Any, manager_class: type[Any]) -> None:
     manager_class.cleanup = safe_cleanup
 
 
+def patch_zhihu_phase_telemetry(
+    client_class: type[Any],
+    crawler_class: type[Any],
+    manager_class: type[Any],
+    telemetry: PhaseTelemetry,
+) -> None:
+    original_launch = manager_class.launch_and_connect
+
+    async def tracked_launch(self: Any, *args: Any, **kwargs: Any) -> Any:
+        telemetry.begin("cdp_initialization")
+        return await original_launch(self, *args, **kwargs)
+
+    manager_class.launch_and_connect = tracked_launch
+
+    def track_method(name: str, phase: str) -> None:
+        original = getattr(client_class, name)
+
+        async def tracked(self: Any, *args: Any, **kwargs: Any) -> Any:
+            telemetry.begin(phase)
+            return await original(self, *args, **kwargs)
+
+        setattr(client_class, name, tracked)
+
+    for method_name in ("get_note_by_keyword", "get_creator_info", "get_creator_answers", "get_creator_articles", "get_creator_videos"):
+        if hasattr(client_class, method_name):
+            track_method(method_name, "upstream_http_api")
+    track_method("get_root_comments", "root_comments")
+    track_method("get_child_comments", "sub_comments")
+    original_detail = crawler_class.get_note_detail
+
+    async def tracked_detail(self: Any, *args: Any, **kwargs: Any) -> Any:
+        telemetry.begin("detail_content")
+        return await original_detail(self, *args, **kwargs)
+
+    crawler_class.get_note_detail = tracked_detail
+
+
 def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], BootstrapOverrides]:
     values = list(argv)
     if "--" not in values:
@@ -302,6 +386,7 @@ def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], Bootstra
     parser.add_argument("--requested-max-comments", type=int, default=30)
     parser.add_argument("--xhs-detail-query", default="")
     parser.add_argument("--xhs-detail-target", default="")
+    parser.add_argument("--telemetry-path", default="")
     args = parser.parse_args(values[:separator])
     checkout = Path(args.checkout).resolve()
     if not (checkout / "main.py").is_file():
@@ -315,12 +400,15 @@ def parse_bootstrap_args(argv: Sequence[str]) -> tuple[Path, list[str], Bootstra
         requested_max_comments=args.requested_max_comments,
         xhs_detail_query=args.xhs_detail_query.strip(),
         xhs_detail_target=args.xhs_detail_target.strip(),
+        telemetry_path=Path(args.telemetry_path).resolve() if args.telemetry_path.strip() else None,
     )
     return checkout, values[separator + 1 :], overrides
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     checkout, upstream_args, overrides = parse_bootstrap_args(list(argv) if argv is not None else sys.argv[1:])
+    telemetry = PhaseTelemetry(overrides.telemetry_path)
+    telemetry.begin("bootstrap_start")
     sys.path.insert(0, str(checkout))
 
     import cmd_arg  # type: ignore[import-not-found]
@@ -328,10 +416,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     from media_platform.douyin.client import DouYinClient  # type: ignore[import-not-found]
     from media_platform.xhs.client import XiaoHongShuClient  # type: ignore[import-not-found]
     from media_platform.zhihu.client import ZhiHuClient  # type: ignore[import-not-found]
+    from media_platform.zhihu.core import ZhihuCrawler  # type: ignore[import-not-found]
     from tools.cdp_browser import CDPBrowserManager  # type: ignore[import-not-found]
 
     apply_cdp_port_override(config, os.environ.get("ENHE_MEDIACRAWLER_CDP_PORT"))
     patch_safe_cdp_cleanup(config, CDPBrowserManager)
+    patch_zhihu_phase_telemetry(ZhiHuClient, ZhihuCrawler, CDPBrowserManager, telemetry)
     patch_douyin_creator_limit(DouYinClient, overrides.requested_max_contents)
     patch_zhihu_creator_limit(ZhiHuClient, overrides.requested_max_contents)
     patch_zhihu_search_limit(ZhiHuClient, overrides.requested_max_contents)
