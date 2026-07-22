@@ -1,11 +1,14 @@
-import importlib.util
+import importlib
 import contextlib
+import functools
 import hashlib
+import http.server
 import io
 import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
@@ -38,6 +41,40 @@ from scripts.media_pipeline.security import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SETUP_SCRIPT = REPO_ROOT / "scripts" / "setup_professional_media.py"
+PRODUCT_FIXTURE = (
+    REPO_ROOT / "references" / "professional-media-fixture" / "product.html"
+)
+
+
+class QuietFixtureHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, _format, *_args):
+        pass
+
+
+@contextlib.contextmanager
+def serve_product_fixture():
+    handler = functools.partial(
+        QuietFixtureHandler, directory=str(PRODUCT_FIXTURE.parent)
+    )
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/{PRODUCT_FIXTURE.name}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def load_capture_module(test_case):
+    module_name = "scripts.media_pipeline.capture"
+    test_case.assertIsNotNone(
+        importlib.util.find_spec(module_name),
+        "capture module must implement the product capture contract",
+    )
+    return importlib.import_module(module_name)
 
 
 def load_setup_module():
@@ -1267,6 +1304,171 @@ class PathContractTest(unittest.TestCase):
             self.assertEqual(find_existing(new, legacy), legacy)
             new.mkdir()
             self.assertEqual(find_existing(new, legacy), new)
+
+
+class ProductCaptureTest(unittest.TestCase):
+    def test_default_plan_has_five_exact_product_shots(self):
+        capture = load_capture_module(self)
+        source_url = "https://example.com/product"
+
+        self.assertEqual(
+            capture.build_default_capture_plan(source_url),
+            {
+                "sourceUrl": source_url,
+                "shots": [
+                    {
+                        "id": "hero",
+                        "url": source_url,
+                        "selector": "#hero",
+                        "action": "none",
+                        "viewport": [1440, 900],
+                        "duration": 3,
+                    },
+                    {
+                        "id": "workflow",
+                        "url": source_url,
+                        "selector": "#workflow",
+                        "action": "scroll",
+                        "viewport": [1440, 900],
+                        "duration": 4,
+                    },
+                    {
+                        "id": "features",
+                        "url": source_url,
+                        "selector": "#features",
+                        "action": "scroll",
+                        "viewport": [1440, 900],
+                        "duration": 4,
+                    },
+                    {
+                        "id": "proof",
+                        "url": source_url,
+                        "selector": "#proof",
+                        "action": "scroll",
+                        "viewport": [1440, 900],
+                        "duration": 3,
+                    },
+                    {
+                        "id": "cta",
+                        "url": source_url,
+                        "selector": "#cta",
+                        "action": "scroll",
+                        "viewport": [1440, 900],
+                        "duration": 3,
+                    },
+                ],
+            },
+        )
+
+    def test_captures_real_screenshots_and_interaction_video(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        with serve_product_fixture() as source_url, tempfile.TemporaryDirectory() as temp:
+            plan = capture.build_default_capture_plan(source_url)
+            result = capture.PlaywrightCaptureProvider(
+                allow_localhost=True
+            ).capture(plan, Path(temp))
+
+            self.assertEqual(result.status, "ready", result.to_dict())
+            images = [
+                artifact
+                for artifact in result.artifacts
+                if artifact.type == "product_capture_image"
+            ]
+            videos = [
+                artifact
+                for artifact in result.artifacts
+                if artifact.type == "product_capture_video"
+            ]
+            self.assertGreaterEqual(len(images), 5)
+            self.assertGreaterEqual(
+                len({artifact.sha256 for artifact in images}), 3
+            )
+            self.assertGreaterEqual(len(videos), 1)
+
+            for artifact in result.artifacts:
+                path = Path(artifact.path)
+                self.assertTrue(path.is_file(), artifact.path)
+                self.assertGreater(path.stat().st_size, 1000, artifact.path)
+
+            image_keys = {
+                "shotId",
+                "requestedSelector",
+                "resolvedSelector",
+                "selectorFallback",
+                "finalUrl",
+                "viewport",
+            }
+            for artifact in images:
+                metadata = artifact.to_dict()["metadata"]
+                self.assertTrue(image_keys.issubset(metadata), metadata)
+                self.assertEqual(metadata["viewport"], [1440, 900])
+
+            for artifact in videos:
+                metadata = artifact.to_dict()["metadata"]
+                self.assertTrue(
+                    {"finalUrl", "viewport", "shotIds"}.issubset(metadata),
+                    metadata,
+                )
+                self.assertEqual(metadata["viewport"], [1440, 900])
+                self.assertEqual(
+                    metadata["shotIds"],
+                    ["hero", "workflow", "features", "proof", "cta"],
+                )
+
+    def test_missing_selector_falls_back_to_main_and_records_metadata(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        with serve_product_fixture() as source_url, tempfile.TemporaryDirectory() as temp:
+            plan = capture.build_default_capture_plan(source_url)
+            shot = dict(plan["shots"][0])
+            shot["selector"] = "#missing-product-section"
+            plan["shots"] = [shot]
+
+            result = capture.PlaywrightCaptureProvider(
+                allow_localhost=True
+            ).capture(plan, Path(temp))
+
+            self.assertEqual(result.status, "ready", result.to_dict())
+            image = next(
+                artifact
+                for artifact in result.artifacts
+                if artifact.type == "product_capture_image"
+            )
+            metadata = image.to_dict()["metadata"]
+            self.assertEqual(
+                metadata["requestedSelector"], "#missing-product-section"
+            )
+            self.assertEqual(metadata["resolvedSelector"], "main")
+            self.assertIs(metadata["selectorFallback"], True)
+
+    def test_invalid_remote_plans_raise_before_playwright_launch(self):
+        capture = load_capture_module(self)
+        cross_origin = capture.build_default_capture_plan(
+            "https://example.com/product"
+        )
+        cross_origin["shots"][0]["url"] = "https://other.example/product"
+        private_route = capture.build_default_capture_plan(
+            "https://example.com/admin/product"
+        )
+
+        for plan in (cross_origin, private_route):
+            with self.subTest(
+                source_url=plan["sourceUrl"]
+            ), tempfile.TemporaryDirectory() as temp:
+                with mock.patch.object(capture, "sync_playwright") as start:
+                    launch = start.return_value.start.return_value.chromium.launch
+                    with self.assertRaises(MediaSecurityError):
+                        capture.PlaywrightCaptureProvider().capture(
+                            plan, Path(temp)
+                        )
+
+                start.assert_not_called()
+                launch.assert_not_called()
 
 
 if __name__ == "__main__":
