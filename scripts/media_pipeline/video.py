@@ -363,6 +363,15 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
         errors.append("duration_invalid")
     elif not math.isfinite(target_duration) or target_duration <= 0 or duration < target_duration * 0.9 or duration > target_duration + 0.5:
         errors.append("duration_out_of_range")
+    duration_range = clean.get("durationRange", (20, 60))
+    try:
+        lower, upper = (float(duration_range[0]), float(duration_range[1]))
+        if not math.isfinite(lower) or not math.isfinite(upper) or lower <= 0 or upper < lower:
+            raise ValueError
+        if target_duration < lower or target_duration > upper:
+            errors.append("target_duration_out_of_range")
+    except (TypeError, ValueError, IndexError):
+        errors.append("duration_range_invalid")
 
     shots = clean.get("shots")
     if not isinstance(shots, (list, tuple)):
@@ -384,6 +393,23 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
         errors.append("voiceover_missing")
     if not all(isinstance(shot, Mapping) and isinstance(shot.get("provenance"), Mapping) and str(shot["provenance"].get("source") or "").strip() for shot in shots):
         errors.append("shot_provenance_missing")
+    source_hashes = clean.get("sourceHashes")
+    if not isinstance(source_hashes, (list, tuple)):
+        errors.append("source_hashes_missing")
+    else:
+        hash_by_id = {
+            str(item.get("shotId")): str(item.get("sha256"))
+            for item in source_hashes
+            if isinstance(item, Mapping) and item.get("shotId") and item.get("sha256")
+        }
+        product_hashes = {hash_by_id.get(str(shot.get("id"))) for shot in shots if isinstance(shot, Mapping) and shot.get("kind") == "product"}
+        supporting_hashes = {hash_by_id.get(str(shot.get("id"))) for shot in shots if isinstance(shot, Mapping) and shot.get("kind") in {"supporting", "broll", "ai_scene"}}
+        product_hashes.discard(None)
+        supporting_hashes.discard(None)
+        if len(product_hashes) < 3:
+            errors.append("product_sources_not_distinct")
+        if len(supporting_hashes) < 2:
+            errors.append("supporting_sources_not_distinct")
     captions = clean.get("captions") or []
     for caption in captions:
         try:
@@ -431,6 +457,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
         voiceover_sha256 = _file_sha256(voice_path) if voice_path else None
         source_asset_count = len(source_hashes) + (1 if voice_path else 0)
         contains_user_data = bool(clean.get("containsUserData", clean.get("contains_user_data", False)))
+        clean["sourceHashes"] = source_hashes
         _encode_final(raw, staged_output, voice_path, float(clean["duration"]))
         probe = probe_media(staged_output)
         quality_errors = _quality_errors(clean, probe)
