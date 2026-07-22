@@ -1,0 +1,54 @@
+{
+  "python": {
+    "version": "3.12"
+  },
+  "hyperframes": {
+    "version": "0.7.68",
+    "license": "Apache-2.0"
+  },
+  "kokoro": {
+    "package": {
+      "name": "kokoro-onnx",
+      "version": "0.4.7",
+      "license": "MIT"
+    },
+    "model": {
+      "version": "v1.0",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "filename": "kokoro-v1.0.onnx",
+          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
+        },
+        {
+          "filename": "voices-v1.0.bin",
+          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+        }
+      ]
+    }
+  },
+  "comfyui": {
+    "repository": "https://github.com/Comfy-Org/ComfyUI.git",
+    "revision": "f6d30bce9a862d56d9184dd65341621a8905ea3e",
+    "license": "GPL-3.0-only",
+    "cudaIndexUrl": "https://download.pytorch.org/whl/cu128",
+    "cudaPackages": {
+      "torch": "2.11.0+cu128",
+      "torchvision": "0.26.0+cu128",
+      "torchaudio": "2.11.0+cu128"
+    }
+  },
+  "flux": {
+    "repository": "Comfy-Org/flux1-schnell",
+    "revision": "7d679837b018bfeb28eca55734b335efcd0e7100",
+    "filename": "flux1-schnell-fp8.safetensors",
+    "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/7d679837b018bfeb28eca55734b335efcd0e7100/split_files/diffusion_models/flux1-schnell-fp8.safetensors",
+    "license": "Apache-2.0"
+  },
+  "musetalk": {
+    "repository": "https://github.com/TMElyralab/MuseTalk.git",
+    "revision": "0a89dec45a0192b824e3cf4daf96c239440c5ed8",
+    "license": "MIT",
+    "enabledByDefault": false
+  }
+}
