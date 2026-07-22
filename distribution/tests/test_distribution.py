@@ -256,6 +256,8 @@ class PublicDistributionTest(unittest.TestCase):
                 "gitignore comment": (root / ".gitignore", "# .env\n# .env.*\n!.env.example\n"),
                 "gitignore order": (root / ".gitignore", "!.env.example\n.env\n.env.*\n"),
                 "trigger comment": (workflow_path, workflow.replace("  push:", "  # push:")),
+                "push false": (workflow_path, workflow.replace("  push:", "  push: false")),
+                "pull request false": (workflow_path, workflow.replace("  pull_request:", "  pull_request: false")),
                 "matrix comment": (workflow_path, workflow.replace("windows-latest, ubuntu-latest", "windows-latest #, ubuntu-latest")),
                 "python comment": (workflow_path, workflow.replace("python-version: '3.12'", "# python-version: '3.12'")),
                 "install comment": (workflow_path, workflow.replace("- run: python -m pip install -r requirements-test.txt", "# - run: python -m pip install -r requirements-test.txt")),

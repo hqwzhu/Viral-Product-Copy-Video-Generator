@@ -1127,6 +1127,7 @@ class DistributionContractTest(unittest.TestCase):
             ],
         )
         self.assertIn("PyYAML==6.0.3", (distribution / "requirements-test.txt").read_text(encoding="utf-8"))
+        self.assertIn("PyYAML==6.0.3", (ROOT / "requirements-test.txt").read_text(encoding="utf-8"))
         self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.3")
         self.assertEqual(contract.STORE_ITEM_ID, "dloklkbnmoigemnfigbkibogmgbieppl")
         for path in (
@@ -1158,6 +1159,26 @@ class DistributionContractTest(unittest.TestCase):
             self.assertIn(next_version, text)
             self.assertNotIn("0.5.2", text)
             self.assertNotIn("pending review", text)
+
+        for path, heading, status_check, unpublished in (
+            (
+                ROOT / "docs" / "extension-store-submission.md",
+                "## Microsoft Edge Add-ons Steps",
+                "Verify the current Edge listing status independently",
+                "if v0.5.3 is not published",
+            ),
+            (
+                ROOT / "docs" / "zh-CN" / "extension-store-submission.md",
+                "## Microsoft Edge Add-ons 上架步骤",
+                "独立核验当前 Edge 条目状态",
+                "若 v0.5.3 尚未发布",
+            ),
+        ):
+            edge_steps = path.read_text(encoding="utf-8").split(heading, 1)[1]
+            self.assertIn(status_check, edge_steps)
+            self.assertIn(unpublished, edge_steps)
+            self.assertNotIn("current v0.5.3 release is published", edge_steps)
+            self.assertNotIn("当前 v0.5.3 已发布", edge_steps)
 
     def test_distribution_gitignore_rules_have_git_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

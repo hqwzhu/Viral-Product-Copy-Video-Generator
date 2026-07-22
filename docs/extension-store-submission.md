@@ -114,7 +114,7 @@ Use the detailed localized descriptions from `docs/store/chrome-listing.md` and 
 
 1. Create or open a Microsoft Partner Center account.
 2. Open the existing Microsoft Edge extension submission when applicable; do not create a replacement for an existing item.
-3. Confirm the current v0.5.3 release is published, then increment the manifest version for the next version; do not alter v0.5.3.
+3. Verify the current Edge listing status independently. If v0.5.3 is published for that Edge item, increment the manifest version for the next version; if v0.5.3 is not published, follow the applicable Edge submission flow without treating the Chrome publication as Edge publication.
 4. Package and upload `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` as the next-version update.
 5. Upload next-version icons and both reviewed localized screenshots from `dist\v<NEXT_VERSION>\store-assets`.
 6. Fill the localized product descriptions, category, privacy policy, support URL, permission justifications, and certification notes.

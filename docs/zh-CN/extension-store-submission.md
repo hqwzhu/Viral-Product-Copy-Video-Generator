@@ -112,7 +112,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist\v<NEXT_VERSION>"
 
 1. 创建或登录 Microsoft Partner Center 账号。
 2. 如果已有 Microsoft Edge 扩展条目，打开现有提交，不为同一扩展创建替代条目。
-3. 确认当前 v0.5.3 已发布后，再提高 manifest 的版本号；不要改动 v0.5.3。
+3. 独立核验当前 Edge 条目状态。若 v0.5.3 已在该 Edge 条目发布，再提高 manifest 的版本号；若 v0.5.3 尚未发布，则按适用的 Edge 提交流程处理，不得把 Chrome 的发布状态当作 Edge 已发布。
 4. 打包并上传 `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` 作为下一版更新。
 5. 上传 `dist\v<NEXT_VERSION>\store-assets` 中下一版图标和两张已审核的本地化截图。
 6. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。

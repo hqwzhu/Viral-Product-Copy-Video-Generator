@@ -189,7 +189,11 @@ def verify_ci_contract(root: Path) -> list[str]:
     except yaml.YAMLError as exc:
         return errors + [f"GitHub Actions workflow is invalid YAML: {exc}"]
     triggers = workflow.get("on") if isinstance(workflow, dict) else None
-    if not isinstance(triggers, dict) or set(triggers) != {"push", "pull_request"}:
+    if (
+        not isinstance(triggers, dict)
+        or set(triggers) != {"push", "pull_request"}
+        or any(value is not None and not isinstance(value, dict) for value in triggers.values())
+    ):
         errors.append("GitHub Actions workflow triggers are incorrect")
         return errors
     job = workflow.get("jobs", {}).get("test") if isinstance(workflow.get("jobs"), dict) else None
