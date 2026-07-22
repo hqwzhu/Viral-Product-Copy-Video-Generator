@@ -726,7 +726,7 @@ class PathContractTest(unittest.TestCase):
     def test_artifact_and_ready_stage_result_round_trip(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "capture.png"
-            source.write_bytes(b"captured product pixels")
+            source.write_bytes(b"capture")
 
             artifact = Artifact.from_file(
                 "product_capture_image",
@@ -740,6 +740,10 @@ class PathContractTest(unittest.TestCase):
             payload = result.to_dict()
 
             self.assertEqual(len(artifact.sha256), 64)
+            self.assertEqual(
+                artifact.sha256,
+                "460ee6aa3a80359181b794cc31a7185addba77626e9f719c10e3c8efb8668a1d",
+            )
             self.assertEqual(artifact.path, str(source.resolve()))
             self.assertEqual(
                 payload,
@@ -778,8 +782,37 @@ class PathContractTest(unittest.TestCase):
         self.assertEqual(slugify("中文"), "product")
         self.assertEqual(paths.root.parent.name, RUNS_DIR)
         self.assertEqual(paths.root.name, "20260723-120000-enhe-api")
-        self.assertEqual(paths.captures.name, "product-captures_产品录屏")
-        self.assertEqual(paths.reports.name, "reports_报告")
+        self.assertEqual(
+            {
+                name: getattr(paths, name).name
+                for name in (
+                    "source_assets",
+                    "captures",
+                    "generated_content",
+                    "voiceovers",
+                    "b_roll",
+                    "ai_scenes",
+                    "videos",
+                    "covers",
+                    "detail_images",
+                    "publish_packs",
+                    "reports",
+                )
+            },
+            {
+                "source_assets": "source-assets_源素材",
+                "captures": "product-captures_产品录屏",
+                "generated_content": "generated-content_生成内容",
+                "voiceovers": "voiceovers_配音",
+                "b_roll": "b-roll_辅助镜头",
+                "ai_scenes": "ai-scenes_AI场景图",
+                "videos": "videos_视频",
+                "covers": "covers_封面",
+                "detail_images": "detail-images_详情图",
+                "publish_packs": "publish-packs_发布包",
+                "reports": "reports_报告",
+            },
+        )
         self.assertNotIn(
             "promotion-output/product-batch-runs", paths.root.as_posix()
         )
