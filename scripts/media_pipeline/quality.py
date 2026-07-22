@@ -205,7 +205,11 @@ def _bool_metadata(item: Any, name: str) -> bool:
 def _check_evidence(evidence: Mapping[str, Any], name: str) -> tuple[bool, Any, str]:
     probe = evidence.get("probe") if isinstance(evidence.get("probe"), Mapping) else {}
     captures = evidence.get("productCaptures") or []
+    if not captures and evidence.get("productCaptureHashes"):
+        captures = [{"sha256": value} for value in evidence.get("productCaptureHashes", [])]
     supporting = evidence.get("supportingScenes") or evidence.get("bRoll") or []
+    if not supporting and evidence.get("supportingSceneHashes"):
+        supporting = [{"sha256": value} for value in evidence.get("supportingSceneHashes", [])]
     ai_scenes = evidence.get("aiScenes") or []
     covers = evidence.get("covers") or []
     details = evidence.get("detailImages") or []
@@ -215,7 +219,9 @@ def _check_evidence(evidence: Mapping[str, Any], name: str) -> tuple[bool, Any, 
         videos = [videos] if videos else []
 
     if name == "non_silent_voice":
-        return bool(probe.get("nonSilent")), probe.get("nonSilent"), "voiceover_non_silent"
+        voiceover = evidence.get("voiceover") if isinstance(evidence.get("voiceover"), Mapping) else {}
+        value = probe.get("nonSilent", voiceover.get("nonSilent", evidence.get("nonSilentVoice")))
+        return bool(value), value, "voiceover_non_silent"
     if name == "five_distinct_shots":
         shot_ids = evidence.get("shotIds") or []
         if not shot_ids and videos:
@@ -269,8 +275,10 @@ def evaluate_media_quality(evidence: Mapping[str, Any] | None, target: str = "pr
     warnings: list[str] = []
     checks: list[dict[str, Any]] = []
     required_families = {
-        "productCaptures": bool(data.get("productCaptures")),
-        "videos": bool(data.get("videos") or data.get("video")),
+        "productCaptures": bool(data.get("productCaptures") or data.get("productCaptureHashes")),
+        # A probe is itself evidence of a video when an older caller has not
+        # yet materialized the normalized ``videos`` list.
+        "videos": bool(data.get("videos") or data.get("video") or data.get("probe")),
         "covers": bool(data.get("covers")),
         "detailImages": bool(data.get("detailImages")),
         "contactSheets": bool(data.get("contactSheets")),
