@@ -2590,6 +2590,37 @@ class ProfessionalVideoTest(unittest.TestCase):
             self.assertIn('data-width="1080"', index)
             self.assertIn('data-height="1920"', index)
 
+    def test_quality_gate_requires_distinct_sources_and_default_duration_range(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            clean = video._normalise_data(data)
+            duplicate_hash = "a" * 64
+            clean["sourceHashes"] = [
+                {"shotId": shot["id"], "sha256": duplicate_hash}
+                for shot in clean["shots"]
+            ]
+            probe = {
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "videoStreams": 1,
+                "audioStreams": 1,
+                "nonSilent": True,
+                "shortEdge": 1080,
+                "duration": 20.0,
+            }
+            errors = video._quality_errors(clean, probe)
+            self.assertIn("product_sources_not_distinct", errors)
+            self.assertIn("supporting_sources_not_distinct", errors)
+            clean["sourceHashes"] = [
+                {"shotId": shot["id"], "sha256": f"{index + 1:064x}"}
+                for index, shot in enumerate(clean["shots"])
+            ]
+            clean["duration"] = 1
+            errors = video._quality_errors(clean, {**probe, "duration": 1.0})
+            self.assertIn("target_duration_out_of_range", errors)
+
 
 class MediaQualityTest(unittest.TestCase):
     """Offline regression tests for the fail-closed quality gate."""
@@ -2685,6 +2716,47 @@ class MediaQualityTest(unittest.TestCase):
             gate = quality.run_quality_gate({}, report_path=Path(temp) / "empty.json")
             self.assertEqual(gate.status, "failed")
             self.assertEqual(gate.provider, "media_quality_gate")
+
+    def test_degraded_gate_drops_failed_artifacts_and_redacts_sensitive_paths(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            try:
+                from PIL import Image
+            except ImportError:
+                self.skipTest("Pillow unavailable")
+            valid_path = root / "valid.png"
+            Image.new("RGB", (20, 20), "#29466d").save(valid_path, format="PNG")
+            valid = replace(
+                Artifact.from_file("product_capture_image", valid_path, "local", "fixture"),
+                metadata={"viewport": [20, 20], "cloudUpload": False},
+            )
+            sensitive_dir = root / "cookies"
+            sensitive_dir.mkdir()
+            sensitive_path = sensitive_dir / "capture.png"
+            Image.new("RGB", (20, 20), "#29466d").save(sensitive_path, format="PNG")
+            sensitive = replace(
+                Artifact.from_file("product_capture_image", sensitive_path, "local", "fixture"),
+                metadata={"viewport": [20, 20], "cloudUpload": False},
+            )
+            report = quality.build_quality_report({"capture": StageResult.ready("local", [sensitive])})
+            self.assertEqual(report["artifacts"][0]["path"], "[redacted-sensitive-path]")
+            self.assertNotIn("cookies", json.dumps(report, ensure_ascii=False))
+
+            with mock.patch.object(
+                quality,
+                "build_quality_report",
+                return_value={"status": "standard_ready", "warnings": [], "blockers": []},
+            ), mock.patch.object(
+                quality,
+                "_inspect_artifact",
+                side_effect=[{"passed": False}, {"passed": True}],
+            ):
+                gate = quality.run_quality_gate(
+                    {"capture": StageResult(status="degraded", provider="local", artifacts=(sensitive, valid))}
+                )
+            self.assertEqual(gate.status, "degraded")
+            self.assertEqual(gate.artifacts, (valid,))
 
 
 if __name__ == "__main__":
