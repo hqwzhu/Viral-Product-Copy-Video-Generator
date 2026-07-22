@@ -13,6 +13,8 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -1107,21 +1109,24 @@ class DistributionContractTest(unittest.TestCase):
         )
         workflow_path = distribution / ".github" / "workflows" / "tests.yml"
         self.assertTrue(workflow_path.is_file())
-        workflow = workflow_path.read_text(encoding="utf-8")
-        for required in (
-            "push:",
-            "pull_request:",
-            "windows-latest",
-            "ubuntu-latest",
-            "actions/checkout@v4",
-            "actions/setup-python@v5",
-            "python-version: '3.12'",
-            "pip install -r requirements-test.txt",
-            "python scripts/verify_distribution.py",
-            "python -m unittest discover -s tests -v",
-        ):
-            self.assertIn(required, workflow)
-        self.assertTrue((distribution / "requirements-test.txt").is_file())
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        self.assertIn("on", workflow)
+        self.assertEqual(set(workflow["on"]), {"push", "pull_request"})
+        job = workflow["jobs"]["test"]
+        self.assertEqual(job["strategy"]["matrix"]["os"], ["windows-latest", "ubuntu-latest"])
+        self.assertEqual(job["runs-on"], "${{ matrix.os }}")
+        self.assertEqual(job["steps"][0], {"uses": "actions/checkout@v4"})
+        self.assertEqual(job["steps"][1]["uses"], "actions/setup-python@v5")
+        self.assertEqual(job["steps"][1]["with"]["python-version"], "3.12")
+        self.assertEqual(
+            [step["run"] for step in job["steps"] if "run" in step],
+            [
+                "python -m pip install -r requirements-test.txt",
+                "python scripts/verify_distribution.py",
+                "python -m unittest discover -s tests -v",
+            ],
+        )
+        self.assertIn("PyYAML==6.0.3", (distribution / "requirements-test.txt").read_text(encoding="utf-8"))
         self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.3")
         self.assertEqual(contract.STORE_ITEM_ID, "dloklkbnmoigemnfigbkibogmgbieppl")
         for path in (
@@ -1140,6 +1145,38 @@ class DistributionContractTest(unittest.TestCase):
             self.assertNotIn("0.5.2", text)
             self.assertNotIn("pending_review", text)
             self.assertNotIn("not_submitted", text)
+
+    def test_store_submission_guides_describe_published_v053_and_next_upgrade(self) -> None:
+        for path, published, next_version in (
+            (ROOT / "docs" / "extension-store-submission.md", "published", "next version"),
+            (ROOT / "docs" / "zh-CN" / "extension-store-submission.md", "已发布", "下一版"),
+        ):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("0.5.3", text)
+            self.assertIn(contract.STORE_ITEM_ID, text)
+            self.assertIn(published, text)
+            self.assertIn(next_version, text)
+            self.assertNotIn("0.5.2", text)
+            self.assertNotIn("pending review", text)
+
+    def test_distribution_gitignore_rules_have_git_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            write_text(
+                root,
+                ".gitignore",
+                (ROOT / "distribution" / ".gitignore").read_text(encoding="utf-8"),
+            )
+            for path, ignored in ((".env", True), (".env.local", True), (".env.example", False)):
+                with self.subTest(path=path):
+                    result = subprocess.run(
+                        ["git", "check-ignore", "-q", "--", path],
+                        cwd=root,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, ignored)
 
     def test_extension_commands_match_the_approved_non_payment_contract(self) -> None:
         popup = (ROOT / "browser-extension" / "popup.js").read_text(encoding="utf-8")

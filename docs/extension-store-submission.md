@@ -4,6 +4,10 @@ Version: 0.5.3
 
 This guide turns `browser-extension/` into the Chrome Web Store and Microsoft Edge Add-ons submission package for ENHE Product Promo Maker.
 
+## Current Published Release
+
+Chrome Web Store item `dloklkbnmoigemnfigbkibogmgbieppl` has version `0.5.3` published. Its archived ZIP, artwork, checksums, and release evidence are immutable. Do not repackage, re-upload, or replace v0.5.3. For the next version, first increment the extension version, create a new release directory and evidence set, then submit that new version as an update to the same item.
+
 Localized store names:
 
 - English (default): `ENHE Product Promo Maker`
@@ -19,26 +23,28 @@ Official references:
 
 From the repository root:
 
+For the next version only, after incrementing the version:
+
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v<NEXT_VERSION>"
 ```
 
 The command writes:
 
-- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
-- `dist\v0.5.3\browser-extension-package-report.json`
-- `dist\v0.5.3\browser-extension-package-report.md`
+- `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip`
+- `dist\v<NEXT_VERSION>\browser-extension-package-report.json`
+- `dist\v<NEXT_VERSION>\browser-extension-package-report.md`
 
 Place reviewed store artwork in:
 
-- `dist\v0.5.3\store-assets\enhe-product-promo-maker-en-1280x800.png`
-- `dist\v0.5.3\store-assets\enhe-product-promo-maker-zh-1280x800.png`
+- `dist\v<NEXT_VERSION>\store-assets\enhe-product-promo-maker-en-1280x800.png`
+- `dist\v<NEXT_VERSION>\store-assets\enhe-product-promo-maker-zh-1280x800.png`
 
-Upload the zip file to the existing store item. Keep the reports as release evidence; the compatible package slug remains `enhe-promotion-manager-0.5.3.zip`.
+Upload the next-version ZIP to the existing store item. Keep its reports as release evidence.
 
 ## Pre-Submission Checklist
 
-- Version and package output are 0.5.3 under `dist\v0.5.3`.
+- The current published release remains v0.5.3 and unchanged; the next version and package output use a new `dist\v<NEXT_VERSION>` directory.
 - Manifest is MV3.
 - Popup code and CSS are packaged locally.
 - No remote code is loaded by `<script src="https://...">`, dynamic imports, `importScripts`, `eval`, or `new Function`.
@@ -96,30 +102,24 @@ Use the detailed localized descriptions from `docs/store/chrome-listing.md` and 
 1. Create or open a Chrome Web Store Developer Dashboard account.
 2. Pay any required developer registration fee in the dashboard.
 3. Open item `dloklkbnmoigemnfigbkibogmgbieppl`; do not create a new item.
-4. Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:
-5. If v0.5.2 is pending review, do not replace it; wait for the review result.
-6. If v0.5.2 is published, continue with the v0.5.3 upload as an update.
-7. If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.
-8. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
-9. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
-10. Fill the localized name, short description, detailed description, category, product website, support URL, and privacy policy fields from the committed documents.
-11. Fill privacy practices using the permission justifications above. State that the extension does not collect platform passwords, cookies, payment secrets, or API tokens.
-12. Explain paid features: hosted runs require ENHE subscription credits; local command generation can remain free or trial-limited.
-13. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for review. If login, account verification, or captcha is required, pause for the account owner to complete it.
+4. Confirm that v0.5.3 is published, then increment the manifest version for the next version; do not change the v0.5.3 archive or listing history.
+5. Package the next version and upload `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` as an update to this item.
+6. Upload next-version icons and both reviewed localized screenshots from `dist\v<NEXT_VERSION>\store-assets`.
+7. Fill the localized name, short description, detailed description, category, product website, support URL, and privacy policy fields from the committed documents.
+8. Fill privacy practices using the permission justifications above. State that the extension does not collect platform passwords, cookies, payment secrets, or API tokens.
+9. Explain paid features: hosted runs require ENHE subscription credits; local command generation can remain free or trial-limited.
+10. Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit the next version for review. If login, account verification, or captcha is required, pause for the account owner to complete it.
 
 ## Microsoft Edge Add-ons Steps
 
 1. Create or open a Microsoft Partner Center account.
 2. Open the existing Microsoft Edge extension submission when applicable; do not create a replacement for an existing item.
-3. Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:
-4. If v0.5.2 is pending review, do not replace it; wait for the review result.
-5. If v0.5.2 is published, continue with the v0.5.3 upload as an update.
-6. If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.
-7. Upload `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`.
-8. Upload the v0.5.3 icon and both reviewed localized screenshots from `dist\v0.5.3\store-assets`.
-9. Fill the localized product descriptions, category, privacy policy, support URL, permission justifications, and certification notes.
-10. In reviewer notes, state that remote services return data only and that all extension logic is inside the package.
-11. Confirm the generated publishing assets require user approval, then submit for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.
+3. Confirm the current v0.5.3 release is published, then increment the manifest version for the next version; do not alter v0.5.3.
+4. Package and upload `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` as the next-version update.
+5. Upload next-version icons and both reviewed localized screenshots from `dist\v<NEXT_VERSION>\store-assets`.
+6. Fill the localized product descriptions, category, privacy policy, support URL, permission justifications, and certification notes.
+7. In reviewer notes, state that remote services return data only and that all extension logic is inside the package.
+8. Confirm the generated publishing assets require user approval, then submit the next version for certification. If login, account verification, or captcha is required, pause for the account owner to complete it.
 
 ## Reviewer Notes Template
 

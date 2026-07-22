@@ -1,6 +1,6 @@
 name: Distribution tests
 
-on:
+'on':
   push:
   pull_request:
 

@@ -1,1 +1,1 @@
-# Distribution verification and tests use only the Python standard library.
+PyYAML==6.0.3

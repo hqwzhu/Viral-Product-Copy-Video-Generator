@@ -11,6 +11,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import yaml
+
 sys.dont_write_bytecode = True
 
 import distribution_contract as contract
@@ -93,18 +95,13 @@ EXPECTED_VALIDATOR_COMMANDS = (
     "python -m unittest discover -s tests -v",
 )
 EXPECTED_GITIGNORE_RULES = (".env", ".env.*", "!.env.example")
-EXPECTED_CI_WORKFLOW_MARKERS = (
-    "push:",
-    "pull_request:",
-    "windows-latest",
-    "ubuntu-latest",
-    "actions/checkout@v4",
-    "actions/setup-python@v5",
-    "python-version: '3.12'",
-    "pip install -r requirements-test.txt",
-    "python scripts/verify_distribution.py",
-    "python -m unittest discover -s tests -v",
-)
+EXPECTED_CI_STEPS = [
+    {"uses": "actions/checkout@v4"},
+    {"uses": "actions/setup-python@v5", "with": {"python-version": "3.12"}},
+    {"run": "python -m pip install -r requirements-test.txt"},
+    {"run": "python scripts/verify_distribution.py"},
+    {"run": "python -m unittest discover -s tests -v"},
+]
 
 
 def redact_error(message: str) -> str:
@@ -152,19 +149,58 @@ def verify_required_files(root: Path) -> list[str]:
     ]
 
 
+def _effective_gitignore_rules(text: str) -> list[str]:
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _gitignore_ignores(path: str, rules: list[str]) -> bool:
+    ignored = False
+    for rule in rules:
+        negated = rule.startswith("!")
+        pattern = rule[1:] if negated else rule
+        if pattern == path or (pattern == ".env.*" and path.startswith(".env.")):
+            ignored = not negated
+    return ignored
+
+
 def verify_ci_contract(root: Path) -> list[str]:
     errors: list[str] = []
-    gitignore = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    gitignore = _effective_gitignore_rules((root / ".gitignore").read_text(encoding="utf-8"))
     for rule in EXPECTED_GITIGNORE_RULES:
         if rule not in gitignore:
             errors.append(f".gitignore is missing required rule: {rule}")
+    if not (
+        _gitignore_ignores(".env", gitignore)
+        and _gitignore_ignores(".env.local", gitignore)
+        and not _gitignore_ignores(".env.example", gitignore)
+    ):
+        errors.append(".gitignore environment-file behavior is incorrect")
     for path in root.rglob(".env*"):
         if path.is_file() and path.name != ".env.example":
             errors.append(f"environment file is not allowed in public distribution: {path.relative_to(root).as_posix()}")
-    workflow = (root / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
-    for marker in EXPECTED_CI_WORKFLOW_MARKERS:
-        if marker not in workflow:
-            errors.append(f"GitHub Actions workflow is missing: {marker}")
+    try:
+        workflow = yaml.safe_load(
+            (root / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+        )
+    except yaml.YAMLError as exc:
+        return errors + [f"GitHub Actions workflow is invalid YAML: {exc}"]
+    triggers = workflow.get("on") if isinstance(workflow, dict) else None
+    if not isinstance(triggers, dict) or set(triggers) != {"push", "pull_request"}:
+        errors.append("GitHub Actions workflow triggers are incorrect")
+        return errors
+    job = workflow.get("jobs", {}).get("test") if isinstance(workflow.get("jobs"), dict) else None
+    if not isinstance(job, dict):
+        return errors + ["GitHub Actions test job is missing"]
+    if job.get("runs-on") != "${{ matrix.os }}":
+        errors.append("GitHub Actions test runner is incorrect")
+    if job.get("strategy", {}).get("matrix", {}).get("os") != ["windows-latest", "ubuntu-latest"]:
+        errors.append("GitHub Actions OS matrix is incorrect")
+    if job.get("steps") != EXPECTED_CI_STEPS:
+        errors.append("GitHub Actions test steps are incorrect")
     return errors
 
 
@@ -257,10 +293,16 @@ def verify_versions(root: Path, release: dict) -> list[str]:
         errors.append("Skill component capability IDs differ from the contract")
     if extension_component.get("runtime") != "Chrome Manifest V3":
         errors.append("extension component runtime is incorrect")
+    if extension_component.get("name") != contract.PRODUCT_EN:
+        errors.append("extension component product name is incorrect")
     if extension_component.get("entryPoints") != ["manifest.json", "popup.html", "popup.js"]:
         errors.append("extension component entry points are incorrect")
     if extension_component.get("nonPaymentCapabilityIds") != list(contract.NON_PAYMENT_COMMANDS):
         errors.append("extension component capability IDs differ from the contract")
+    for locale, expected_name in (("en", contract.PRODUCT_EN), ("zh_CN", contract.PRODUCT_ZH)):
+        messages = read_json(root / "extension/chrome/_locales" / locale / "messages.json")
+        if messages.get("extensionName", {}).get("message") != expected_name:
+            errors.append(f"{locale} extension product name is incorrect")
     return errors
 
 
