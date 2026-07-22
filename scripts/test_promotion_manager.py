@@ -7895,44 +7895,82 @@ Prompt templates for product copy, SEO content, and video scripts.
                 self.assertIn(marker, text, f"{label} missing {marker}")
             self.assertIn("dist/v0.5.3", text.replace("\\", "/"))
 
-        state_markers_en = [
-            "Check the dashboard status of the current v0.5.2 submission before uploading v0.5.3:",
-            "If v0.5.2 is pending review, do not replace it; wait for the review result.",
-            "If v0.5.2 is published, continue with the v0.5.3 upload as an update.",
-            "If v0.5.2 is rejected, record the rejection reason, fix any required issue, then upload v0.5.3.",
-        ]
-        state_markers_zh = [
-            "上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：",
-            "如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。",
-            "如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。",
-            "如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。",
-        ]
-        upload_step_en = "Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`."
+        self.assertIn(
+            "Its validated archive is `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`; "
+            "this is an immutable historical verification asset, not a package to upload again.",
+            submission_en,
+        )
+        self.assertIn(
+            "其已验证归档为 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`；"
+            "它只是不可修改的历史验证资产，不是再次上传的操作指令。",
+            submission_zh,
+        )
+        for text in (submission_en, submission_zh):
+            self.assertNotIn("v0.5.2", text)
+            self.assertIn("<NEXT_VERSION>", text)
+        self.assertNotIn("pending review", submission_en.lower())
+        self.assertNotIn(
+            "Upload `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`",
+            submission_en,
+        )
+        self.assertNotIn(
+            "上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`",
+            submission_zh,
+        )
+
+        chrome_upload_step_en = (
+            "Package the next version and upload "
+            "`dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
+            "as an update to this item."
+        )
         screenshots_step_en = (
-            "Upload the v0.5.3 icon and both reviewed localized screenshots from "
-            "`dist\\v0.5.3\\store-assets`."
+            "Upload next-version icons and both reviewed localized screenshots from "
+            "`dist\\v<NEXT_VERSION>\\store-assets`."
         )
         chrome_submit_step_en = (
-            "Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit for "
-            "review. If login, account verification, or captcha is required, pause for the "
-            "account owner to complete it."
+            "Paste `docs/store/reviewer-notes.md`, confirm the item ID again, and submit the "
+            "next version for review. If login, account verification, or captcha is required, "
+            "pause for the account owner to complete it."
+        )
+        edge_status_step_en = (
+            "Verify the current Edge listing status independently. If v0.5.3 is published for "
+            "that Edge item, increment the manifest version for the next version; if v0.5.3 is "
+            "not published, follow the applicable Edge submission flow without treating the "
+            "Chrome publication as Edge publication."
+        )
+        edge_upload_step_en = (
+            "Package and upload "
+            "`dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
+            "as the next-version update."
         )
         edge_submit_step_en = (
-            "Confirm the generated publishing assets require user approval, then submit for "
-            "certification. If login, account verification, or captcha is required, pause for "
-            "the account owner to complete it."
+            "Confirm the generated publishing assets require user approval, then submit the "
+            "next version for certification. If login, account verification, or captcha is "
+            "required, pause for the account owner to complete it."
         )
-        upload_step_zh = "上传 `dist\\v0.5.3\\enhe-promotion-manager-0.5.3.zip`。"
+        chrome_upload_step_zh = (
+            "打包下一版，并将 `dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
+            "作为该条目的更新上传。"
+        )
         screenshots_step_zh = (
-            "上传 v0.5.3 图标和 `dist\\v0.5.3\\store-assets` 中已审核的两张本地化截图。"
+            "上传 `dist\\v<NEXT_VERSION>\\store-assets` 中下一版图标和两张已审核的本地化截图。"
         )
         chrome_submit_step_zh = (
-            "粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、"
-            "账号验证或 captcha，由账号所有者完成后再继续。"
+            "粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交下一版审核。"
+            "若需要登录、账号验证或 captcha，由账号所有者完成后再继续。"
+        )
+        edge_status_step_zh = (
+            "独立核验当前 Edge 条目状态。若 v0.5.3 已在该 Edge 条目发布，再提高 manifest "
+            "的版本号；若 v0.5.3 尚未发布，则按适用的 Edge 提交流程处理，不得把 Chrome "
+            "的发布状态当作 Edge 已发布。"
+        )
+        edge_upload_step_zh = (
+            "打包并上传 `dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
+            "作为下一版更新。"
         )
         edge_submit_step_zh = (
-            "确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，"
-            "由账号所有者完成后再继续。"
+            "确认生成的发布素材需要用户批准后提交下一版认证。若需要登录、账号验证或 "
+            "captcha，由账号所有者完成后再继续。"
         )
         submission_sections = [
             (
@@ -7940,52 +7978,38 @@ Prompt templates for product copy, SEO content, and video scripts.
                 submission_en.split("## Chrome Web Store Steps", 1)[1].split(
                     "## Microsoft Edge Add-ons Steps", 1
                 )[0],
-                state_markers_en,
-                upload_step_en,
-                [upload_step_en, screenshots_step_en, chrome_submit_step_en],
+                [chrome_upload_step_en, screenshots_step_en, chrome_submit_step_en],
             ),
             (
                 "English Edge steps",
                 submission_en.split("## Microsoft Edge Add-ons Steps", 1)[1].split(
                     "## Reviewer Notes Template", 1
                 )[0],
-                state_markers_en,
-                upload_step_en,
-                [upload_step_en, screenshots_step_en, edge_submit_step_en],
+                [edge_status_step_en, edge_upload_step_en, screenshots_step_en, edge_submit_step_en],
             ),
             (
                 "Chinese Chrome steps",
                 submission_zh.split("## Chrome Web Store 上架步骤", 1)[1].split(
                     "## Microsoft Edge Add-ons 上架步骤", 1
                 )[0],
-                state_markers_zh,
-                upload_step_zh,
-                [upload_step_zh, screenshots_step_zh, chrome_submit_step_zh],
+                [chrome_upload_step_zh, screenshots_step_zh, chrome_submit_step_zh],
             ),
             (
                 "Chinese Edge steps",
                 submission_zh.split("## Microsoft Edge Add-ons 上架步骤", 1)[1].split(
                     "## 审核备注模板", 1
                 )[0],
-                state_markers_zh,
-                upload_step_zh,
-                [upload_step_zh, screenshots_step_zh, edge_submit_step_zh],
+                [edge_status_step_zh, edge_upload_step_zh, screenshots_step_zh, edge_submit_step_zh],
             ),
         ]
-        for label, section, state_markers, upload_step, required_steps in submission_sections:
-            ordered_markers = [*state_markers, upload_step]
-            for marker in ordered_markers:
-                self.assertIn(marker, section, f"{label} missing state gate: {marker}")
-            marker_positions = [section.index(marker) for marker in ordered_markers]
-            self.assertTrue(
-                all(left < right for left, right in zip(marker_positions, marker_positions[1:])),
-                f"{label} must order check, pending, published, rejected, then upload",
-            )
+        for label, section, required_steps in submission_sections:
             normalized_section_lines = [
                 re.sub(r"^\d+\.\s*", "", line) for line in section.splitlines()
             ]
             for required_step in required_steps:
                 self.assertIn(required_step, normalized_section_lines, f"{label} missing step")
+            step_positions = [normalized_section_lines.index(step) for step in required_steps]
+            self.assertEqual(step_positions, sorted(step_positions), f"{label} steps are out of order")
 
         submission_en_lines = [
             re.sub(r"^\d+\.\s*", "", line) for line in submission_en.splitlines()

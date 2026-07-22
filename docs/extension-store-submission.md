@@ -6,7 +6,7 @@ This guide turns `browser-extension/` into the Chrome Web Store and Microsoft Ed
 
 ## Current Published Release
 
-Chrome Web Store item `dloklkbnmoigemnfigbkibogmgbieppl` has version `0.5.3` published. Its archived ZIP, artwork, checksums, and release evidence are immutable. Do not repackage, re-upload, or replace v0.5.3. For the next version, first increment the extension version, create a new release directory and evidence set, then submit that new version as an update to the same item.
+Chrome Web Store item `dloklkbnmoigemnfigbkibogmgbieppl` has version `0.5.3` published. Its validated archive is `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`; this is an immutable historical verification asset, not a package to upload again. Its artwork, checksums, and release evidence are also immutable. Do not repackage, re-upload, or replace v0.5.3. For the next version, first increment the extension version, create a new release directory and evidence set, then submit that new version as an update to the same item.
 
 Localized store names:
 

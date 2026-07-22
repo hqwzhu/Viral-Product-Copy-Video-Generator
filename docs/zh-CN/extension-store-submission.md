@@ -6,7 +6,7 @@
 
 ## 当前已发布版本
 
-Chrome Web Store 条目 `dloklkbnmoigemnfigbkibogmgbieppl` 的 v0.5.3 已发布。其归档 ZIP、商店图片、校验和与发行证据均不可更改；不得重新打包、重新上传或替换 v0.5.3。下一版升级时，先提高扩展版本号，创建新的发行目录和证据集，再作为同一条目的更新提交。
+Chrome Web Store 条目 `dloklkbnmoigemnfigbkibogmgbieppl` 的 v0.5.3 已发布。其已验证归档为 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`；它只是不可修改的历史验证资产，不是再次上传的操作指令。其商店图片、校验和与发行证据也均不可更改；不得重新打包、重新上传或替换 v0.5.3。下一版升级时，先提高扩展版本号，创建新的发行目录和证据集，再作为同一条目的更新提交。
 
 商店本地化名称：
 
