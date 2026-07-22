@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest import mock
 
 from scripts.media_pipeline.contracts import (
@@ -17,6 +17,7 @@ from scripts.media_pipeline.contracts import (
     MediaJob,
     StageResult,
     atomic_write_json,
+    stage_result_is_valid,
 )
 from scripts.media_pipeline.paths import (
     DEFAULT_OUTPUT_ROOT,
@@ -25,6 +26,12 @@ from scripts.media_pipeline.paths import (
     find_existing,
     new_run_paths,
     slugify,
+)
+from scripts.media_pipeline.security import (
+    MediaSecurityError,
+    cloud_file_allowed,
+    redact_secrets,
+    validate_capture_shot,
 )
 
 
@@ -625,6 +632,169 @@ class RuntimeSetupTest(unittest.TestCase):
         )
 
         self.assertFalse(self.setup.check_runtime(runtime_root)["installed"]["flux"])
+
+
+class MediaSecurityTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_capture_rejects_cross_origin_and_private_routes(self):
+        source = "https://enhe.test/product"
+
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                source,
+                {"url": "https://evil.test/x", "selector": "main"},
+            )
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                source,
+                {"url": "https://enhe.test/admin", "selector": "main"},
+            )
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                source,
+                {"url": "https://enhe.test/%61dmin", "selector": "main"},
+            )
+
+    def test_capture_rejects_localhost_and_invalid_actions_by_default(self):
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                "http://localhost:8000/product",
+                {"selector": "main"},
+            )
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                "https://enhe.test/product",
+                {"selector": "main", "action": "type-password"},
+            )
+
+    def test_capture_allows_explicit_local_deterministic_fixture(self):
+        self.assertIsNone(
+            validate_capture_shot(
+                "http://127.0.0.1:8000/product",
+                {
+                    "url": "http://127.0.0.1:8000/fixture",
+                    "selector": "main",
+                    "action": "scroll",
+                },
+                allow_localhost=True,
+            )
+        )
+
+    def test_cloud_media_requires_flag_and_exact_allowlist_membership(self):
+        allowed = self.root / "approved" / "product.png"
+        other = self.root / "approved" / "other.png"
+
+        self.assertFalse(cloud_file_allowed(allowed, False, [allowed]))
+        self.assertTrue(cloud_file_allowed(allowed, True, [allowed]))
+        self.assertFalse(cloud_file_allowed(other, True, [allowed]))
+
+    def test_cloud_media_rejects_sensitive_paths_even_when_allowlisted(self):
+        cookies = self.root / "Chrome" / "User Data" / "Default" / "Cookies"
+        token = self.root / "exports" / "api-token.json"
+        login_data = self.root / "exports" / "Login Data.json"
+
+        self.assertFalse(cloud_file_allowed(cookies, True, [cookies]))
+        self.assertFalse(cloud_file_allowed(token, True, [token]))
+        self.assertFalse(cloud_file_allowed(login_data, True, [login_data]))
+
+    def test_stage_result_detects_changed_and_unchanged_artifacts(self):
+        path = self.root / "capture.bin"
+        path.write_bytes(b"first")
+        artifact = Artifact.from_file(
+            "product_capture_image",
+            path,
+            "playwright",
+            "user-authorized",
+        )
+        result = StageResult.ready("playwright", [artifact])
+
+        with mock.patch.object(
+            Path,
+            "read_bytes",
+            side_effect=AssertionError("Stage validation must stream the file"),
+        ):
+            self.assertTrue(stage_result_is_valid(result))
+
+        path.write_bytes(b"changed")
+        self.assertFalse(stage_result_is_valid(result))
+
+    def test_stage_result_rejects_non_resumable_states(self):
+        path = self.root / "capture.bin"
+        path.write_bytes(b"first")
+        artifact = Artifact.from_file(
+            "product_capture_image",
+            path,
+            "playwright",
+            "user-authorized",
+        )
+
+        self.assertTrue(
+            stage_result_is_valid(
+                StageResult(status="degraded", provider="playwright", artifacts=(artifact,))
+            )
+        )
+        self.assertFalse(
+            stage_result_is_valid(
+                StageResult(status="failed", provider="playwright", artifacts=(artifact,))
+            )
+        )
+        self.assertFalse(
+            stage_result_is_valid(
+                StageResult(status="skipped", provider="playwright", artifacts=(artifact,))
+            )
+        )
+        self.assertFalse(stage_result_is_valid(StageResult.ready("playwright", [])))
+        path.unlink()
+        self.assertFalse(
+            stage_result_is_valid(StageResult.ready("playwright", [artifact]))
+        )
+        self.assertFalse(stage_result_is_valid(None))
+
+    def test_redact_secrets_recurses_and_returns_independent_json_containers(self):
+        nested = [{"value": "keep"}]
+        source = MappingProxyType(
+            {
+                "api_key": "one",
+                "api-key": "two",
+                "TOKEN": "three",
+                "clientSecret": "four",
+                "cookieJar": "five",
+                "authorization": {"nested": "six"},
+                "safe": {"nested": nested, "tuple": ("a", {"plain": "b"})},
+            }
+        )
+
+        redacted = redact_secrets(source)
+
+        for key in (
+            "api_key",
+            "api-key",
+            "TOKEN",
+            "clientSecret",
+            "cookieJar",
+            "authorization",
+        ):
+            self.assertEqual(redacted[key], "[REDACTED]")
+        self.assertEqual(
+            redacted["safe"],
+            {"nested": [{"value": "keep"}], "tuple": ["a", {"plain": "b"}]},
+        )
+        self.assertIs(type(redacted), dict)
+        self.assertIs(type(redacted["safe"]), dict)
+        self.assertIs(type(redacted["safe"]["nested"]), list)
+        self.assertIs(type(redacted["safe"]["tuple"]), list)
+        json.dumps(redacted)
+
+        redacted["safe"]["nested"][0]["value"] = "changed-output"
+        self.assertEqual(nested[0]["value"], "keep")
+        nested[0]["value"] = "changed-input"
+        self.assertEqual(redacted["safe"]["tuple"][1]["plain"], "b")
 
 
 class PathContractTest(unittest.TestCase):

@@ -155,6 +155,23 @@ class StageResult:
         )
 
 
+def stage_result_is_valid(result: StageResult) -> bool:
+    try:
+        if result.status not in ("ready", "degraded") or not result.artifacts:
+            return False
+        for artifact in result.artifacts:
+            path = Path(artifact.path)
+            if not path.is_file():
+                return False
+            with path.open("rb") as handle:
+                sha256 = hashlib.file_digest(handle, "sha256").hexdigest()
+            if sha256 != artifact.sha256:
+                return False
+    except Exception:
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class MediaJob:
     run_id: str
