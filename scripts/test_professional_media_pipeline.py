@@ -106,6 +106,411 @@ def load_voiceover_module(test_case):
     return importlib.import_module(module_name)
 
 
+def load_scenes_module(test_case):
+    module_name = "scripts.media_pipeline.scenes"
+    test_case.assertIsNotNone(
+        importlib.util.find_spec(module_name),
+        "scenes module must implement AI scene and B-roll providers",
+    )
+    return importlib.import_module(module_name)
+
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"fake-scene-pixels"
+
+
+class _FakeComfyHandler(http.server.BaseHTTPRequestHandler):
+    state = None
+
+    def log_message(self, _format, *_args):
+        pass
+
+    def _json(self, value, status=200):
+        payload = json.dumps(value).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self):
+        path, _, query = self.path.partition("?")
+        if path == "/system_stats":
+            self._json(self.state.get("health_payload", {"system": {"os": "fake"}}))
+        elif path.startswith("/history/"):
+            if self.state.get("malformed_history"):
+                self._json({"bad": True})
+            elif self.state.get("history_responses"):
+                self._json(self.state["history_responses"].pop(0))
+            elif self.state.get("history_empty"):
+                self._json({})
+            else:
+                self._json({"fake-prompt-id": {"outputs": {"7": {"images": [{
+                    "filename": "scene.png", "subfolder": "", "type": "output"
+                }]}}}})
+        elif path == "/view":
+            self.state["view_query"] = query
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(PNG_BYTES)))
+            self.end_headers()
+            self.wfile.write(PNG_BYTES)
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        if self.path != "/prompt":
+            self.send_error(404)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        self.state["prompt_payload"] = json.loads(self.rfile.read(length))
+        self._json({"prompt_id": "fake-prompt-id"})
+
+
+class _RedirectHandler(http.server.BaseHTTPRequestHandler):
+    state = None
+
+    def log_message(self, _format, *_args):
+        pass
+
+    def do_GET(self):
+        if self.path == "/start":
+            self.send_response(302)
+            self.send_header("Location", "/dest")
+            self.end_headers()
+            return
+        if self.path == "/dest":
+            self.state["destination_calls"] = self.state.get("destination_calls", 0) + 1
+            self.state["destination_authorization"] = self.headers.get("Authorization")
+            payload = b'{"photos": []}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        self.send_error(404)
+
+
+@contextlib.contextmanager
+def serve_fake_comfyui(state=None):
+    state = state if state is not None else {}
+    _FakeComfyHandler.state = state
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _FakeComfyHandler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@contextlib.contextmanager
+def serve_redirect_target(state=None):
+    state = state if state is not None else {}
+    _RedirectHandler.state = state
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RedirectHandler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+class SceneProviderTest(unittest.TestCase):
+    def setUp(self):
+        self.scenes = load_scenes_module(self)
+        self.workflow = REPO_ROOT / "references" / "comfyui" / "flux1-schnell-api.json"
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_comfyui_flux_fake_protocol_materializes_pinned_workflow_and_png(self):
+        state = {}
+        with serve_fake_comfyui(state) as base_url:
+            provider = self.scenes.ComfyUiFluxProvider(base_url, self.workflow)
+            result = provider.generate(
+                "A software workflow dashboard",
+                width=1080,
+                height=1080,
+                seed=7,
+                output_dir=self.root,
+            )
+
+        self.assertEqual(result.status, "ready", result.to_dict())
+        self.assertEqual(len(result.artifacts), 1)
+        artifact = result.artifacts[0]
+        self.assertEqual(artifact.type, "ai_scene")
+        self.assertEqual(artifact.source, "ai-generated")
+        self.assertEqual(artifact.license, "Apache-2.0")
+        self.assertTrue(artifact.metadata["aiGenerated"])
+        target = Path(artifact.path)
+        self.assertTrue(target.name.startswith("ai-scene-"))
+        self.assertEqual(target.read_bytes(), PNG_BYTES)
+        self.assertEqual(artifact.sha256, hashlib.sha256(PNG_BYTES).hexdigest())
+
+        payload = state["prompt_payload"]
+        self.assertEqual(set(payload), {"prompt", "client_id"})
+        workflow = payload["prompt"]
+        nodes = list(workflow.values())
+        checkpoint = next(node for node in nodes if node["class_type"] == "CheckpointLoaderSimple")
+        self.assertEqual(checkpoint["inputs"]["ckpt_name"], "flux1-schnell-fp8.safetensors")
+        sampler = next(node for node in nodes if node["class_type"] == "KSampler")["inputs"]
+        self.assertEqual({sampler["steps"], sampler["cfg"], sampler["sampler_name"], sampler["scheduler"]}, {4, 1.0, "euler", "simple"})
+        self.assertEqual(sampler["seed"], 7)
+        text_nodes = [node for node in nodes if node["class_type"] == "CLIPTextEncode"]
+        self.assertIn("A software workflow dashboard", [node["inputs"]["text"] for node in text_nodes])
+        latent = next(node for node in nodes if node["class_type"] == "EmptyLatentImage")["inputs"]
+        self.assertEqual((latent["width"], latent["height"]), (1080, 1080))
+        save = next(node for node in nodes if node["class_type"] == "SaveImage")["inputs"]
+        self.assertTrue(save["filename_prefix"].startswith("ai-scene-"))
+
+    def test_comfyui_cloud_gate_and_health_or_malformed_failures(self):
+        provider = self.scenes.ComfyUiFluxProvider("https://comfy.example.invalid", self.workflow)
+        with mock.patch.object(provider, "health", return_value=True) as health:
+            result = provider.generate("blocked", output_dir=self.root)
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.error_code, "cloud_media_not_allowed")
+        health.assert_not_called()
+
+        state = {"malformed_history": True}
+        with serve_fake_comfyui(state) as base_url:
+            result = self.scenes.ComfyUiFluxProvider(base_url, self.workflow).generate(
+                "bad history", output_dir=self.root
+            )
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_code, "comfyui_history_malformed")
+        self.assertEqual(result.artifacts, ())
+
+    def test_comfyui_unavailable_is_skipped(self):
+        provider = self.scenes.ComfyUiFluxProvider(
+            "http://127.0.0.1:1", self.workflow, timeout_seconds=1
+        )
+        result = provider.generate("unavailable", output_dir=self.root)
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.error_code, "comfyui_unavailable")
+
+    def test_comfyui_empty_history_is_in_progress_then_ready(self):
+        state = {
+            "history_responses": [
+                {},
+                {"fake-prompt-id": {"outputs": {"7": {"images": [{
+                    "filename": "scene.png", "subfolder": "", "type": "output"
+                }]}}}},
+            ]
+        }
+        with serve_fake_comfyui(state) as base_url:
+            result = self.scenes.ComfyUiFluxProvider(
+                base_url, self.workflow, timeout_seconds=2
+            ).generate("async", output_dir=self.root)
+        self.assertEqual(result.status, "ready", result.to_dict())
+
+    def test_comfyui_empty_history_times_out_without_prompt_retry(self):
+        state = {"history_empty": True}
+        with serve_fake_comfyui(state) as base_url:
+            result = self.scenes.ComfyUiFluxProvider(
+                base_url, self.workflow, timeout_seconds=0.2
+            ).generate("still running", output_dir=self.root)
+        self.assertEqual(result.status, "failed", result.to_dict())
+        self.assertEqual(result.error_code, "comfyui_timeout")
+        self.assertEqual(result.artifacts, ())
+
+    def test_comfyui_bad_health_skips_before_prompt(self):
+        for health_payload in ({}, {"error": "down"}, {"system": {}}):
+            with self.subTest(health_payload=health_payload):
+                state = {"health_payload": health_payload}
+                with serve_fake_comfyui(state) as base_url:
+                    result = self.scenes.ComfyUiFluxProvider(
+                        base_url, self.workflow, timeout_seconds=1
+                    ).generate("bad health", output_dir=self.root)
+                self.assertEqual(result.status, "skipped", result.to_dict())
+                self.assertEqual(result.error_code, "comfyui_unavailable")
+                self.assertNotIn("prompt_payload", state)
+
+    def test_pexels_unconfigured_skips_without_secret(self):
+        result = self.scenes.PexelsProvider(api_key="").search(
+            "software workflow", self.root, 2
+        )
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.error_code, "pexels_not_configured")
+        self.assertNotIn("api_key", json.dumps(result.to_dict(), sort_keys=True))
+
+    def test_pexels_fake_search_downloads_only_landscape_and_redacts_key(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return self.body
+
+        photos = {
+            "photos": [
+                {
+                    "width": 1200,
+                    "height": 800,
+                    "photographer": "Ada",
+                    "url": "https://www.pexels.com/photo/1/",
+                    "src": {"original": "https://images.pexels.com/one.jpg"},
+                },
+                {
+                    "width": 800,
+                    "height": 800,
+                    "photographer": "Square",
+                    "url": "https://www.pexels.com/photo/2/",
+                    "src": {"original": "https://images.example/two.jpg"},
+                },
+            ]
+        }
+        calls = []
+
+        def fake_urlopen(req, timeout):
+            calls.append((req, timeout))
+            if len(calls) == 1:
+                self.assertEqual(req.get_header("Authorization"), "SECRET-PEXELS")
+                self.assertIn("api.pexels.com/v1/search", req.full_url)
+                return Response(json.dumps(photos).encode("utf-8"))
+            return Response(b"JPEG-BYTES")
+
+        with mock.patch.object(self.scenes, "_open_no_redirect", side_effect=fake_urlopen):
+            result = self.scenes.PexelsProvider("SECRET-PEXELS").search(
+                "software workflow", self.root, 2
+            )
+        self.assertEqual(result.status, "ready", result.to_dict())
+        self.assertEqual(len(result.artifacts), 1)
+        artifact = result.artifacts[0]
+        self.assertEqual(artifact.type, "b_roll_image")
+        self.assertEqual(artifact.metadata["orientation"], "landscape")
+        self.assertEqual(Path(artifact.path).read_bytes(), b"JPEG-BYTES")
+        serialized = json.dumps(result.to_dict(), sort_keys=True)
+        self.assertNotIn("SECRET-PEXELS", serialized)
+
+    def test_pexels_rejects_non_https_or_untrusted_image_urls_before_download(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return self.body
+
+        for original_url in (
+            "file:///secret.txt",
+            "http://images.pexels.com/unsafe.jpg",
+            "https://127.0.0.1/unsafe.jpg",
+            "https://evil.example/unsafe.jpg",
+            "https://images.example/unsafe.jpg",
+            "https://evil.pexels.com/unsafe.jpg",
+        ):
+            with self.subTest(original_url=original_url):
+                calls = []
+                payload = {
+                    "photos": [{
+                        "width": 1200,
+                        "height": 800,
+                        "photographer": "Attacker",
+                        "url": "https://www.pexels.com/photo/unsafe/",
+                        "src": {"original": original_url},
+                    }]
+                }
+
+                def fake_urlopen(req, timeout):
+                    calls.append(req)
+                    return Response(json.dumps(payload).encode("utf-8"))
+
+                with mock.patch.object(
+                    self.scenes, "_open_no_redirect", side_effect=fake_urlopen
+                ):
+                    result = self.scenes.PexelsProvider("SECRET-PEXELS").search(
+                        "unsafe", self.root, 1
+                    )
+                self.assertEqual(result.status, "failed", result.to_dict())
+                self.assertEqual(result.error_code, "pexels_request_failed")
+                self.assertEqual(len(calls), 1)
+
+    def test_redirects_are_denied_without_forwarding_authorization(self):
+        state = {}
+        with serve_redirect_target(state) as base_url:
+            with self.assertRaises(self.scenes._RedirectDenied):
+                self.scenes._request_bytes(
+                    f"{base_url}/start",
+                    timeout=1,
+                    headers={"Authorization": "SECRET-PEXELS"},
+                )
+        self.assertEqual(state.get("destination_calls", 0), 0)
+        self.assertIsNone(state.get("destination_authorization"))
+
+    def test_pexels_api_redirect_fails_without_leaking_authorization(self):
+        state = {}
+        with serve_redirect_target(state) as base_url:
+            with mock.patch.object(
+                self.scenes, "_endpoint", return_value=f"{base_url}/start"
+            ):
+                result = self.scenes.PexelsProvider("SECRET-PEXELS").search(
+                    "redirect", self.root, 1
+                )
+        self.assertEqual(result.status, "failed", result.to_dict())
+        self.assertEqual(result.error_code, "pexels_redirect_denied")
+        self.assertEqual(state.get("destination_calls", 0), 0)
+
+    def test_pexels_image_redirect_fails_without_ready_artifact(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return self.body
+
+        payload = {
+            "photos": [{
+                "width": 1200,
+                "height": 800,
+                "photographer": "Ada",
+                "url": "https://www.pexels.com/photo/redirect/",
+                "src": {"original": "https://images.pexels.com/start.jpg"},
+            }]
+        }
+        calls = []
+
+        def fake_open(req, timeout):
+            calls.append(req)
+            if len(calls) == 1:
+                return Response(json.dumps(payload).encode("utf-8"))
+            raise self.scenes._RedirectDenied
+
+        with mock.patch.object(self.scenes, "_open_no_redirect", side_effect=fake_open):
+            result = self.scenes.PexelsProvider("SECRET-PEXELS").search(
+                "redirect", self.root, 1
+            )
+        self.assertEqual(result.status, "failed", result.to_dict())
+        self.assertEqual(result.error_code, "pexels_redirect_denied")
+        self.assertEqual(result.artifacts, ())
+
+
 class RuntimeSetupTest(unittest.TestCase):
     def setUp(self):
         self.setup = load_setup_module()
