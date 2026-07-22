@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -49,6 +50,8 @@ def _command(
     *,
     cwd: Path | None = None,
     packages: list[str] | None = None,
+    venv_python: Path | None = None,
+    python_version: str | None = None,
 ) -> dict[str, Any]:
     action: dict[str, Any] = {
         "id": action_id,
@@ -60,6 +63,10 @@ def _command(
         action["cwd"] = str(cwd)
     if packages is not None:
         action["packages"] = packages
+    if venv_python is not None:
+        action["venvPython"] = str(venv_python)
+    if python_version is not None:
+        action["pythonVersion"] = python_version
     return action
 
 
@@ -131,10 +138,13 @@ def build_install_plan(
             [
                 "uv",
                 "venv",
+                "--allow-existing",
                 "--python",
                 manifest["python"]["version"],
                 str(core_venv),
             ],
+            venv_python=core_python,
+            python_version=manifest["python"]["version"],
         ),
         _command(
             "install-core-python-packages",
@@ -199,10 +209,13 @@ def build_install_plan(
                     [
                         "uv",
                         "venv",
+                        "--allow-existing",
                         "--python",
                         manifest["python"]["version"],
                         str(comfy_venv),
                     ],
+                    venv_python=comfy_python,
+                    python_version=manifest["python"]["version"],
                 ),
                 _command(
                     "install-comfyui-cuda-packages",
@@ -284,40 +297,48 @@ def _resolve_executable(name: str) -> str:
     return str(Path(resolved).resolve())
 
 
-def _git_head(checkout: Path) -> str | None:
-    if not (checkout / ".git").is_dir():
+def _git_head(checkout: Path, git: str | None = None) -> str | None:
+    if not checkout.exists():
         return None
+    git = git or _resolve_executable("git")
     try:
         result = subprocess.run(
-            [_resolve_executable("git"), "-C", str(checkout), "rev-parse", "HEAD"],
+            [git, "-C", str(checkout), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
             shell=False,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"Unable to inspect existing Git checkout: {checkout}"
+        ) from error
     return result.stdout.strip() or None
 
 
 def _ensure_git_checkout(repository: str, destination: Path, revision: str) -> None:
-    current = _git_head(destination)
-    if current == revision:
-        return
-    if current is None and destination.exists():
-        shutil.rmtree(destination)
-
     git = _resolve_executable("git")
-    if not destination.exists():
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [git, "clone", repository, str(destination)],
-            check=True,
-            capture_output=True,
-            text=True,
-            shell=False,
-        )
-    else:
+    if destination.exists():
+        if _git_head(destination, git) == revision:
+            return
+        try:
+            origin = subprocess.run(
+                [git, "-C", str(destination), "remote", "get-url", "origin"],
+                check=True,
+                capture_output=True,
+                text=True,
+                shell=False,
+            ).stdout.strip()
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(
+                f"Unable to inspect existing Git checkout origin: {destination}"
+            ) from error
+        normalized_origin = origin.rstrip("/\\").removesuffix(".git").casefold()
+        normalized_repository = repository.rstrip("/\\").removesuffix(".git").casefold()
+        if normalized_origin != normalized_repository:
+            raise RuntimeError(
+                f"Existing Git checkout is not managed by this repository: {destination}"
+            )
         subprocess.run(
             [git, "-C", str(destination), "fetch", "origin", revision],
             check=True,
@@ -325,15 +346,66 @@ def _ensure_git_checkout(repository: str, destination: Path, revision: str) -> N
             text=True,
             shell=False,
         )
-    subprocess.run(
-        [git, "-C", str(destination), "checkout", "--detach", revision],
-        check=True,
-        capture_output=True,
-        text=True,
-        shell=False,
+        subprocess.run(
+            [git, "-C", str(destination), "checkout", "--detach", revision],
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        if _git_head(destination, git) != revision:
+            raise RuntimeError(f"Git checkout did not reach pinned revision: {revision}")
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(
+        tempfile.mkdtemp(
+            prefix=f".{destination.name}.", suffix=".part", dir=destination.parent
+        )
     )
-    if _git_head(destination) != revision:
-        raise RuntimeError(f"Git checkout did not reach pinned revision: {revision}")
+    staged_checkout = staging_root / "checkout"
+    try:
+        subprocess.run(
+            [git, "clone", repository, str(staged_checkout)],
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        subprocess.run(
+            [git, "-C", str(staged_checkout), "checkout", "--detach", revision],
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        if _git_head(staged_checkout, git) != revision:
+            raise RuntimeError(f"Git checkout did not reach pinned revision: {revision}")
+        if destination.exists():
+            raise RuntimeError(f"Git destination appeared during installation: {destination}")
+        staged_checkout.replace(destination)
+    finally:
+        shutil.rmtree(staging_root)
+
+
+def _venv_runtime_version(python: Path) -> str | None:
+    if not python.is_file():
+        return None
+    try:
+        result = subprocess.run(
+            [
+                str(python),
+                "-c",
+                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(f"Unable to validate existing venv Python: {python}") from error
+    return result.stdout.strip()
 
 
 def _sha256(path: Path) -> str:
@@ -405,6 +477,13 @@ def _valid_flux_receipt(root: Path, manifest: dict[str, Any]) -> bool:
     return _matches_integrity(model, receipt.get("sizeBytes"), receipt.get("sha256"))
 
 
+def _is_pinned_checkout(checkout: Path, revision: str) -> bool:
+    try:
+        return _git_head(checkout) == revision
+    except (FileNotFoundError, RuntimeError):
+        return False
+
+
 def check_runtime(runtime_root: Path | None = None) -> dict[str, Any]:
     """Validate tool presence, pinned checkout, and installed artifact integrity."""
     root = Path(runtime_root) if runtime_root is not None else default_runtime_root()
@@ -432,7 +511,9 @@ def check_runtime(runtime_root: Path | None = None) -> dict[str, Any]:
                 kokoro_files["voices-v1.0.bin"].get("sizeBytes"),
                 kokoro_files["voices-v1.0.bin"].get("sha256"),
             ),
-            "comfyui": _git_head(root / "ComfyUI") == manifest["comfyui"]["revision"],
+            "comfyui": _is_pinned_checkout(
+                root / "ComfyUI", manifest["comfyui"]["revision"]
+            ),
             "flux": _valid_flux_receipt(root, manifest),
         },
     }
@@ -532,14 +613,30 @@ def _atomic_write_json(destination: Path, value: dict[str, Any]) -> None:
 def _execute_action(action: dict[str, Any]) -> None:
     kind = action["kind"]
     if kind == "command":
+        venv_python = Path(action["venvPython"]) if action.get("venvPython") else None
+        expected_version = action.get("pythonVersion")
+        if venv_python is not None:
+            current_version = _venv_runtime_version(venv_python)
+            if current_version == expected_version:
+                return
+            if current_version is not None:
+                raise RuntimeError(
+                    f"Existing venv uses Python {current_version}; expected {expected_version}"
+                )
         arguments = list(action["arguments"])
         arguments[0] = _resolve_executable(arguments[0])
         subprocess.run(
             arguments,
             cwd=action.get("cwd"),
             check=True,
+            capture_output=venv_python is not None,
+            text=venv_python is not None,
             shell=False,
         )
+        if venv_python is not None and _venv_runtime_version(venv_python) != expected_version:
+            raise RuntimeError(
+                f"Created venv does not provide required Python {expected_version}"
+            )
         return
     if kind == "git-checkout":
         _ensure_git_checkout(

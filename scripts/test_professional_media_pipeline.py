@@ -144,6 +144,48 @@ class RuntimeSetupTest(unittest.TestCase):
 
         self.assertIs(raised.exception, failure)
 
+    def test_venv_action_can_run_twice(self):
+        runtime_root = self.root / "runtime"
+        action = next(
+            action
+            for action in self.setup.build_install_plan(runtime_root)["actions"]
+            if action["id"] == "create-core-venv"
+        )
+
+        self.setup._execute_action(action)
+        self.setup._execute_action(action)
+
+        python = self.setup._venv_python(runtime_root / "core" / ".venv")
+        version = subprocess.run(
+            [str(python), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(version, "3.12")
+
+    def test_venv_action_recovers_partial_first_attempt(self):
+        runtime_root = self.root / "runtime"
+        action = next(
+            action
+            for action in self.setup.build_install_plan(runtime_root)["actions"]
+            if action["id"] == "create-core-venv"
+        )
+        venv = runtime_root / "core" / ".venv"
+        venv.mkdir(parents=True)
+        (venv / "interrupted.part").write_text("partial", encoding="utf-8")
+
+        self.setup._execute_action(action)
+
+        python = self.setup._venv_python(venv)
+        version = subprocess.run(
+            [str(python), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(version, "3.12")
+
     def test_partial_download_is_cleaned_after_bounded_retries(self):
         destination = self.root / "models" / "model.bin"
 
@@ -342,16 +384,82 @@ class RuntimeSetupTest(unittest.TestCase):
 
         self.assertEqual(self.setup._git_head(checkout), expected)
 
-    def test_pinned_checkout_recovers_incomplete_clone(self):
+    def test_wrong_origin_repo_is_not_mutated(self):
+        source, expected, wrong = self._make_git_source()
+        checkout = self.root / "checkout"
+        subprocess.run(["git", "clone", "--quiet", str(source), str(checkout)], check=True)
+        sentinel = checkout / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "not managed"):
+            self.setup._ensure_git_checkout(
+                str(self.root / "different-origin"), checkout, expected
+            )
+
+        self.assertEqual(self.setup._git_head(checkout), wrong)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_pinned_checkout_clones_clean_destination(self):
         source, expected, _wrong = self._make_git_source()
         checkout = self.root / "checkout"
-        (checkout / ".git").mkdir(parents=True)
-        (checkout / "stale.part").write_text("incomplete", encoding="utf-8")
 
         self.setup._ensure_git_checkout(str(source), checkout, expected)
 
         self.assertEqual(self.setup._git_head(checkout), expected)
-        self.assertFalse((checkout / "stale.part").exists())
+        self.assertEqual((checkout / "version.txt").read_text(encoding="utf-8"), "first")
+
+    def test_missing_git_preserves_existing_destination(self):
+        checkout = self.root / "checkout"
+        checkout.mkdir()
+        sentinel = checkout / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+
+        with mock.patch.object(self.setup.shutil, "which", return_value=None):
+            with self.assertRaises(FileNotFoundError):
+                self.setup._ensure_git_checkout("unused", checkout, "pinned")
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_non_repository_destination_preserves_user_files(self):
+        source, expected, _wrong = self._make_git_source()
+        checkout = self.root / "checkout"
+        checkout.mkdir()
+        sentinel = checkout / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "inspect existing Git checkout"):
+            self.setup._ensure_git_checkout(str(source), checkout, expected)
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_corrupt_git_directory_is_never_deleted(self):
+        source, expected, _wrong = self._make_git_source()
+        checkout = self.root / "checkout"
+        (checkout / ".git").mkdir(parents=True)
+        sentinel = checkout / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "inspect existing Git checkout"):
+            self.setup._ensure_git_checkout(str(source), checkout, expected)
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_rev_parse_failure_preserves_git_file_and_user_data(self):
+        checkout = self.root / "checkout"
+        checkout.mkdir()
+        (checkout / ".git").write_text("gitdir: missing", encoding="utf-8")
+        sentinel = checkout / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+        failure = subprocess.CalledProcessError(128, ["git", "rev-parse"])
+
+        with mock.patch.object(
+            self.setup, "_resolve_executable", return_value=str(self.root / "git.exe")
+        ), mock.patch.object(self.setup.subprocess, "run", side_effect=failure):
+            with self.assertRaisesRegex(RuntimeError, "inspect existing Git checkout"):
+                self.setup._ensure_git_checkout("unused", checkout, "pinned")
+
+        self.assertTrue((checkout / ".git").is_file())
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
 
     def test_check_runtime_rejects_unpinned_comfyui_checkout(self):
         source, _first, _second = self._make_git_source()
