@@ -2452,5 +2452,64 @@ class CommercialVisualTest(unittest.TestCase):
         self.assertTrue(all(not path.exists() for path in targets))
 
 
+class ProfessionalVideoTest(unittest.TestCase):
+    def load_video(self):
+        module_name = "scripts.media_pipeline.video"
+        self.assertIsNotNone(
+            importlib.util.find_spec(module_name),
+            "video module must implement the HyperFrames product-demo contract",
+        )
+        return importlib.import_module(module_name)
+
+    def test_project_contains_five_shots_three_motion_types_and_local_gsap(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            project = video.materialize_hyperframes_project(data, root / "project")
+            html = (project / "index.html").read_text(encoding="utf-8")
+            script = (project / "composition.js").read_text(encoding="utf-8")
+            self.assertNotIn("cdn.jsdelivr.net", html)
+            self.assertTrue((project / "vendor" / "gsap.min.js").is_file())
+            self.assertIn('data-composition-id="root"', html)
+            self.assertIn('data-width="1920"', html)
+            self.assertIn('data-height="1080"', html)
+            self.assertIn('data-duration="20.0"', html)
+            self.assertGreaterEqual(len(data["shots"]), 5)
+            self.assertEqual(set(video.MOTION_TYPES), set(data["motionTypes"]))
+            for motion_type in video.MOTION_TYPES:
+                self.assertIn(motion_type, script)
+            self.assertIn("escapeHtml", script)
+            self.assertIn("gsap.timeline({ paused: true", script)
+            self.assertIn("window.__timelines.root", script)
+            serialised = json.loads(
+                (project / "composition-data.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(serialised["shots"]), 5)
+            self.assertTrue(
+                all(not Path(shot["src"]).is_absolute() for shot in serialised["shots"])
+            )
+
+    def test_professional_render_has_h264_aac_and_non_silent_audio(self):
+        video = self.load_video()
+        if not video.professional_render_available():
+            self.skipTest("HyperFrames/Kokoro/FFmpeg runtime unavailable")
+        with tempfile.TemporaryDirectory() as temp:
+            result = video.render_fixture_professional_video(Path(temp))
+            self.assertEqual(result.status, "ready", result.to_dict())
+            probe = result.diagnostics["probe"]
+            self.assertEqual(probe["videoCodec"], "h264")
+            self.assertEqual(probe["audioCodec"], "aac")
+            self.assertTrue(probe["nonSilent"])
+            self.assertGreaterEqual(probe["shortEdge"], 1080)
+            artifact = result.artifacts[0].to_dict()
+            metadata = artifact["metadata"]
+            self.assertEqual(metadata["sourceAssetCount"], 6)
+            self.assertEqual(len(metadata["sourceHashes"]), 5)
+            self.assertEqual(len(metadata["voiceoverSha256"]), 64)
+            self.assertTrue(all(len(item["sha256"]) == 64 for item in metadata["sourceHashes"]))
+            self.assertFalse(metadata["cloudUpload"])
+
+
 if __name__ == "__main__":
     unittest.main()

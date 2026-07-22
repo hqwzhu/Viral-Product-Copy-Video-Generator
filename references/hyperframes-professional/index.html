@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>ENHE product demonstration</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./vendor/gsap.min.js"></script>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="root"
+      data-width="1920"
+      data-height="1080"
+      data-duration="20"
+      data-fps="30"
+      data-start="0"
+    >
+      <div id="background" class="clip canvas-background" data-start="0" data-duration="20" data-track-index="0" aria-hidden="true"></div>
+    </div>
+    <script id="composition-data"></script>
+    <script>
+      // Static HyperFrames lint needs an eagerly registered timeline. The
+      // data-driven composition replaces this placeholder synchronously.
+      window.__timelines = window.__timelines || {};
+      window.__timelines.root = gsap.timeline({ paused: true });
+    </script>
+    <script src="./composition.js"></script>
+  </body>
+</html>
