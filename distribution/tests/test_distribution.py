@@ -30,6 +30,27 @@ import generate_checksums  # noqa: E402
 import verify_distribution  # noqa: E402
 
 
+FIXED_ZIP_TIMESTAMP = contract.FIXED_ZIP_TIMESTAMP
+FIXED_ZIP_CREATE_SYSTEM = contract.FIXED_ZIP_CREATE_SYSTEM
+FIXED_ZIP_EXTERNAL_ATTR = contract.FIXED_ZIP_EXTERNAL_ATTR
+FIXED_ZIP_COMPRESSLEVEL = contract.FIXED_ZIP_COMPRESSLEVEL
+
+
+def write_deterministic_zip_member(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
+    info = zipfile.ZipInfo(name, date_time=FIXED_ZIP_TIMESTAMP)
+    info.create_system = FIXED_ZIP_CREATE_SYSTEM
+    info.external_attr = FIXED_ZIP_EXTERNAL_ATTR
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.extra = b""
+    info.comment = b""
+    archive.writestr(
+        info,
+        data,
+        compress_type=zipfile.ZIP_DEFLATED,
+        compresslevel=FIXED_ZIP_COMPRESSLEVEL,
+    )
+
+
 def write_text(root: Path, relative: str, text: str = "fixture\n") -> Path:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,10 +252,20 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
 
     validated = base / f"validated-extension-{version}.zip"
     extension_root = root / extension
-    with zipfile.ZipFile(validated, "w") as archive:
+    with zipfile.ZipFile(
+        validated,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=FIXED_ZIP_COMPRESSLEVEL,
+    ) as archive:
+        archive.comment = b""
         for path in sorted(extension_root.rglob("*")):
             if path.is_file() and path.name != "component-manifest.json":
-                archive.writestr(path.relative_to(extension_root).as_posix(), path.read_bytes())
+                write_deterministic_zip_member(
+                    archive,
+                    path.relative_to(extension_root).as_posix(),
+                    path.read_bytes(),
+                )
     return root, validated
 
 
@@ -536,18 +567,55 @@ class PublicDistributionTest(unittest.TestCase):
             with zipfile.ZipFile(extension_zip) as archive:
                 self.assertIn("manifest.json", archive.namelist())
                 self.assertNotIn("component-manifest.json", archive.namelist())
+                self.assertEqual(archive.comment, b"")
+                for info in archive.infolist():
+                    self.assertEqual(info.date_time, FIXED_ZIP_TIMESTAMP)
+                    self.assertEqual(info.create_system, FIXED_ZIP_CREATE_SYSTEM)
+                    self.assertEqual(info.external_attr, FIXED_ZIP_EXTERNAL_ATTR)
+                    self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
+                    self.assertEqual(info.extra, b"")
+                    self.assertEqual(info.comment, b"")
             skill_zip = dist / release["skillArchive"]
             with zipfile.ZipFile(skill_zip) as archive:
                 names = archive.namelist()
                 self.assertIn("viral-product-copy-video-generator/SKILL.md", names)
                 self.assertEqual(names, sorted(names))
-                self.assertTrue(
-                    all(info.date_time == build_release.FIXED_ZIP_TIMESTAMP for info in archive.infolist())
-                )
+                self.assertEqual(archive.comment, b"")
+                for info in archive.infolist():
+                    self.assertEqual(info.date_time, FIXED_ZIP_TIMESTAMP)
+                    self.assertEqual(info.create_system, FIXED_ZIP_CREATE_SYSTEM)
+                    self.assertEqual(info.external_attr, FIXED_ZIP_EXTERNAL_ATTR)
+                    self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
+                    self.assertEqual(info.extra, b"")
+                    self.assertEqual(info.comment, b"")
             for name in contract.NON_PAYMENT_COMMANDS:
                 self.assertTrue(
                     (root / "skill/viral-product-copy-video-generator/scripts" / name).is_file()
                 )
+
+    def test_verifier_rejects_extension_archive_metadata_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, validated = create_public_repository(Path(temp))
+            with mock.patch.object(build_release, "ROOT", root):
+                dist = build_release.build_release(validated)
+
+            release = verify_distribution.read_json(root / "release-manifest.json")
+            extension_zip = dist / release["extensionArchive"]
+            with zipfile.ZipFile(extension_zip) as source:
+                contents = [(name, source.read(name)) for name in source.namelist()]
+            with zipfile.ZipFile(extension_zip, "w", compression=zipfile.ZIP_DEFLATED) as drifted:
+                for name, data in contents:
+                    drifted.writestr(name, data)
+            release["artifacts"][extension_zip.name] = {
+                "bytes": extension_zip.stat().st_size,
+                "sha256": contract.sha256_file(extension_zip).upper(),
+            }
+
+            errors = verify_distribution.verify_archives(root, release)
+            self.assertIn(
+                "extension ZIP metadata is not deterministic: manifest.json",
+                errors,
+            )
 
     def test_release_rejects_duplicate_and_traversal_extension_members(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

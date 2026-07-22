@@ -495,6 +495,10 @@ def verify_archives(root: Path, release: dict) -> list[str]:
     try:
         with zipfile.ZipFile(skill_zip) as archive:
             names = _safe_zip_members(archive)
+            errors.extend(
+                f"Skill ZIP metadata is not deterministic: {name}"
+                for name in contract.nondeterministic_zip_members(archive)
+            )
             if len(names) != len(set(names)) or set(names) != set(expected_skill):
                 errors.append("Skill ZIP member list differs from Skill source")
             else:
@@ -512,6 +516,10 @@ def verify_archives(root: Path, release: dict) -> list[str]:
     try:
         with zipfile.ZipFile(extension_zip) as archive:
             names = _safe_zip_members(archive)
+            errors.extend(
+                f"extension ZIP metadata is not deterministic: {name}"
+                for name in contract.nondeterministic_zip_members(archive)
+            )
             if "manifest.json" not in names:
                 errors.append("extension ZIP is missing root manifest.json")
             if "component-manifest.json" in names:

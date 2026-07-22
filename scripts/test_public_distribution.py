@@ -619,7 +619,7 @@ class DistributionContractTest(unittest.TestCase):
             },
             "version-sync.md": {
                 "zh": (
-                    "公开仓库/Skill/扩展源码/发行候选版本：0.5.4",
+                    f"公开仓库/Skill/扩展源码/发行候选版本：{contract.VERSION}",
                     "已发布的 Chrome 商店版本：0.5.3",
                     "非支付命令引用：11/11 已在随包 Skill 中存在",
                     "支付与订阅：不纳入功能同步结论，但扩展原有 UI 和 billing-contract.json 保留",
@@ -628,7 +628,8 @@ class DistributionContractTest(unittest.TestCase):
                     "--sync-installed-skill",
                 ),
                 "en": (
-                    "Public repository / Skill / extension source/release candidate version: 0.5.4",
+                    "Public repository / Skill / extension source/release candidate version: "
+                    f"{contract.VERSION}",
                     "Published Chrome Web Store version: 0.5.3",
                     "Non-payment command references: 11/11 exist in the bundled Skill",
                     "Payment and subscriptions: excluded from the feature parity conclusion; the existing extension UI and billing-contract.json remain included",
@@ -696,14 +697,15 @@ class DistributionContractTest(unittest.TestCase):
             (en_docs / name).read_text(encoding="utf-8") for name in sorted(en_names)
         )
         for fact in (
-            "公开仓库/Skill/扩展源码/发行候选版本：0.5.4",
+            f"公开仓库/Skill/扩展源码/发行候选版本：{contract.VERSION}",
             "已发布的 Chrome 商店版本：0.5.3",
             "非支付命令引用：11/11 已在随包 Skill 中存在",
             "Hosted Worker：关闭",
         ):
             self.assertIn(fact, zh_corpus)
         for fact in (
-            "Public repository / Skill / extension source/release candidate version: 0.5.4",
+            "Public repository / Skill / extension source/release candidate version: "
+            f"{contract.VERSION}",
             "Published Chrome Web Store version: 0.5.3",
             "Non-payment command references: 11/11 exist in the bundled Skill",
             "Hosted Worker: disabled",

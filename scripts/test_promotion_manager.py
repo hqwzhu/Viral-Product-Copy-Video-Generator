@@ -21,8 +21,12 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts import distribution_contract as release_contract
+
+
 SCRIPT = ROOT / "scripts" / "promotion_manager.py"
 PRODUCT_INTAKE = ROOT / "scripts" / "product_intake.py"
 BROWSER_SNAPSHOT = ROOT / "scripts" / "browser_snapshot.py"
@@ -7127,7 +7131,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
 
-        self.assertEqual(manifest["version"], "0.5.4")
+        self.assertEqual(manifest["version"], release_contract.VERSION)
         self.assertEqual(manifest["default_locale"], "en")
         self.assertEqual(manifest["name"], "__MSG_extensionName__")
         self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
@@ -7171,7 +7175,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
         contract = json.loads((BROWSER_EXTENSION / "billing-contract.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["version"], "0.5.4")
+        self.assertEqual(manifest["version"], release_contract.VERSION)
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
         self.assertEqual(manifest["host_permissions"], ["https://www.enhe-tech.com.cn/*"])
@@ -7389,9 +7393,9 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.4")
+        self.assertEqual(report["version"], release_contract.VERSION)
         package_path = Path(report["package"])
-        self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.4.zip")
+        self.assertEqual(package_path.name, f"enhe-promotion-manager-{release_contract.VERSION}.zip")
         self.assertTrue(package_path.exists())
         archive_sha256 = hashlib.sha256(package_path.read_bytes()).hexdigest().upper()
         self.assertEqual(report.get("archiveName"), package_path.name)
@@ -7399,7 +7403,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         report_markdown = (out_dir / "dist/browser-extension-package-report.md").read_text(encoding="utf-8")
         self.assertIn(f"- Archive: `{package_path.name}`", report_markdown)
         self.assertIn(f"- SHA-256: `{archive_sha256}`", report_markdown)
-        self.assertIn("- Version: `0.5.4`", report_markdown)
+        self.assertIn(f"- Version: `{release_contract.VERSION}`", report_markdown)
+        self.assertTrue(report["checks"]["versionMatchesDistributionContract"])
+        self.assertTrue(report["checks"]["deterministicArchiveMetadata"])
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])
@@ -7412,7 +7418,17 @@ Prompt templates for product copy, SEO content, and video scripts.
             "https://www.enhe-tech.com.cn/promotion-manager/support",
         )
         with zipfile.ZipFile(package_path) as package:
-            names = set(package.namelist())
+            infos = package.infolist()
+            names = {info.filename for info in infos}
+            self.assertEqual([info.filename for info in infos], sorted(names))
+            self.assertEqual(package.comment, b"")
+            for info in infos:
+                self.assertEqual(info.date_time, release_contract.FIXED_ZIP_TIMESTAMP)
+                self.assertEqual(info.create_system, release_contract.FIXED_ZIP_CREATE_SYSTEM)
+                self.assertEqual(info.external_attr, release_contract.FIXED_ZIP_EXTERNAL_ATTR)
+                self.assertEqual(info.compress_type, release_contract.FIXED_ZIP_COMPRESSION)
+                self.assertEqual(info.extra, b"")
+                self.assertEqual(info.comment, b"")
         self.assertIn("manifest.json", names)
         self.assertIn("popup.html", names)
         self.assertIn("popup.css", names)
@@ -7424,6 +7440,69 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("_locales/en/messages.json", names)
         self.assertIn("_locales/zh_CN/messages.json", names)
 
+    def test_browser_extension_package_is_deterministic_across_source_metadata_changes(self) -> None:
+        base = Path(tempfile.mkdtemp(prefix="browser-extension-determinism-test-"))
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
+        project_dir = base / "mini-project"
+        scripts_dir = project_dir / "scripts"
+        extension_dir = project_dir / "browser-extension"
+        scripts_dir.mkdir(parents=True)
+        shutil.copy2(PACKAGE_BROWSER_EXTENSION, scripts_dir / PACKAGE_BROWSER_EXTENSION.name)
+        shutil.copy2(ROOT / "scripts" / "distribution_contract.py", scripts_dir / "distribution_contract.py")
+        shutil.copytree(BROWSER_EXTENSION, extension_dir)
+
+        first_out = project_dir / "first"
+        second_out = project_dir / "second"
+        subprocess.run(
+            [sys.executable, str(scripts_dir / PACKAGE_BROWSER_EXTENSION.name), "--out-dir", str(first_out)],
+            cwd=project_dir,
+            check=True,
+        )
+        for index, path in enumerate(sorted(item for item in extension_dir.rglob("*") if item.is_file())):
+            timestamp = 946684800 + index * 2
+            os.utime(path, (timestamp, timestamp))
+            path.chmod(0o600 if index % 2 else 0o644)
+        subprocess.run(
+            [sys.executable, str(scripts_dir / PACKAGE_BROWSER_EXTENSION.name), "--out-dir", str(second_out)],
+            cwd=project_dir,
+            check=True,
+        )
+
+        archive_name = f"enhe-promotion-manager-{release_contract.VERSION}.zip"
+        first_bytes = (first_out / archive_name).read_bytes()
+        second_bytes = (second_out / archive_name).read_bytes()
+        self.assertEqual(first_bytes, second_bytes)
+        self.assertEqual(hashlib.sha256(first_bytes).digest(), hashlib.sha256(second_bytes).digest())
+
+    def test_browser_extension_package_rejects_manifest_contract_version_drift(self) -> None:
+        base = Path(tempfile.mkdtemp(prefix="browser-extension-version-drift-test-"))
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
+        project_dir = base / "mini-project"
+        scripts_dir = project_dir / "scripts"
+        extension_dir = project_dir / "browser-extension"
+        scripts_dir.mkdir(parents=True)
+        shutil.copy2(PACKAGE_BROWSER_EXTENSION, scripts_dir / PACKAGE_BROWSER_EXTENSION.name)
+        shutil.copy2(ROOT / "scripts" / "distribution_contract.py", scripts_dir / "distribution_contract.py")
+        shutil.copytree(BROWSER_EXTENSION, extension_dir)
+        manifest_path = extension_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["version"] = "9.9.9"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+        out_dir = project_dir / "dist"
+        result = subprocess.run(
+            [sys.executable, str(scripts_dir / PACKAGE_BROWSER_EXTENSION.name), "--out-dir", str(out_dir)],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        report = json.loads((out_dir / "browser-extension-package-report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("versionMatchesDistributionContract", report["missing"])
+        self.assertFalse((out_dir / "enhe-promotion-manager-9.9.9.zip").exists())
+
     def test_browser_extension_package_defaults_to_v054_without_touching_v053_archive(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-default-package-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -7432,6 +7511,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         extension_dir = project_dir / "browser-extension"
         package_script.parent.mkdir(parents=True)
         shutil.copy2(PACKAGE_BROWSER_EXTENSION, package_script)
+        shutil.copy2(ROOT / "scripts" / "distribution_contract.py", package_script.parent / "distribution_contract.py")
         for relative_path in [
             "manifest.json",
             "popup.html",
@@ -7465,18 +7545,23 @@ Prompt templates for product copy, SEO content, and video scripts.
             cwd=project_dir,
         )
 
-        versioned_dir = project_dir / "dist" / "v0.5.4"
+        versioned_dir = project_dir / "dist" / f"v{release_contract.VERSION}"
         report_path = versioned_dir / "browser-extension-package-report.json"
         self.assertTrue(report_path.exists())
         report = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.4")
-        self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.4.zip").exists())
+        self.assertEqual(report["version"], release_contract.VERSION)
+        self.assertTrue(
+            (versioned_dir / f"enhe-promotion-manager-{release_contract.VERSION}.zip").exists()
+        )
         for path, expected in historical_contents.items():
             self.assertEqual(path.read_bytes(), expected, str(path))
 
     def test_current_readmes_use_isolated_v054_package_command(self) -> None:
-        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.4"'
+        expected_command = (
+            'python scripts\\package_browser_extension.py --out-dir '
+            f'".\\dist\\v{release_contract.VERSION}"'
+        )
         retired_tokens = [
             'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
             r"dist\enhe-promotion-manager-<version>.zip",
@@ -7496,11 +7581,14 @@ Prompt templates for product copy, SEO content, and video scripts.
                     self.assertNotIn(retired_token, readme)
 
     def test_browser_extension_guides_use_isolated_v054_package_outputs(self) -> None:
-        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.4"'
+        expected_command = (
+            'python scripts\\package_browser_extension.py --out-dir '
+            f'".\\dist\\v{release_contract.VERSION}"'
+        )
         expected_outputs = [
-            r"dist\v0.5.4\enhe-promotion-manager-0.5.4.zip",
-            r"dist\v0.5.4\browser-extension-package-report.json",
-            r"dist\v0.5.4\browser-extension-package-report.md",
+            fr"dist\v{release_contract.VERSION}\enhe-promotion-manager-{release_contract.VERSION}.zip",
+            fr"dist\v{release_contract.VERSION}\browser-extension-package-report.json",
+            fr"dist\v{release_contract.VERSION}\browser-extension-package-report.md",
         ]
         retired_tokens = [
             'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
@@ -7516,7 +7604,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         ]:
             guide = guide_path.read_text(encoding="utf-8")
             with self.subTest(guide=guide_path):
-                self.assertIn("0.5.4", guide)
+                self.assertIn(release_contract.VERSION, guide)
                 self.assertIn(expected_command, guide)
                 for output in expected_outputs:
                     self.assertIn(output, guide)
@@ -7873,8 +7961,10 @@ Prompt templates for product copy, SEO content, and video scripts.
         for asset_line in [
             "- `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
             "the label `ENHE Promo Maker`.",
-            "- `dist/v0.5.4/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
-            "- `dist/v0.5.4/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
+            f"- `dist/v{release_contract.VERSION}/store-assets/"
+            "enhe-product-promo-maker-en-1280x800.png` — English popup.",
+            f"- `dist/v{release_contract.VERSION}/store-assets/"
+            "enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
         ]:
             self.assertIn(asset_line, screenshot_lines)
 
@@ -7919,8 +8009,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
 
         chrome_upload_step_en = (
-            "Package v0.5.4 and upload "
-            "`dist\\v0.5.4\\enhe-promotion-manager-0.5.4.zip` "
+            f"Package v{release_contract.VERSION} and upload "
+            f"`dist\\v{release_contract.VERSION}\\enhe-promotion-manager-"
+            f"{release_contract.VERSION}.zip` "
             "as a later update to this item."
         )
         screenshots_step_en = (
@@ -7949,7 +8040,8 @@ Prompt templates for product copy, SEO content, and video scripts.
             "required, pause for the account owner to complete it."
         )
         chrome_upload_step_zh = (
-            "打包 v0.5.4，并在后续将 `dist\\v0.5.4\\enhe-promotion-manager-0.5.4.zip` "
+            f"打包 v{release_contract.VERSION}，并在后续将 `dist\\v{release_contract.VERSION}\\"
+            f"enhe-promotion-manager-{release_contract.VERSION}.zip` "
             "作为该条目的更新上传。"
         )
         screenshots_step_zh = (
