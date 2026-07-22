@@ -18,11 +18,13 @@
       "files": [
         {
           "filename": "kokoro-v1.0.onnx",
-          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
+          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+          "sizeBytes": 325532387
         },
         {
           "filename": "voices-v1.0.bin",
-          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+          "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+          "sizeBytes": 28214398
         }
       ]
     }
@@ -42,7 +44,7 @@
     "repository": "Comfy-Org/flux1-schnell",
     "revision": "7d679837b018bfeb28eca55734b335efcd0e7100",
     "filename": "flux1-schnell-fp8.safetensors",
-    "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/7d679837b018bfeb28eca55734b335efcd0e7100/split_files/diffusion_models/flux1-schnell-fp8.safetensors",
+    "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/7d679837b018bfeb28eca55734b335efcd0e7100/flux1-schnell-fp8.safetensors?download=true",
     "license": "Apache-2.0"
   },
   "musetalk": {
