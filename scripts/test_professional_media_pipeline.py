@@ -54,6 +54,29 @@ class RuntimeSetupTest(unittest.TestCase):
         self.assertNotIn("HF_TOKEN", serialized)
         self.assertNotIn("apiKey", serialized)
 
+    def test_manifest_pins_size_and_sha256_for_every_model_asset(self):
+        manifest = self.setup._manifest()
+        assets = [*manifest["kokoro"]["model"]["files"], manifest["flux"]]
+
+        for asset in assets:
+            with self.subTest(filename=asset["filename"]):
+                self.assertIsInstance(asset.get("sizeBytes"), int)
+                self.assertGreater(asset["sizeBytes"], 0)
+                self.assertRegex(asset.get("sha256", ""), r"^[0-9a-f]{64}$")
+
+    def test_same_size_corrupt_file_fails_integrity(self):
+        expected = b"trusted-model"
+        corrupt = b"damaged-model"
+        self.assertEqual(len(expected), len(corrupt))
+        path = self.root / "same-size-model.bin"
+        path.write_bytes(corrupt)
+
+        self.assertFalse(
+            self.setup._matches_integrity(
+                path, len(expected), hashlib.sha256(expected).hexdigest()
+            )
+        )
+
     def test_command_resolves_windows_cmd_executable(self):
         npm_cmd = str(self.root / "npm.CMD")
         action = {
@@ -146,7 +169,12 @@ class RuntimeSetupTest(unittest.TestCase):
             side_effect=lambda *_args, **_kwargs: BrokenResponse(),
         ) as urlopen, mock.patch.object(self.setup.time, "sleep"):
             with self.assertRaises(TimeoutError):
-                self.setup._download_public_file("https://example.invalid/model", destination)
+                self.setup._download_public_file(
+                    "https://example.invalid/model",
+                    destination,
+                    expected_size=len(b"complete"),
+                    expected_sha256=hashlib.sha256(b"complete").hexdigest(),
+                )
 
         self.assertEqual(urlopen.call_count, self.setup.DOWNLOAD_ATTEMPTS)
         self.assertTrue(
@@ -154,6 +182,21 @@ class RuntimeSetupTest(unittest.TestCase):
         )
         self.assertFalse(destination.exists())
         self.assertFalse(destination.with_name("model.bin.part").exists())
+
+    def test_download_without_fixed_or_upstream_integrity_fails_closed(self):
+        destination = self.root / "untrusted-model.bin"
+
+        with mock.patch.object(
+            self.setup.urllib.request,
+            "urlopen",
+            side_effect=lambda *_args, **_kwargs: io.BytesIO(b"arbitrary content"),
+        ), mock.patch.object(self.setup.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "trusted integrity"):
+                self.setup._download_public_file(
+                    "https://example.invalid/model", destination
+                )
+
+        self.assertFalse(destination.exists())
 
     def test_corrupt_existing_file_is_replaced_and_verified(self):
         destination = self.root / "model.bin"
@@ -347,10 +390,13 @@ class RuntimeSetupTest(unittest.TestCase):
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         self.assertEqual(saved["sizeBytes"], len(b"complete model"))
         self.assertEqual(saved["sha256"], hashlib.sha256(b"complete model").hexdigest())
-        self.assertTrue(self.setup.check_runtime(runtime_root)["installed"]["flux"])
+        manifest["flux"]["sizeBytes"] = len(b"complete model")
+        manifest["flux"]["sha256"] = hashlib.sha256(b"complete model").hexdigest()
+        with mock.patch.object(self.setup, "_manifest", return_value=manifest):
+            self.assertTrue(self.setup.check_runtime(runtime_root)["installed"]["flux"])
 
-        model.write_bytes(b"corrupt")
-        self.assertFalse(self.setup.check_runtime(runtime_root)["installed"]["flux"])
+            model.write_bytes(b"corrupt")
+            self.assertFalse(self.setup.check_runtime(runtime_root)["installed"]["flux"])
 
     def test_receipt_refuses_model_that_misses_expected_integrity(self):
         model = self.root / "model.bin"

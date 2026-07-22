@@ -445,7 +445,7 @@ def _download_public_file(
     expected_size: int | None = None,
     expected_sha256: str | None = None,
 ) -> tuple[int, str]:
-    if (expected_size is not None or expected_sha256 is not None) and _matches_integrity(
+    if expected_size is not None and expected_sha256 is not None and _matches_integrity(
         destination, expected_size, expected_sha256
     ):
         return _assert_file_integrity(destination, expected_size, expected_sha256)
@@ -477,6 +477,10 @@ def _download_public_file(
                             character in "0123456789abcdefABCDEF" for character in candidate
                         ):
                             response_sha256 = candidate
+                if response_size is None or response_sha256 is None:
+                    raise RuntimeError(
+                        "Download response did not provide trusted integrity metadata"
+                    )
                 shutil.copyfileobj(response, output)
             verified = _assert_file_integrity(partial, response_size, response_sha256)
             partial.replace(destination)
