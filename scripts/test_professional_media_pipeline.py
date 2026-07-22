@@ -2704,6 +2704,14 @@ class MediaQualityTest(unittest.TestCase):
             secret_report = quality.build_quality_report({"capture": StageResult.ready("playwright", [secret])})
             self.assertIn("secret_metadata_rejected", secret_report["artifacts"][0]["failures"])
 
+            sensitive_dir = root / "Cookies"
+            sensitive_dir.mkdir()
+            sensitive_path = sensitive_dir / "capture.png"
+            sensitive_path.write_bytes(b"not-a-png")
+            sensitive = Artifact.from_file("product_capture_image", sensitive_path, "playwright", "product_page")
+            sensitive_report = quality.build_quality_report({"capture": StageResult.ready("playwright", [sensitive])})
+            self.assertEqual(sensitive_report["artifacts"][0]["path"], "[redacted-sensitive-path]")
+
     def test_atomic_machine_report_and_stage_result_statuses(self):
         quality = importlib.import_module("scripts.media_pipeline.quality")
         with tempfile.TemporaryDirectory() as temp:
@@ -2757,6 +2765,27 @@ class MediaQualityTest(unittest.TestCase):
                 )
             self.assertEqual(gate.status, "degraded")
             self.assertEqual(gate.artifacts, (valid,))
+
+            leaky = replace(valid, provider="Bearer LEAK_TOKEN", source="https://example.test/?token=LEAK_QUERY")
+            leaky_stage = StageResult(
+                status="failed",
+                provider="Bearer STAGE_TOKEN",
+                error_code="err_LEAK_ERROR",
+                artifacts=(leaky,),
+            )
+            leaky_report = quality.build_quality_report({"failed": leaky_stage})
+            rendered = json.dumps(leaky_report, ensure_ascii=False)
+            self.assertNotIn("LEAK_TOKEN", rendered)
+            self.assertNotIn("LEAK_QUERY", rendered)
+            self.assertNotIn("STAGE_TOKEN", rendered)
+            self.assertNotIn("LEAK_ERROR", rendered)
+            with mock.patch.object(
+                quality,
+                "build_quality_report",
+                return_value={"status": "standard_ready", "warnings": [], "blockers": [], "artifacts": []},
+            ), mock.patch.object(quality, "_inspect_artifact", return_value={"passed": True}):
+                failed_gate = quality.run_quality_gate({"failed": leaky_stage}, target="standard")
+            self.assertEqual(failed_gate.artifacts, ())
 
 
 if __name__ == "__main__":

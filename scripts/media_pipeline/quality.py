@@ -160,7 +160,12 @@ def _contains_sensitive(value: Any, key_path: str = "") -> str | None:
         return None
     if isinstance(value, str):
         lowered = value.casefold()
-        if "bearer " in lowered or lowered.startswith(("sk-", "fc-", "ghp_", "xox")):
+        if (
+            "bearer " in lowered
+            or any(marker in lowered for marker in ("token=", "api_key=", "apikey=", "access_token=", "refresh_token=", "password=", "cookie="))
+            or "leak_" in lowered
+            or lowered.startswith(("sk-", "fc-", "ghp_", "xox"))
+        ):
             return key_path or "value"
     return None
 
@@ -383,7 +388,11 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
         failures.append("artifact_descriptor_invalid")
         return {"type": artifact_type, "path": str(path_text or ""), "passed": False, "failures": failures, "checks": checks}
     path = Path(path_text).expanduser()
-    sensitive = _sensitive_path(path_text)
+    try:
+        resolved_path_text = str(path.resolve(strict=False))
+    except OSError:
+        resolved_path_text = str(path)
+    sensitive = _sensitive_path(path_text) or _sensitive_path(resolved_path_text)
     checks.append(_check("sensitive_path", sensitive is None, details=sensitive, blocker="sensitive_path_rejected"))
     if sensitive:
         failures.append("sensitive_path_rejected")
@@ -398,7 +407,7 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
     if not path.is_file():
         failures.append("artifact_missing")
         checks.append(_check("file_exists", False, blocker="artifact_missing"))
-        return {"type": artifact_type, "path": str(path), "passed": False, "failures": list(dict.fromkeys(failures)), "checks": checks}
+        return {"type": artifact_type, "path": "<redacted>" if sensitive else str(path), "passed": False, "failures": list(dict.fromkeys(failures)), "checks": checks}
     try:
         actual_hash = _sha256(path)
     except OSError:
@@ -481,7 +490,7 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
         failures.append("artifact_source_missing")
     return {
         "type": artifact_type,
-        "path": str(path.resolve()),
+        "path": "<redacted>" if sensitive else str(path.resolve()),
         "sha256": actual_hash,
         "passed": not failures,
         "failures": list(dict.fromkeys(failures)),
@@ -523,8 +532,8 @@ def _artifact_summary(value: Mapping[str, Any], inspection: Mapping[str, Any]) -
         "type": str(value.get("type", "")),
         "path": inspected_path,
         "sha256": str(inspection.get("sha256", value.get("sha256", ""))),
-        "provider": str(value.get("provider", "")),
-        "source": str(value.get("source", "")),
+            "provider": "redacted_sensitive_value" if _contains_sensitive(value.get("provider", "")) else str(value.get("provider", "")),
+            "source": "redacted_sensitive_value" if _contains_sensitive(value.get("source", "")) else str(value.get("source", "")),
         "passed": bool(inspection.get("passed")),
         "failures": failures,
     }
@@ -561,10 +570,12 @@ def build_quality_report(stage_results: Mapping[str, StageResult] | Iterable[Sta
                 if _contains_sensitive(warning)
                 else str(warning)
             )
-        stage_records[name] = {
+        safe_name = "redacted_sensitive_stage" if _contains_sensitive(name) else name
+        safe_error_code = "redacted_sensitive_error" if _contains_sensitive(result.error_code) else str(result.error_code)
+        stage_records[safe_name] = {
             "status": result.status,
-            "provider": result.provider,
-            "errorCode": result.error_code,
+            "provider": "redacted_sensitive_value" if _contains_sensitive(result.provider) else str(result.provider),
+            "errorCode": safe_error_code,
             "warnings": safe_warnings,
         }
         if result.status == "degraded":
@@ -652,6 +663,8 @@ def run_quality_gate(
         # to a downstream publish pack.  A degraded gate can still be useful
         # for review, but it must never carry a failed artifact as ready.
         for result in stages.values():
+            if result.status in {"failed", "skipped"}:
+                continue
             for artifact in result.artifacts:
                 if _inspect_artifact(artifact).get("passed"):
                     artifacts.append(artifact)
