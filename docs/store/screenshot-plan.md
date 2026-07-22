@@ -1,10 +1,10 @@
 # Store Screenshot Plan
 
-Prepare the ENHE Product Promo Maker v0.5.3 assets before submission:
+Prepare the ENHE Product Promo Maker v0.5.4 source/release-candidate assets before a later submission. Chrome v0.5.3 remains published and its assets remain immutable:
 
 - `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and the label `ENHE Promo Maker`.
-- `dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.
-- `dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.
+- `dist/v0.5.4/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.
+- `dist/v0.5.4/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.
 
 The English and Simplified Chinese popup screenshots must safely show:
 

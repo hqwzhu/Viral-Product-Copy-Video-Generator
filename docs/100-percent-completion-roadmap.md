@@ -344,7 +344,7 @@ npm run migrate
 11. Build the extension package:
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 12. Submit the generated ZIP to Chrome Web Store and Microsoft Edge Add-ons.

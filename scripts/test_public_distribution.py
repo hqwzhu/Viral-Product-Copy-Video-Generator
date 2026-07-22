@@ -619,7 +619,7 @@ class DistributionContractTest(unittest.TestCase):
             },
             "version-sync.md": {
                 "zh": (
-                    "公开仓库/Skill/扩展源码版本：0.5.3",
+                    f"公开仓库/Skill/扩展源码/发行候选版本：{contract.VERSION}",
                     "已发布的 Chrome 商店版本：0.5.3",
                     "非支付命令引用：11/11 已在随包 Skill 中存在",
                     "支付与订阅：不纳入功能同步结论，但扩展原有 UI 和 billing-contract.json 保留",
@@ -628,7 +628,8 @@ class DistributionContractTest(unittest.TestCase):
                     "--sync-installed-skill",
                 ),
                 "en": (
-                    "Public repository / Skill / extension source version: 0.5.3",
+                    "Public repository / Skill / extension source/release candidate version: "
+                    f"{contract.VERSION}",
                     "Published Chrome Web Store version: 0.5.3",
                     "Non-payment command references: 11/11 exist in the bundled Skill",
                     "Payment and subscriptions: excluded from the feature parity conclusion; the existing extension UI and billing-contract.json remain included",
@@ -696,14 +697,15 @@ class DistributionContractTest(unittest.TestCase):
             (en_docs / name).read_text(encoding="utf-8") for name in sorted(en_names)
         )
         for fact in (
-            "公开仓库/Skill/扩展源码版本：0.5.3",
+            f"公开仓库/Skill/扩展源码/发行候选版本：{contract.VERSION}",
             "已发布的 Chrome 商店版本：0.5.3",
             "非支付命令引用：11/11 已在随包 Skill 中存在",
             "Hosted Worker：关闭",
         ):
             self.assertIn(fact, zh_corpus)
         for fact in (
-            "Public repository / Skill / extension source version: 0.5.3",
+            "Public repository / Skill / extension source/release candidate version: "
+            f"{contract.VERSION}",
             "Published Chrome Web Store version: 0.5.3",
             "Non-payment command references: 11/11 exist in the bundled Skill",
             "Hosted Worker: disabled",
@@ -878,7 +880,7 @@ class DistributionContractTest(unittest.TestCase):
             self.assertTrue((snapshot / "scripts" / "tracked.py").is_file())
             self.assertFalse((snapshot / "scripts" / "ignored.py").exists())
 
-    def test_committed_extension_snapshot_matches_validated_release_bytes(self) -> None:
+    def test_committed_extension_snapshot_distinguishes_v054_source_from_v053_archive(self) -> None:
         release_path = ROOT / "dist" / "v0.5.3" / "enhe-promotion-manager-0.5.3.zip"
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
@@ -934,10 +936,16 @@ class DistributionContractTest(unittest.TestCase):
                 for member in sorted(release_members):
                     with self.subTest(member=member):
                         expected = release.read(member)
-                        self.assertEqual(
-                            (snapshot / "browser-extension" / member).read_bytes(),
-                            expected,
-                        )
+                        actual = (snapshot / "browser-extension" / member).read_bytes()
+                        if member == "manifest.json":
+                            self.assertNotEqual(actual, expected)
+                            self.assertEqual(json.loads(actual)["version"], contract.VERSION)
+                            self.assertEqual(
+                                json.loads(expected)["version"],
+                                contract.PUBLISHED_STORE_VERSION,
+                            )
+                        else:
+                            self.assertEqual(actual, expected)
                         attribute = subprocess.run(
                             ["git", "check-attr", "text", "--", f"browser-extension/{member}"],
                             cwd=source,
@@ -1022,10 +1030,14 @@ class DistributionContractTest(unittest.TestCase):
             release = json.loads(
                 (target / "release-manifest.json").read_text(encoding="utf-8")
             )
-            self.assertEqual(release["version"], "0.5.3")
+            self.assertEqual(release["version"], contract.VERSION)
             self.assertEqual(release["sourceCommit"], "test-source-commit")
-            self.assertEqual(release["chromeWebStore"]["publishedVersion"], "0.5.3")
+            self.assertEqual(
+                release["chromeWebStore"]["publishedVersion"],
+                contract.PUBLISHED_STORE_VERSION,
+            )
             self.assertEqual(release["chromeWebStore"]["status"], "published")
+            self.assertIsNone(release["chromeWebStore"]["submittedVersion"])
             self.assertEqual(release["chromeWebStore"]["listingUrl"], contract.STORE_LISTING_URL)
             self.assertEqual(release["syncAudit"]["status"], "ready")
             self.assertEqual(
@@ -1077,7 +1089,7 @@ class DistributionContractTest(unittest.TestCase):
                 builder.build_repository(ROOT, target, source_commit="test")
 
     def test_public_identity_constants_are_exact(self) -> None:
-        self.assertEqual(contract.VERSION, "0.5.3")
+        self.assertEqual(contract.VERSION, "0.5.4")
         self.assertEqual(contract.PUBLISHED_STORE_VERSION, "0.5.3")
         self.assertEqual(contract.STORE_ITEM_ID, "dloklkbnmoigemnfigbkibogmgbieppl")
         self.assertEqual(contract.PUBLIC_REPOSITORY, "hqwzhu/enhe-promotion-manager")
@@ -1141,24 +1153,23 @@ class DistributionContractTest(unittest.TestCase):
             distribution / "docs" / "en" / "version-sync.md",
         ):
             text = path.read_text(encoding="utf-8")
-            self.assertIn(contract.PRODUCT_EN if path.name == "README.en.md" else "0.5.3", text)
+            self.assertIn(contract.VERSION, text)
+            self.assertIn(contract.PUBLISHED_STORE_VERSION, text)
             self.assertIn(listing_url, text)
             self.assertNotIn("0.5.2", text)
-            self.assertNotIn("pending_review", text)
-            self.assertNotIn("not_submitted", text)
 
-    def test_store_submission_guides_describe_published_v053_and_next_upgrade(self) -> None:
+    def test_store_submission_guides_distinguish_source_candidate_from_published_store(self) -> None:
         for path, published, next_version in (
             (ROOT / "docs" / "extension-store-submission.md", "published", "next version"),
             (ROOT / "docs" / "zh-CN" / "extension-store-submission.md", "已发布", "下一版"),
         ):
             text = path.read_text(encoding="utf-8")
-            self.assertIn("0.5.3", text)
+            self.assertIn(contract.VERSION, text)
+            self.assertIn(contract.PUBLISHED_STORE_VERSION, text)
             self.assertIn(contract.STORE_ITEM_ID, text)
             self.assertIn(published, text)
             self.assertIn(next_version, text)
             self.assertNotIn("0.5.2", text)
-            self.assertNotIn("pending review", text)
 
         for path, heading, status_check, unpublished in (
             (

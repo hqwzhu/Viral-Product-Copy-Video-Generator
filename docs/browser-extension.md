@@ -2,7 +2,7 @@
 
 The `browser-extension` folder contains a Chrome Manifest V3 operator popup for ENHE Product Promo Maker.
 
-Version 0.5.3 provides a complete Chinese/English popup. On first launch it follows Chrome's UI language, then remembers the operator's explicit `中文 / EN` selection in local extension storage. Store metadata is also localized through Chrome `_locales` resources.
+Version 0.5.4 is the source/release candidate and provides a complete Chinese/English popup. On first launch it follows Chrome's UI language, then remembers the operator's explicit `中文 / EN` selection in local extension storage. Store metadata is also localized through Chrome `_locales` resources. Chrome Web Store v0.5.3 remains published; v0.5.4 has not yet been submitted for review.
 
 ## What It Does
 
@@ -43,16 +43,16 @@ Version 0.5.3 provides a complete Chinese/English popup. On first launch it foll
 Build a Chrome/Edge submission zip from the repository root:
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 The command writes:
 
-- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
-- `dist\v0.5.3\browser-extension-package-report.json`
-- `dist\v0.5.3\browser-extension-package-report.md`
+- `dist\v0.5.4\enhe-promotion-manager-0.5.4.zip`
+- `dist\v0.5.4\browser-extension-package-report.json`
+- `dist\v0.5.4\browser-extension-package-report.md`
 
-Only upload the zip when `dist\v0.5.3\browser-extension-package-report.json` reports `status: ready`. The package check verifies MV3, bundled icons, local popup code, scoped permissions, and no remote code execution patterns.
+Only submit the v0.5.4 zip when `dist\v0.5.4\browser-extension-package-report.json` reports `status: ready`; this task does not submit it. The package check verifies MV3, bundled icons, local popup code, scoped permissions, and no remote code execution patterns.
 
 For Chrome Web Store and Microsoft Edge Add-ons listing steps, reviewer notes, privacy policy fields, and paid-subscription wording, see `docs/extension-store-submission.md`.
 

@@ -20,7 +20,7 @@ import verify_distribution
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
+FIXED_ZIP_TIMESTAMP = contract.FIXED_ZIP_TIMESTAMP
 
 
 def _json_bytes(payload: dict) -> bytes:
@@ -28,10 +28,12 @@ def _json_bytes(payload: dict) -> bytes:
 
 
 def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
-    info = zipfile.ZipInfo(name, date_time=FIXED_ZIP_TIMESTAMP)
-    info.compress_type = zipfile.ZIP_DEFLATED
-    info.external_attr = 0o644 << 16
-    archive.writestr(info, data)
+    archive.writestr(
+        contract.deterministic_zip_info(name),
+        data,
+        compress_type=contract.FIXED_ZIP_COMPRESSION,
+        compresslevel=contract.FIXED_ZIP_COMPRESSLEVEL,
+    )
 
 
 def _validate_root_ancestors(root: Path) -> None:
@@ -200,7 +202,13 @@ def build_skill_zip(output: Path) -> None:
         contract._strict_files(ROOT, source),
         key=lambda path: path.relative_to(source).as_posix(),
     )
-    with zipfile.ZipFile(output, "w") as archive:
+    with zipfile.ZipFile(
+        output,
+        "w",
+        compression=contract.FIXED_ZIP_COMPRESSION,
+        compresslevel=contract.FIXED_ZIP_COMPRESSLEVEL,
+    ) as archive:
+        archive.comment = b""
         for path in files:
             relative = path.relative_to(source).as_posix()
             add_bytes(
@@ -220,9 +228,8 @@ def validate_skill_zip(path: Path) -> None:
         names = verify_distribution._safe_zip_members(archive)
         if len(names) != len(set(names)) or set(names) != set(expected):
             raise RuntimeError("staged Skill ZIP member list differs from public source")
-        for info in archive.infolist():
-            if info.date_time != FIXED_ZIP_TIMESTAMP:
-                raise RuntimeError("staged Skill ZIP timestamp is not deterministic")
+        if contract.nondeterministic_zip_members(archive):
+            raise RuntimeError("staged Skill ZIP metadata is not deterministic")
         for name, source_path in expected.items():
             if archive.read(name) != source_path.read_bytes():
                 raise RuntimeError("staged Skill ZIP bytes differ from public source")
@@ -251,6 +258,8 @@ def copy_validated_extension(source_zip: Path, output: Path) -> None:
             or "component-manifest.json" in names
         ):
             raise RuntimeError("validated extension ZIP member list differs from public source")
+        if contract.nondeterministic_zip_members(archive):
+            raise RuntimeError("validated extension ZIP metadata is not deterministic")
         for name, path in expected.items():
             if archive.read(name) != path.read_bytes():
                 raise RuntimeError(f"validated extension ZIP differs from public source: {name}")
