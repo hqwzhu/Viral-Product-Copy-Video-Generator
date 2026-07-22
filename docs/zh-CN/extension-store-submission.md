@@ -4,6 +4,10 @@
 
 本文用于把 `browser-extension/` 打包为可提交到 Chrome Web Store 和 Microsoft Edge Add-ons 的 ENHE Product Promo Maker 扩展包。
 
+## 当前已发布版本
+
+Chrome Web Store 条目 `dloklkbnmoigemnfigbkibogmgbieppl` 的 v0.5.3 已发布。其已验证归档为 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`；它只是不可修改的历史验证资产，不是再次上传的操作指令。其商店图片、校验和与发行证据也均不可更改；不得重新打包、重新上传或替换 v0.5.3。下一版升级时，先提高扩展版本号，创建新的发行目录和证据集，再作为同一条目的更新提交。
+
 商店本地化名称：
 
 - 简体中文：`ENHE 产品推广素材生成器`
@@ -19,26 +23,28 @@
 
 在仓库根目录运行：
 
+仅在提高版本号后，为下一版运行：
+
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v<NEXT_VERSION>"
 ```
 
 输出文件：
 
-- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
-- `dist\v0.5.3\browser-extension-package-report.json`
-- `dist\v0.5.3\browser-extension-package-report.md`
+- `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip`
+- `dist\v<NEXT_VERSION>\browser-extension-package-report.json`
+- `dist\v<NEXT_VERSION>\browser-extension-package-report.md`
 
 把审核通过的商店图片放在：
 
-- `dist\v0.5.3\store-assets\enhe-product-promo-maker-en-1280x800.png`
-- `dist\v0.5.3\store-assets\enhe-product-promo-maker-zh-1280x800.png`
+- `dist\v<NEXT_VERSION>\store-assets\enhe-product-promo-maker-en-1280x800.png`
+- `dist\v<NEXT_VERSION>\store-assets\enhe-product-promo-maker-zh-1280x800.png`
 
-向现有商店条目上传 zip，并保留报告作为发布证据。兼容包名继续使用 `enhe-promotion-manager-0.5.3.zip`。
+向现有商店条目上传下一版 ZIP，并保留其报告作为发行证据。
 
 ## 上架前检查
 
-- 版本和打包输出均为 `dist\v0.5.3` 下的 0.5.3。
+- 当前已发布版本保持 v0.5.3 不变；下一版与打包输出使用新的 `dist\v<NEXT_VERSION>` 目录。
 - Manifest 使用 MV3。
 - popup、CSS 和 JavaScript 均随扩展包本地提供。
 - 不加载 remote code：没有远程 `<script src="https://...">`、动态 import、`importScripts`、`eval` 或 `new Function`。
@@ -94,30 +100,24 @@ python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
 1. 创建或登录 Chrome Web Store Developer Dashboard 账号。
 2. 按后台要求完成开发者注册和费用支付。
 3. 打开条目 `dloklkbnmoigemnfigbkibogmgbieppl`，不要创建新条目。
-4. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
-5. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
-6. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
-7. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
-8. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
-9. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
-10. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策。
-11. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。
-12. 说明收费功能：托管运行消耗 ENHE 订阅积分；本地命令生成可以保持免费或受试用限制。
-13. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
+4. 确认 v0.5.3 已发布后，再提高 manifest 的版本号；不要改动 v0.5.3 归档或条目历史。
+5. 打包下一版，并将 `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` 作为该条目的更新上传。
+6. 上传 `dist\v<NEXT_VERSION>\store-assets` 中下一版图标和两张已审核的本地化截图。
+7. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策字段。
+8. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。
+9. 说明收费功能：托管运行消耗 ENHE 订阅积分；本地命令生成可以保持免费或受试用限制。
+10. 粘贴 `docs/store/reviewer-notes.md`，再次确认条目 ID 后提交下一版审核。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## Microsoft Edge Add-ons 上架步骤
 
 1. 创建或登录 Microsoft Partner Center 账号。
 2. 如果已有 Microsoft Edge 扩展条目，打开现有提交，不为同一扩展创建替代条目。
-3. 上传 v0.5.3 前，先检查后台中当前 v0.5.2 提交的状态：
-4. 如果 v0.5.2 正在审核，不要替换该提交；等待审核结果。
-5. 如果 v0.5.2 已发布，将 v0.5.3 作为更新继续上传。
-6. 如果 v0.5.2 被拒绝，记录拒绝原因，修复必须处理的问题后再上传 v0.5.3。
-7. 上传 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`。
-8. 上传 v0.5.3 图标和 `dist\v0.5.3\store-assets` 中已审核的两张本地化截图。
-9. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。
-10. 在审核备注中说明远程服务只返回数据，全部扩展逻辑都在安装包内。
-11. 确认生成的发布素材需要用户批准后提交认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
+3. 独立核验当前 Edge 条目状态。若 v0.5.3 已在该 Edge 条目发布，再提高 manifest 的版本号；若 v0.5.3 尚未发布，则按适用的 Edge 提交流程处理，不得把 Chrome 的发布状态当作 Edge 已发布。
+4. 打包并上传 `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` 作为下一版更新。
+5. 上传 `dist\v<NEXT_VERSION>\store-assets` 中下一版图标和两张已审核的本地化截图。
+6. 填写本地化产品说明、分类、隐私政策、支持网址、权限说明和认证说明。
+7. 在审核备注中说明远程服务只返回数据，全部扩展逻辑都在安装包内。
+8. 确认生成的发布素材需要用户批准后提交下一版认证。若需要登录、账号验证或 captcha，由账号所有者完成后再继续。
 
 ## 审核备注模板
 

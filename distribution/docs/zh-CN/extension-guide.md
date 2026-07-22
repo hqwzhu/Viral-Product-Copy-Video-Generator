@@ -6,7 +6,7 @@ Chrome 扩展是 Manifest V3 的本地入口，用来把当前产品页面转换
 
 ### Chrome Web Store
 
-打开 [现有商店条目](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)，点击安装。商店当前公开版本（发布前）为 `0.5.2`。
+打开 [已发布的 Chrome 商店条目](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl)，点击安装。商店当前公开版本为 `0.5.3`。
 
 ### 未打包扩展
 

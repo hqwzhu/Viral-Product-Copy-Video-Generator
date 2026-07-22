@@ -4,7 +4,7 @@
 
 Public repository / Skill / extension source version: 0.5.3
 
-Current public Chrome Web Store version (before update): 0.5.2
+Published Chrome Web Store version: 0.5.3
 
 Non-payment command references: 11/11 exist in the bundled Skill
 
@@ -32,7 +32,7 @@ The public distribution parses the Python commands referenced by the extension s
 
 ## Relationship between the store and source versions
 
-During preparation of this public release, the Chrome Web Store listing at https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl shows public version `0.5.2`. The public repository and release candidate use `0.5.3`. Store users receive the corresponding update only after packaging, store submission, and platform review are complete. The documentation does not present an update that has not completed store review as already published.
+The published Chrome Web Store listing at https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl, the public repository, and the release packages use version `0.5.3`.
 
 ## What the synchronization conclusion excludes
 

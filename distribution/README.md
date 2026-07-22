@@ -128,7 +128,7 @@ python scripts\skill_entry.py `
 ## 当前版本与下载
 
 - 公开仓库、Skill 和扩展源码：`0.5.3`
-- Chrome 商店当前公开版本（本次更新前）：`0.5.2`
+- Chrome 商店当前公开版本：`0.5.3`（已发布）
 - [下载 Skill v0.5.3](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-product-promo-maker-skill-0.5.3.zip)
 - [下载 Chrome 插件 v0.5.3](https://github.com/hqwzhu/enhe-promotion-manager/releases/download/v0.5.3/enhe-promotion-manager-extension-0.5.3.zip)
 - [查看全部 GitHub Releases](https://github.com/hqwzhu/enhe-promotion-manager/releases)

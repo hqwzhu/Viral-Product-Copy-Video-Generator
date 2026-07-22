@@ -6,7 +6,7 @@ The Chrome extension is a Manifest V3 local entry point that turns the current p
 
 ### Chrome Web Store
 
-Open the [existing store listing](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl) and install it. The current public store version before update is `0.5.2`.
+Open the [published Chrome Web Store listing](https://chromewebstore.google.com/detail/enhe-promotion-manager/dloklkbnmoigemnfigbkibogmgbieppl) and install it. The current public store version is `0.5.3`.
 
 ### Unpacked extension
 
