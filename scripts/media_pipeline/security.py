@@ -85,7 +85,7 @@ def validate_capture_shot(
         target = _parsed_origin(target_url)
         if source[:3] != target[:3]:
             raise MediaSecurityError("Capture target must use the source origin")
-        if not allow_localhost and (
+        if allow_localhost is not True and (
             _is_loopback(source[1]) or _is_loopback(target[1])
         ):
             raise MediaSecurityError("Localhost capture requires explicit permission")

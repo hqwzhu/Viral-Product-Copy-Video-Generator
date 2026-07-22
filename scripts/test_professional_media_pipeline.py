@@ -686,6 +686,16 @@ class MediaSecurityTest(unittest.TestCase):
             )
         )
 
+    def test_capture_rejects_truthy_non_boolean_localhost_permission(self):
+        for allow_localhost in (1, "yes"):
+            with self.subTest(allow_localhost=allow_localhost):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(
+                        "http://127.0.0.1:8000/product",
+                        {"selector": "main"},
+                        allow_localhost=allow_localhost,
+                    )
+
     def test_cloud_media_requires_flag_and_exact_allowlist_membership(self):
         allowed = self.root / "approved" / "product.png"
         other = self.root / "approved" / "other.png"
