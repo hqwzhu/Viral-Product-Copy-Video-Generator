@@ -186,6 +186,45 @@ class RuntimeSetupTest(unittest.TestCase):
         ).stdout.strip()
         self.assertEqual(version, "3.12")
 
+    def test_venv_action_repairs_missing_pyvenv_cfg(self):
+        runtime_root = self.root / "runtime"
+        action = next(
+            action
+            for action in self.setup.build_install_plan(runtime_root)["actions"]
+            if action["id"] == "create-core-venv"
+        )
+        venv = runtime_root / "core" / ".venv"
+        self.setup._execute_action(action)
+        (venv / "pyvenv.cfg").unlink()
+
+        self.setup._execute_action(action)
+
+        self.assertTrue((venv / "pyvenv.cfg").is_file())
+        self.assertEqual(
+            self.setup._venv_runtime_version(self.setup._venv_python(venv)), "3.12"
+        )
+
+    def test_corrupt_venv_python_fails_closed_without_deleting_files(self):
+        runtime_root = self.root / "runtime"
+        action = next(
+            action
+            for action in self.setup.build_install_plan(runtime_root)["actions"]
+            if action["id"] == "create-core-venv"
+        )
+        venv = runtime_root / "core" / ".venv"
+        python = self.setup._venv_python(venv)
+        python.parent.mkdir(parents=True)
+        python.write_bytes(b"not an executable")
+        (venv / "pyvenv.cfg").write_text("version = 3.12.9\n", encoding="utf-8")
+        sentinel = venv / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "validate existing venv Python"):
+            self.setup._execute_action(action)
+
+        self.assertEqual(python.read_bytes(), b"not an executable")
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
     def test_partial_download_is_cleaned_after_bounded_retries(self):
         destination = self.root / "models" / "model.bin"
 
@@ -397,6 +436,24 @@ class RuntimeSetupTest(unittest.TestCase):
             )
 
         self.assertEqual(self.setup._git_head(checkout), wrong)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_parent_repository_is_not_mutated_through_child_destination(self):
+        source, expected, parent_head = self._make_git_source()
+        parent = self.root / "parent-checkout"
+        subprocess.run(["git", "clone", "--quiet", str(source), str(parent)], check=True)
+        child = parent / "runtime-child"
+        child.mkdir()
+        sentinel = child / "USER_DATA.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+        tracked = parent / "version.txt"
+        self.assertEqual(tracked.read_text(encoding="utf-8"), "second")
+
+        with self.assertRaisesRegex(RuntimeError, "top level"):
+            self.setup._ensure_git_checkout(str(source), child, expected)
+
+        self.assertEqual(self.setup._git_head(parent), parent_head)
+        self.assertEqual(tracked.read_text(encoding="utf-8"), "second")
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
 
     def test_pinned_checkout_clones_clean_destination(self):

@@ -302,6 +302,13 @@ def _git_head(checkout: Path, git: str | None = None) -> str | None:
         return None
     git = git or _resolve_executable("git")
     try:
+        top_level = subprocess.run(
+            [git, "-C", str(checkout), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False,
+        ).stdout.strip()
         result = subprocess.run(
             [git, "-C", str(checkout), "rev-parse", "HEAD"],
             check=True,
@@ -313,6 +320,12 @@ def _git_head(checkout: Path, git: str | None = None) -> str | None:
         raise RuntimeError(
             f"Unable to inspect existing Git checkout: {checkout}"
         ) from error
+    normalized_top_level = os.path.normcase(str(Path(top_level).resolve()))
+    normalized_checkout = os.path.normcase(str(checkout.resolve()))
+    if normalized_top_level != normalized_checkout:
+        raise RuntimeError(
+            f"Git top level does not match requested destination: {checkout}"
+        )
     return result.stdout.strip() or None
 
 
@@ -389,6 +402,8 @@ def _ensure_git_checkout(repository: str, destination: Path, revision: str) -> N
 
 
 def _venv_runtime_version(python: Path) -> str | None:
+    if not (python.parents[1] / "pyvenv.cfg").is_file():
+        return None
     if not python.is_file():
         return None
     try:
