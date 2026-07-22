@@ -2511,5 +2511,180 @@ class ProfessionalVideoTest(unittest.TestCase):
             self.assertFalse(metadata["cloudUpload"])
 
 
+class MediaQualityTest(unittest.TestCase):
+    """Offline regression tests for the fail-closed quality gate."""
+
+    @staticmethod
+    def complete_evidence():
+        return {
+            "probe": {
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "shortEdge": 1080,
+                "duration": 20.0,
+                "nonSilent": True,
+            },
+            "productCaptures": [{"sha256": f"capture-{index}"} for index in range(3)],
+            "videos": [{"shotIds": [f"shot-{index}" for index in range(5)]}],
+            "supportingScenes": [{"sha256": "scene-1"}, {"sha256": "scene-2"}],
+            "aiScenes": [{"aiGenerated": True}],
+            "motionTypes": ["zoomPan", "productHighlight", "sceneTransition"],
+            "captionsSynced": True,
+            "covers": [{"containsProductCapture": True, "hasBrand": True}],
+            "detailImages": [{"containsProductCapture": True}],
+            "contactSheets": [{}],
+        }
+
+    def test_professional_requires_every_video_and_visual_gate(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        report = quality.evaluate_media_quality(self.complete_evidence(), target="professional")
+        self.assertEqual(report["status"], "professional_ready")
+        self.assertEqual(report["blockers"], [])
+
+    def test_missing_ai_scene_downgrades_to_standard(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        evidence = self.complete_evidence()
+        evidence["aiScenes"] = []
+        report = quality.evaluate_media_quality(evidence, target="professional")
+        self.assertEqual(report["status"], "standard_ready")
+        self.assertIn("ai_photographic_scene_missing", report["blockers"])
+
+    def test_missing_capture_or_visual_family_is_partial(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        evidence = self.complete_evidence()
+        evidence["productCaptures"] = []
+        report = quality.evaluate_media_quality(evidence, target="professional")
+        self.assertEqual(report["status"], "partial_ready")
+
+    def test_artifact_gate_rejects_corruption_dimensions_silence_and_secrets(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            try:
+                from PIL import Image
+            except ImportError:
+                self.skipTest("Pillow unavailable")
+            image_path = root / "capture.png"
+            Image.new("RGB", (20, 20), "#29466d").save(image_path, format="PNG")
+            capture = Artifact.from_file("product_capture_image", image_path, "playwright", "product_page")
+            capture = capture.__class__(**{**capture.to_dict(), "containsUserData": False, "metadata": {"viewport": [21, 20], "cloudUpload": False}})
+            capture_stage = StageResult.ready("playwright", [capture])
+            report = quality.build_quality_report({"capture": capture_stage}, target="professional")
+            self.assertEqual(report["status"], "partial_ready")
+            self.assertIn("artifact_hash_mismatch", report["artifacts"][0]["failures"])
+
+            damaged = root / "damaged.png"
+            damaged.write_bytes(b"not a png")
+            damaged_artifact = Artifact.from_file("cover_image", damaged, "local", "composite")
+            damaged_artifact = damaged_artifact.__class__(**{**damaged_artifact.to_dict(), "containsUserData": False, "metadata": {"cloudUpload": False}})
+            result = quality.build_quality_report({"visuals": StageResult.ready("local", [damaged_artifact])})
+            self.assertIn("png_invalid", result["artifacts"][0]["failures"])
+
+            silent = root / "silent.mp4"
+            silent.write_bytes(b"fake mp4")
+            video_artifact = Artifact.from_file("professional_product_demo_video", silent, "local", "composition")
+            video_artifact = video_artifact.__class__(**{**video_artifact.to_dict(), "containsUserData": False, "metadata": {"cloudUpload": False}})
+            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": False}):
+                video_report = quality.build_quality_report({"video": StageResult.ready("local", [video_artifact])})
+            self.assertIn("video_silent", video_report["artifacts"][0]["failures"])
+
+            secret = Artifact.from_file("product_capture_image", image_path, "playwright", "product_page")
+            secret = secret.__class__(**{**secret.to_dict(), "containsUserData": False, "metadata": {"cloudUpload": False, "api_key": "do-not-log"}})
+            secret_report = quality.build_quality_report({"capture": StageResult.ready("playwright", [secret])})
+            self.assertIn("secret_metadata_rejected", secret_report["artifacts"][0]["failures"])
+
+    def test_atomic_machine_report_and_stage_result_statuses(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "reports" / "media-quality-report.json"
+            report = quality.evaluate_media_quality(self.complete_evidence())
+            destination = quality.write_quality_report(path, report)
+            self.assertEqual(destination, path.resolve())
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["status"], "professional_ready")
+            self.assertFalse(path.with_name(path.name + ".tmp").exists())
+            gate = quality.run_quality_gate({}, report_path=Path(temp) / "empty.json")
+            self.assertEqual(gate.status, "failed")
+            self.assertEqual(gate.provider, "media_quality_gate")
+            self.assertFalse(metadata["containsUserData"])
+
+    def test_inline_payload_escapes_script_terminators(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            data["shots"][0]["title"] = "</script><script>window.PWN=1</script>"
+            data["captions"][0]["text"] = "</script><img src=x onerror=alert(1)>"
+            project = video.materialize_hyperframes_project(data, root / "project")
+            html = (project / "index.html").read_text(encoding="utf-8")
+            self.assertNotIn("</script><script>window.PWN", html)
+            self.assertIn(r"\u003c/script\u003e", html)
+
+    def test_quality_gate_rejects_invalid_probe(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            output = root / "invalid-quality.mp4"
+            bad_probe = {
+                "videoCodec": "mpeg4",
+                "audioCodec": "",
+                "videoStreams": 1,
+                "audioStreams": 0,
+                "nonSilent": False,
+                "shortEdge": 360,
+                "duration": 1.0,
+            }
+            with mock.patch.object(video, "materialize_hyperframes_project"), mock.patch.object(
+                video, "hyperframes_executable", return_value=Path("hyperframes.mjs")
+            ), mock.patch.object(video, "_tool", side_effect=lambda name: "node.exe" if name == "node" else None), mock.patch.object(
+                video, "_run", return_value=mock.Mock(stdout="", stderr="")
+            ), mock.patch.object(video, "_encode_final"), mock.patch.object(
+                video, "probe_media", return_value=bad_probe
+            ):
+                result = video.render_professional_video(data, output, root / "project")
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.error_code, "professional_video_quality_gate_failed")
+            self.assertFalse(output.exists())
+            self.assertIn("video_codec_not_h264", result.warnings)
+
+    def test_final_encode_is_atomic_and_preserves_previous_output(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "raw.mp4"
+            output = root / "final.mp4"
+            raw.write_bytes(b"raw")
+            output.write_bytes(b"OLD_VALID")
+
+            def fail_after_partial(command, cwd=None):
+                Path(command[-1]).write_bytes(b"PARTIAL")
+                raise subprocess.CalledProcessError(1, command, stderr="encode failed")
+
+            with mock.patch.object(video, "_tool", return_value="ffmpeg"), mock.patch.object(
+                video, "probe_media", return_value={"audioStreams": 0}
+            ), mock.patch.object(video, "_run", side_effect=fail_after_partial):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    video._encode_final(raw, output, None, 2.0)
+            self.assertEqual(output.read_bytes(), b"OLD_VALID")
+            self.assertFalse(Path(str(output) + ".part").exists())
+
+    def test_resolution_presets_and_css_follow_composition_size(self):
+        video = self.load_video()
+        self.assertEqual(video._resolution_preset(1920, 1080), "landscape")
+        self.assertEqual(video._resolution_preset(1080, 1920), "portrait")
+        self.assertEqual(video._resolution_preset(1080, 1080), "square")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            data.update({"width": 1080, "height": 1920})
+            project = video.materialize_hyperframes_project(data, root / "project")
+            style = (project / "style.css").read_text(encoding="utf-8")
+            index = (project / "index.html").read_text(encoding="utf-8")
+            self.assertIn("--width: 1080px", style)
+            self.assertIn("--height: 1920px", style)
+            self.assertIn('data-width="1080"', index)
+            self.assertIn('data-height="1920"', index)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,14 @@
   // The materializer embeds data in the page so required assets never depend on
   // a render-time network fetch. composition-data.json remains alongside it as
   // the inspectable source of truth.
-  const data = window.__HF_DATA__ || { shots: [], captions: [], motionTypes: [] };
+  const dataNode = document.querySelector("#composition-data");
+  let embeddedData = {};
+  try {
+    embeddedData = dataNode ? JSON.parse(dataNode.textContent || "{}") : {};
+  } catch (error) {
+    embeddedData = {};
+  }
+  const data = window.__HF_DATA__ || embeddedData || { shots: [], captions: [], motionTypes: [] };
   // Named motion categories are retained in the composition for quality
   // inspection: zoomPan, productHighlight, and sceneTransition.
   const motionTypes = ["zoomPan", "productHighlight", "sceneTransition"];

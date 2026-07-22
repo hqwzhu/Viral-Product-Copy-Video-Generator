@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import math
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +34,19 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     return value
+
+
+def _script_json(value: Any) -> str:
+    """Serialize data for an inline script without allowing HTML termination."""
+
+    return (
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
 def _safe_asset_path(value: Any) -> Path:
@@ -204,9 +217,17 @@ def materialize_hyperframes_project(data: Mapping[str, Any], project_dir: str | 
     index = index.replace('data-width="1920"', f'data-width="{clean["width"]}"')
     index = index.replace('data-height="1080"', f'data-height="{clean["height"]}"')
     index = index.replace('data-duration="20"', f'data-duration="{clean["duration"]}"')
-    payload = json.dumps(clean, ensure_ascii=False, separators=(",", ":"))
-    index = index.replace('<script id="composition-data"></script>', f'<script id="composition-data">window.__HF_DATA__ = {payload};</script>')
+    payload = _script_json(clean)
+    index = index.replace(
+        '<script id="composition-data"></script>',
+        f'<script id="composition-data" type="application/json">{payload}</script>',
+    )
     (project / "index.html").write_text(index, encoding="utf-8")
+    style_path = project / "style.css"
+    style = style_path.read_text(encoding="utf-8")
+    style = style.replace("--width: 1920px", f"--width: {clean['width']}px")
+    style = style.replace("--height: 1080px", f"--height: {clean['height']}px")
+    style_path.write_text(style, encoding="utf-8")
     return project
 
 
@@ -224,6 +245,21 @@ def _tool(name: str) -> str | None:
 
 def professional_render_available() -> bool:
     return hyperframes_executable() is not None and _tool("node") is not None and _tool("ffmpeg") is not None and _tool("ffprobe") is not None
+
+
+def _resolution_preset(width: int, height: int) -> str:
+    presets = {
+        (1920, 1080): "landscape",
+        (1080, 1920): "portrait",
+        (3840, 2160): "landscape-4k",
+        (2160, 3840): "portrait-4k",
+        (1080, 1080): "square",
+        (2160, 2160): "square-4k",
+    }
+    try:
+        return presets[(width, height)]
+    except KeyError as exc:
+        raise ValueError("unsupported_hyperframes_resolution") from exc
 
 
 def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -282,6 +318,8 @@ def _encode_final(raw: Path, output: Path, voiceover: Path | None, duration: flo
     if not ffmpeg:
         raise RuntimeError("FFmpeg is required for final encoding")
     output.parent.mkdir(parents=True, exist_ok=True)
+    part = output.with_name(output.name + ".part")
+    part.unlink(missing_ok=True)
     command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", str(raw)]
     if voiceover:
         command += ["-i", str(voiceover)]
@@ -291,8 +329,73 @@ def _encode_final(raw: Path, output: Path, voiceover: Path | None, duration: flo
         command += ["-map", "0:v:0"]
         if probe_media(raw).get("audioStreams"):
             command += ["-map", "0:a:0"]
-    command += ["-t", f"{duration:.3f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(output)]
-    _run(command)
+    command += [
+        "-t", f"{duration:.3f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-preset", "medium", "-crf", "18", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", "-f", "mp4", str(part),
+    ]
+    try:
+        _run(command)
+        if not part.is_file() or part.stat().st_size <= 0:
+            raise RuntimeError("final_video_part_missing")
+        part.replace(output)
+    finally:
+        part.unlink(missing_ok=True)
+
+
+def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[str]:
+    """Return hard failures for the professional-video acceptance contract."""
+
+    errors: list[str] = []
+    if probe.get("videoCodec") != "h264":
+        errors.append("video_codec_not_h264")
+    if probe.get("audioCodec") != "aac":
+        errors.append("audio_codec_not_aac")
+    if probe.get("videoStreams") != 1 or probe.get("audioStreams") != 1:
+        errors.append("stream_count_invalid")
+    if probe.get("nonSilent") is not True:
+        errors.append("audio_silent")
+    if int(probe.get("shortEdge", 0) or 0) < 1080:
+        errors.append("resolution_below_1080_short_edge")
+    duration = float(probe.get("duration", 0) or 0)
+    target_duration = float(clean.get("duration", 0) or 0)
+    if not math.isfinite(duration) or duration <= 0:
+        errors.append("duration_invalid")
+    elif not math.isfinite(target_duration) or target_duration <= 0 or duration < target_duration * 0.9 or duration > target_duration + 0.5:
+        errors.append("duration_out_of_range")
+
+    shots = clean.get("shots")
+    if not isinstance(shots, (list, tuple)):
+        errors.append("shots_missing")
+        shots = []
+    product_count = sum(isinstance(shot, Mapping) and shot.get("kind") == "product" for shot in shots)
+    supporting_count = sum(isinstance(shot, Mapping) and shot.get("kind") in {"supporting", "broll", "ai_scene"} for shot in shots)
+    if product_count < 3:
+        errors.append("product_shots_below_three")
+    if supporting_count < 2:
+        errors.append("supporting_shots_below_two")
+    motion_types = set(clean.get("motionTypes") or ())
+    if not set(MOTION_TYPES).issubset(motion_types):
+        errors.append("motion_types_incomplete")
+    provenance = clean.get("provenance")
+    if not isinstance(provenance, Mapping) or provenance.get("cloudUpload") is not False:
+        errors.append("cloud_upload_provenance_invalid")
+    if not clean.get("voiceover"):
+        errors.append("voiceover_missing")
+    if not all(isinstance(shot, Mapping) and isinstance(shot.get("provenance"), Mapping) and str(shot["provenance"].get("source") or "").strip() for shot in shots):
+        errors.append("shot_provenance_missing")
+    captions = clean.get("captions") or []
+    for caption in captions:
+        try:
+            start = float(caption.get("start", 0))
+            caption_duration = float(caption.get("duration", 0))
+        except (AttributeError, TypeError, ValueError):
+            errors.append("caption_timing_invalid")
+            break
+        if not math.isfinite(start) or not math.isfinite(caption_duration) or start < 0 or caption_duration <= 0 or start + caption_duration > target_duration + 1e-6:
+            errors.append("caption_timing_invalid")
+            break
+    return list(dict.fromkeys(errors))
 
 
 def render_professional_video(data: Mapping[str, Any], output: str | Path, project_dir: str | Path | None = None) -> StageResult:
@@ -308,7 +411,8 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
         node = _tool("node")
         if executable is None or node is None:
             raise RuntimeError("HyperFrames local runtime is unavailable")
-        command = [node, str(executable), "render", str(workspace), "--output", str(raw), "--quality", "high", "--workers", "1", "--low-memory-mode", "--strict", "--no-best-effort", "--resolution", "landscape"]
+        resolution = _resolution_preset(int(clean["width"]), int(clean["height"]))
+        command = [node, str(executable), "render", str(workspace), "--output", str(raw), "--quality", "high", "--workers", "1", "--low-memory-mode", "--strict", "--no-best-effort", "--resolution", resolution]
         _run(command, cwd=workspace)
         voice = clean.get("voiceover")
         voice_path = _safe_asset_path(voice) if voice else None
@@ -324,8 +428,19 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
             )
         voiceover_sha256 = _file_sha256(voice_path) if voice_path else None
         source_asset_count = len(source_hashes) + (1 if voice_path else 0)
+        contains_user_data = bool(clean.get("containsUserData", clean.get("contains_user_data", False)))
         _encode_final(raw, output_path, voice_path, float(clean["duration"]))
         probe = probe_media(output_path)
+        quality_errors = _quality_errors(clean, probe)
+        if quality_errors:
+            output_path.unlink(missing_ok=True)
+            return StageResult(
+                status="failed",
+                provider="hyperframes_ffmpeg_local",
+                error_code="professional_video_quality_gate_failed",
+                warnings=tuple(quality_errors),
+                diagnostics={"project": str(workspace), "probe": probe, "qualityErrors": quality_errors},
+            )
         artifact = Artifact.from_file(
             "professional_product_demo_video",
             output_path,
@@ -340,7 +455,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
             source=artifact.source,
             license=artifact.license,
             provider=artifact.provider,
-            contains_user_data=False,
+            contains_user_data=contains_user_data,
             metadata={
                 "probe": probe,
                 "shotCount": len(clean["shots"]),
@@ -353,6 +468,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
                 "sourceHashes": source_hashes,
                 "sourceAssetCount": source_asset_count,
                 "voiceoverSha256": voiceover_sha256,
+                "containsUserData": contains_user_data,
                 "cloudUpload": False,
             },
         )
@@ -377,6 +493,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
                 "sourceHashes": source_hashes,
                 "sourceAssetCount": source_asset_count,
                 "voiceoverSha256": voiceover_sha256,
+                "containsUserData": contains_user_data,
                 "cloudUpload": False,
             },
         )
