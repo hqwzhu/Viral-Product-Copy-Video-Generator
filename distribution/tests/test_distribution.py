@@ -260,6 +260,27 @@ class PublicDistributionTest(unittest.TestCase):
                     verify_distribution.verify_ci_contract(root),
                 )
 
+    def test_gitignore_contract_rejects_unsafe_negations_and_masked_rule_order(self) -> None:
+        mutations = {
+            "root secret reinclude": (".env\n.env.*\n!.env.example\n!/.env.secret\n", True),
+            "production reinclude": (".env\n.env.*\n!.env.example\n!.env.production\n", False),
+            "recursive local reinclude": (".env\n.env.*\n!.env.example\n!**/.env.local\n", False),
+            "masked required-rule order": (".env\n!.env.example\n.env.*\n!.env.example\n", True),
+        }
+        for name, (content, sampled_semantics_pass) in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+                write_text(root, ".gitignore", content)
+                self.assertEqual(
+                    verify_distribution._gitignore_has_expected_behavior(root),
+                    sampled_semantics_pass,
+                )
+                self.assertIn(
+                    ".gitignore environment-file behavior is incorrect",
+                    verify_distribution.verify_ci_contract(root),
+                )
+
     def test_ci_contract_rejects_each_isolated_yaml_drift(self) -> None:
         mutations = (
             ("trigger comment", "text", ("  push:", "  # push:"), "GitHub Actions workflow triggers are incorrect"),

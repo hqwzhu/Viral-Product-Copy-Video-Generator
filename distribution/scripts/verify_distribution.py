@@ -158,6 +158,16 @@ def _effective_gitignore_rules(text: str) -> list[str]:
     ]
 
 
+def _gitignore_rules_follow_safety_policy(rules: list[str]) -> bool:
+    try:
+        required_positions = tuple(rules.index(rule) for rule in EXPECTED_GITIGNORE_RULES)
+    except ValueError:
+        return False
+    return required_positions == tuple(sorted(required_positions)) and all(
+        not rule.startswith("!") or rule == "!.env.example" for rule in rules
+    )
+
+
 def _gitignore_has_expected_behavior(root: Path) -> bool | None:
     paths = (
         ".env",
@@ -208,7 +218,7 @@ def verify_ci_contract(root: Path) -> list[str]:
     gitignore_behavior = _gitignore_has_expected_behavior(root)
     if gitignore_behavior is None:
         return ["gitignore semantic validation unavailable"]
-    if not gitignore_behavior:
+    if not _gitignore_rules_follow_safety_policy(gitignore) or not gitignore_behavior:
         errors.append(".gitignore environment-file behavior is incorrect")
     for path in root.rglob(".env*"):
         if path.is_file() and path.name != ".env.example":
