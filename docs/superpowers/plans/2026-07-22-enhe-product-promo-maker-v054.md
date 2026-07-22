@@ -32,11 +32,13 @@
 - Produces: `patch_douyin_creator_limit(client_class, requested_max_contents)` and `patch_zhihu_creator_limit(client_class, requested_max_contents)`.
 - Preserves: existing XHS detail and Zhihu search patches.
 
-- [ ] **Step 1: Verify the creator-limit tests cover callbacks before downstream persistence**
+**Status (2026-07-22): Complete.** The focused creator-limit tests and full Sidecar suite passed, and the bounded callback behavior was committed.
+
+- [x] **Step 1: Verify the creator-limit tests cover callbacks before downstream persistence**
 
   Confirm the tests require Douyin to stop pagination at three rows before callback execution and Zhihu to expose at most three rows from its first creator page with `paging.is_end=true`.
 
-- [ ] **Step 2: Run the focused tests**
+- [x] **Step 2: Run the focused tests**
 
   Run:
 
@@ -48,7 +50,7 @@
 
   Expected: `Ran 2 tests` and `OK`.
 
-- [ ] **Step 3: Run the full Sidecar contract suite**
+- [x] **Step 3: Run the full Sidecar contract suite**
 
   Run:
 
@@ -58,7 +60,7 @@
 
   Expected: all tests pass.
 
-- [ ] **Step 4: Commit only the bootstrap, tests, and this plan**
+- [x] **Step 4: Commit only the bootstrap, tests, and this plan**
 
   ```powershell
   git add scripts/mediacrawler_bootstrap.py scripts/test_mediacrawler_sidecar.py docs/superpowers/plans/2026-07-22-enhe-product-promo-maker-v054.md
@@ -75,7 +77,9 @@
 - Consumes: reviewed source files from Task 1.
 - Produces: versioned test evidence and a drift report.
 
-- [ ] **Step 1: Confirm Pillow in the installed private environment**
+**Status (2026-07-22): Complete.** Pillow 12.3.0 imported, the 185-test controller passed without skips, media PNG checks passed, and the read-only Sidecar setup check was ready.
+
+- [x] **Step 1: Confirm Pillow in the installed private environment**
 
   ```powershell
   C:\Users\HU\.codex\skills\viral-product-copy-video-generator\.venv\Scripts\python.exe -c "import PIL; print(PIL.__version__)"
@@ -83,7 +87,7 @@
 
   Expected: Pillow imports successfully.
 
-- [ ] **Step 2: Run the 185-test main regression**
+- [x] **Step 2: Run the 185-test main regression**
 
   ```powershell
   C:\Users\HU\.codex\skills\viral-product-copy-video-generator\.venv\Scripts\python.exe scripts\test_promotion_manager.py
@@ -91,7 +95,7 @@
 
   Expected: `Ran 185 tests` and `OK`.
 
-- [ ] **Step 3: Run media-focused tests and Sidecar setup check**
+- [x] **Step 3: Run media-focused tests and Sidecar setup check**
 
   Verify real PNG output exists, `setup --check` reports `ready`, and no credential value is printed.
 
@@ -104,11 +108,13 @@
 - Consumes: current visible Chrome logins and the pinned Sidecar.
 - Produces: search/detail/creator/comment evidence for Xiaohongshu, Douyin, and Zhihu plus one successful sub-comment run.
 
-- [ ] **Step 1: Run Xiaohongshu detail, comments, creator, and a bounded sub-comment collection**
-- [ ] **Step 2: Run Douyin detail, comments, creator, and a bounded sub-comment collection**
-- [ ] **Step 3: Run Zhihu search, detail, comments, creator, and a bounded sub-comment collection**
+**Status (2026-07-22): Invocation and safety evidence complete; live provider availability partial.** All nine modes were invoked: the six Xiaohongshu/Douyin modes were ready, while all three Zhihu modes ended in bounded timeouts with no user-action gate. The sole diagnosis reached `lastPhase=cdp_initialization`; no blind retry was performed. The final sensitive-output and cleanup audit passed.
+
+- [x] **Step 1: Run Xiaohongshu detail, comments, creator, and a bounded sub-comment collection**
+- [x] **Step 2: Run Douyin detail, comments, creator, and a bounded sub-comment collection**
+- [x] **Step 3: Run Zhihu search, detail, comments, creator, and a bounded sub-comment collection**
 - [ ] **Step 4: Stop only for visible login, CAPTCHA, account verification, or risk confirmation**
-- [ ] **Step 5: Scan every formal run directory**
+- [x] **Step 5: Scan every formal run directory**
 
   Acceptance requires no raw directory, no `run.lock`, no Cookie/Authorization/token/signature value, no original user ID, and no orphan Sidecar Chrome/Python process.
 
@@ -123,7 +129,9 @@
 **Interfaces:**
 - Produces: an assembled public repository that ignores secrets, tests on Windows and Ubuntu, and reports Chrome Store v0.5.3 as published.
 
-- [ ] **Step 1: Add secret ignore rules**
+**Status (2026-07-22): Complete.** The public distribution contract, workflow, current release documentation, and drift tests are implemented and verified.
+
+- [x] **Step 1: Add secret ignore rules**
 
   The public `.gitignore` must include:
 
@@ -133,15 +141,15 @@
   !.env.example
   ```
 
-- [ ] **Step 2: Add GitHub Actions**
+- [x] **Step 2: Add GitHub Actions**
 
   Create a workflow triggered by `push` and `pull_request` that checks out the repository, sets up Python 3.12, installs `requirements-test.txt`, runs `python scripts/verify_distribution.py`, and runs `python -m unittest discover -s tests -v` on `windows-latest` and `ubuntu-latest`.
 
-- [ ] **Step 3: Update Chrome Store and release documentation**
+- [x] **Step 3: Update Chrome Store and release documentation**
 
   Record public Chrome version `0.5.3`, status `published`, and the verified public listing URL. Remove `pending_review` and `0.5.2` claims from current-state sections.
 
-- [ ] **Step 4: Add distribution tests**
+- [x] **Step 4: Add distribution tests**
 
   Tests must fail when `.env` ignore rules, the workflow matrix/commands, product name, or published Chrome status drift.
 
@@ -155,8 +163,10 @@
 - Consumes: reviewed commits from Tasks 1-4.
 - Produces: merged source PR and zero managed-file drift.
 
-- [ ] **Step 1: Run source tests and distribution tests**
-- [ ] **Step 2: Push `agent/v054-release` and open a draft PR to source `main`**
+**Status (2026-07-22): In progress.** Source/distribution tests passed and draft PR #6 is open. Review is not approved; ready, merge, installed-Skill synchronization, release, and cleanup remain incomplete.
+
+- [x] **Step 1: Run source tests and distribution tests**
+- [x] **Step 2: Push `agent/v054-release` and open a draft PR to source `main`**
 - [ ] **Step 3: Complete spec and code-quality review, fix Important/Critical findings, and re-review**
 - [ ] **Step 4: Mark the PR ready, merge it, and verify source `main`**
 - [ ] **Step 5: Run approved Skill sync from reviewed source and rerun drift/setup/tests**

@@ -936,13 +936,17 @@ class SidecarRuntimeTests(unittest.TestCase):
         self.assertFalse(sidecar.lock_path(self.install).exists())
         self.assertFalse((self.run_dir / "raw").exists())
 
-    def test_runner_cleans_raw_and_lock_when_telemetry_delete_fails(self) -> None:
+    def test_runner_reports_cleanup_error_and_cleans_raw_and_lock_when_telemetry_delete_fails(self) -> None:
         original_unlink = Path.unlink
         telemetry_path = self.run_dir / "phase-telemetry.json"
+        sensitive_error = f"cannot delete {telemetry_path} https://private.example.test/private-user-id?token=secret"
+        unlink_attempts = 0
 
         def selective_unlink(path: Path, *args: object, **kwargs: object) -> None:
+            nonlocal unlink_attempts
             if path == telemetry_path:
-                raise PermissionError("telemetry delete denied")
+                unlink_attempts += 1
+                raise PermissionError(sensitive_error)
             original_unlink(path, *args, **kwargs)
 
         def timeout_executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
@@ -951,10 +955,19 @@ class SidecarRuntimeTests(unittest.TestCase):
         with mock.patch.object(Path, "unlink", new=selective_unlink):
             result = sidecar.run_sidecar(self.install, self.zhihu_request, self.run_dir, executor=timeout_executor)
 
-        self.assertEqual(result.reason, "timeout")
-        self.assertTrue(telemetry_path.exists())
-        self.assertFalse((self.run_dir / "raw").exists())
-        self.assertFalse(sidecar.lock_path(self.install).exists())
+        try:
+            self.assertEqual(unlink_attempts, 3)
+            self.assertEqual(result.status, "cleanup_error")
+            self.assertEqual(result.reason, "cleanup_error")
+            self.assertEqual(result.warning, "cleanup_incomplete")
+            self.assertEqual(result.telemetry["phases"][-1]["status"], "cleanup_error")
+            self.assertEqual(result.telemetry["phases"][-1]["reason"], "cleanup_error")
+            self.assertNotIn(sensitive_error, json.dumps(vars(result), default=str))
+            self.assertTrue(telemetry_path.exists())
+            self.assertFalse((self.run_dir / "raw").exists())
+            self.assertFalse(sidecar.lock_path(self.install).exists())
+        finally:
+            telemetry_path.unlink(missing_ok=True)
 
     def test_acquire_lock_removes_created_file_and_closes_descriptor_when_write_fails(self) -> None:
         opened_descriptors: list[int] = []
@@ -1901,12 +1914,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], "cleanup_error")
         self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
 
-    def test_zhihu_ready_and_timeout_manifests_preserve_terminal_telemetry_and_cleanup(self) -> None:
+    def test_zhihu_ready_and_timeout_telemetry_cleanup_failures_update_manifests_and_clean_other_resources(self) -> None:
         out_dir = self.root / "promotion-output"
         sidecar_root = self.root / "sidecar"
         sidecar_root.mkdir()
         (sidecar_root / "identity.salt").write_bytes(b"s" * 32)
         original_run_sidecar = sidecar.run_sidecar
+        original_unlink = Path.unlink
+        sensitive_error = f"cannot delete {self.root / 'private-telemetry-user-id'} https://private.example.test/item?token=secret"
 
         def ready_runner(install: sidecar.SidecarInstall, request: sidecar.CollectRequest, run_dir: Path, **kwargs: object) -> sidecar.RunResult:
             def executor(command: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
@@ -1949,14 +1964,24 @@ class CliTests(unittest.TestCase):
 
             return original_run_sidecar(install, request, run_dir, executor=executor, **kwargs)
 
-        for label, runner, expected_status, expected_phase, expected_terminal in (
-            ("ready", ready_runner, "ready", "normalization", "success"),
-            ("timeout", timeout_runner, "error", "cdp_initialization", "timeout"),
+        for label, runner, expected_phase in (
+            ("ready", ready_runner, "normalization"),
+            ("timeout", timeout_runner, "cdp_initialization"),
         ):
             with self.subTest(label=label):
+                unlink_attempts = 0
+
+                def selective_unlink(path: Path, *args: object, **kwargs: object) -> None:
+                    nonlocal unlink_attempts
+                    if path.name == "phase-telemetry.json":
+                        unlink_attempts += 1
+                        raise PermissionError(sensitive_error)
+                    original_unlink(path, *args, **kwargs)
+
                 with (
                     mock.patch.object(platform_data_manager.mediacrawler_sidecar, "check_setup", return_value={"status": "ready"}),
                     mock.patch.object(platform_data_manager.mediacrawler_sidecar, "run_sidecar", side_effect=runner),
+                    mock.patch.object(Path, "unlink", new=selective_unlink),
                 ):
                     report = self.run_main(
                         [
@@ -1974,14 +1999,29 @@ class CliTests(unittest.TestCase):
                         ]
                     )
                     run_dir = Path(report["runDir"])
-                    manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
-                    self.assertEqual(manifest["status"], expected_status)
+                    manifest_bytes = (run_dir / "run-manifest.json").read_bytes()
+                    manifest = json.loads(manifest_bytes)
+
+                telemetry_path = run_dir / "phase-telemetry.json"
+                try:
+                    self.assertEqual(unlink_attempts, 3)
+                    self.assertEqual(report["status"], "cleanup_error")
+                    self.assertEqual(report["reason"], "cleanup_error")
+                    self.assertEqual(manifest["status"], "cleanup_error")
+                    self.assertEqual(manifest["reason"], "cleanup_error")
+                    self.assertEqual(manifest["raw"]["warning"], "cleanup_incomplete")
+                    self.assertTrue(manifest["raw"]["cleaned"])
                     self.assertEqual(manifest["telemetry"]["lastPhase"], expected_phase)
-                    self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], expected_terminal)
-                    self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], expected_terminal)
+                    self.assertEqual(manifest["telemetry"]["phases"][-1]["status"], "cleanup_error")
+                    self.assertEqual(manifest["telemetry"]["phases"][-1]["reason"], "cleanup_error")
                     self.assertNotIn("query-sentinel", json.dumps(manifest["telemetry"]))
                     self.assertNotIn("Cookie", json.dumps(manifest["telemetry"]))
-                    self.assertFalse((run_dir / "phase-telemetry.json").exists())
+                    self.assertNotIn(sensitive_error.encode("utf-8"), manifest_bytes)
+                    self.assertTrue(telemetry_path.exists())
+                    self.assertFalse((run_dir / "raw").exists())
+                    self.assertFalse(sidecar.lock_path(sidecar.SidecarInstall(sidecar_root)).exists())
+                finally:
+                    telemetry_path.unlink(missing_ok=True)
 
     def test_fixture_manifest_and_outputs_do_not_contain_sensitive_markers(self) -> None:
         out_dir = self.root / "promotion-output"

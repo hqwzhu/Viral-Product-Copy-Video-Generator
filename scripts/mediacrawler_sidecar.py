@@ -518,11 +518,11 @@ def run_sidecar(
             payload=payload,
         ))
     finally:
-        if telemetry_path:
-            retry_cleanup(lambda: telemetry_path.unlink(missing_ok=True))
         cleanup_failed = False
-        if not keep_raw and raw_dir.exists():
-            cleanup_failed = not retry_cleanup(lambda: shutil.rmtree(raw_dir))
+        if telemetry_path and not retry_cleanup(lambda: telemetry_path.unlink(missing_ok=True)):
+            cleanup_failed = True
+        if not keep_raw and raw_dir.exists() and not retry_cleanup(lambda: shutil.rmtree(raw_dir)):
+            cleanup_failed = True
         if acquired and not retry_cleanup(lambda: release_lock(install)):
             cleanup_failed = True
         if cleanup_failed and final_result:
