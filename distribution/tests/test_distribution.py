@@ -112,7 +112,8 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
             content = "Hosted Worker: disabled\n"
         write_text(root, relative, content)
 
-    write_text(root, ".gitignore", ".env\n.env.*\n!.env.example\ndist/\n")
+    write_text(root, ".gitignore", "dist/\ntmp-release-download/\n.env\n.env.*\n!.env.example\n__pycache__/\n*.pyc\n.pytest_cache/\n")
+    write_text(root, ".gitattributes", "* text=auto eol=lf\nrelease-manifest.json -text\n")
     write_text(root, "requirements-test.txt", "PyYAML==6.0.3\n")
     write_text(
         root,
@@ -123,20 +124,32 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
                 "'on':",
                 "  push:",
                 "  pull_request:",
+                "permissions:",
+                "  contents: read",
                 "jobs:",
                 "  test:",
                 "    strategy:",
+                "      fail-fast: false",
                 "      matrix:",
                 "        os: [windows-latest, ubuntu-latest]",
                 "    runs-on: ${{ matrix.os }}",
                 "    steps:",
-                "      - uses: actions/checkout@v4",
-                "      - uses: actions/setup-python@v5",
+                "      - name: Check out repository",
+                "        uses: actions/checkout@v4",
+                "      - name: Set up Python",
+                "        uses: actions/setup-python@v5",
                 "        with:",
                 "          python-version: '3.12'",
-                "      - run: python -m pip install -r requirements-test.txt",
-                "      - run: python scripts/verify_distribution.py",
-                "      - run: python -m unittest discover -s tests -v",
+                "          cache: pip",
+                "          cache-dependency-path: requirements-test.txt",
+                "      - name: Install test dependencies",
+                "        run: python -m pip install -r requirements-test.txt",
+                "      - name: Build deterministic release archives",
+                "        run: python scripts/build_release.py --build-extension-from-component",
+                "      - name: Verify distribution contract",
+                "        run: python scripts/verify_distribution.py",
+                "      - name: Run distribution tests",
+                "        run: python -m unittest discover -s tests -v",
             )
             + ("",)
         ),
@@ -336,6 +349,50 @@ class PublicDistributionTest(unittest.TestCase):
                     target[mutation[-1]] = "broken"
                     path.write_text(yaml.safe_dump(workflow, sort_keys=False), encoding="utf-8")
                 self.assertIn(expected, verify_distribution.verify_ci_contract(root))
+
+    def test_ci_contract_rejects_security_and_bootstrap_drift(self) -> None:
+        mutations = (
+            (
+                "permissions",
+                lambda workflow: workflow.__setitem__("permissions", {"contents": "write"}),
+                "GitHub Actions permissions are incorrect",
+            ),
+            (
+                "fail fast",
+                lambda workflow: workflow["jobs"]["test"]["strategy"].__setitem__("fail-fast", True),
+                "GitHub Actions fail-fast policy is incorrect",
+            ),
+            (
+                "setup cache",
+                lambda workflow: workflow["jobs"]["test"]["steps"][1]["with"].__setitem__("cache", ""),
+                "GitHub Actions test steps are incorrect",
+            ),
+            (
+                "bootstrap command",
+                lambda workflow: workflow["jobs"]["test"]["steps"][3].__setitem__(
+                    "run", "python scripts/verify_distribution.py"
+                ),
+                "GitHub Actions test steps are incorrect",
+            ),
+        )
+        for name, mutate, expected in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+                path = root / ".github/workflows/tests.yml"
+                workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+                mutate(workflow)
+                path.write_text(yaml.safe_dump(workflow, sort_keys=False), encoding="utf-8")
+                self.assertIn(expected, verify_distribution.verify_ci_contract(root))
+
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = create_public_repository(Path(temp))
+            self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+            write_text(root, ".gitattributes", "* text=auto\n")
+            self.assertIn(
+                ".gitattributes release normalization is incorrect",
+                verify_distribution.verify_ci_contract(root),
+            )
 
     def test_gitignore_contract_reports_git_unavailable_without_details(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -592,6 +649,35 @@ class PublicDistributionTest(unittest.TestCase):
                 self.assertTrue(
                     (root / "skill/viral-product-copy-video-generator/scripts" / name).is_file()
                 )
+
+    def test_release_component_bootstrap_matches_validated_bytes_and_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            base_a = base / "a"
+            base_b = base / "b"
+            base_a.mkdir()
+            base_b.mkdir()
+            root_a, validated_a = create_public_repository(base_a)
+            root_b, validated_b = create_public_repository(base_b)
+
+            with mock.patch.object(build_release, "ROOT", root_a):
+                dist_a = build_release.build_release(build_extension_from_component=True)
+            with mock.patch.object(build_release, "ROOT", root_b):
+                dist_b = build_release.build_release(build_extension_from_component=True)
+
+            release_a = verify_distribution.read_json(root_a / "release-manifest.json")
+            release_b = verify_distribution.read_json(root_b / "release-manifest.json")
+            extension_a = dist_a / release_a["extensionArchive"]
+            extension_b = dist_b / release_b["extensionArchive"]
+            skill_a = dist_a / release_a["skillArchive"]
+            skill_b = dist_b / release_b["skillArchive"]
+
+            self.assertEqual(extension_a.read_bytes(), validated_a.read_bytes())
+            self.assertEqual(extension_b.read_bytes(), validated_b.read_bytes())
+            self.assertEqual(extension_a.read_bytes(), extension_b.read_bytes())
+            self.assertEqual(skill_a.read_bytes(), skill_b.read_bytes())
+            self.assertEqual(verify_distribution.validate(root_a), [])
+            self.assertEqual(verify_distribution.validate(root_b), [])
 
     def test_verifier_rejects_extension_archive_metadata_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
