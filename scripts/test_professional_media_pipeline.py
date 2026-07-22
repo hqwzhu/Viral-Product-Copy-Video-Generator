@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import wave
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
@@ -94,6 +95,15 @@ def load_setup_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_voiceover_module(test_case):
+    module_name = "scripts.media_pipeline.voiceover"
+    test_case.assertIsNotNone(
+        importlib.util.find_spec(module_name),
+        "voiceover module must implement the local narration contract",
+    )
+    return importlib.import_module(module_name)
 
 
 class RuntimeSetupTest(unittest.TestCase):
@@ -680,6 +690,172 @@ class RuntimeSetupTest(unittest.TestCase):
         )
 
         self.assertFalse(self.setup.check_runtime(runtime_root)["installed"]["flux"])
+
+
+class VoiceoverTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @staticmethod
+    def _write_test_wav(path, seconds=1):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16_000)
+            output.writeframes(b"\x00\x00" * 16_000 * seconds)
+
+    def test_voice_selection_uses_exact_language_map_and_english_default(self):
+        voiceover = load_voiceover_module(self)
+
+        self.assertEqual(voiceover.voice_for_language("zh-CN"), ("zf_xiaobei", "zh"))
+        self.assertEqual(voiceover.voice_for_language("en"), ("af_heart", "en-us"))
+        self.assertEqual(voiceover.voice_for_language("unknown"), ("af_heart", "en-us"))
+
+    def test_actual_kokoro_generates_verified_chinese_wav_and_segments(self):
+        voiceover = load_voiceover_module(self)
+        if not voiceover.professional_tts_available():
+            self.skipTest("pinned professional TTS runtime is not installed")
+
+        result = voiceover.KokoroVoiceoverProvider().generate(
+            "把产品网页变成推广素材。", "zh-CN", self.root
+        )
+
+        self.assertEqual(result.status, "ready", result)
+        self.assertEqual(result.provider, "kokoro_onnx")
+        artifact = result.artifacts[0]
+        wav_path = Path(artifact.path)
+        self.assertEqual(artifact.type, "voiceover_audio")
+        self.assertEqual(artifact.provider, "kokoro_onnx")
+        self.assertEqual(artifact.source, "generated")
+        self.assertEqual(artifact.license, "Apache-2.0")
+        self.assertTrue(wav_path.is_file())
+        self.assertGreater(wav_path.stat().st_size, 4096)
+        header = wav_path.read_bytes()[:12]
+        self.assertEqual(header[:4], b"RIFF")
+        self.assertEqual(header[8:12], b"WAVE")
+
+        duration = result.diagnostics["durationSeconds"]
+        segments = result.diagnostics["segments"]
+        self.assertGreater(duration, 0)
+        self.assertTrue(segments)
+        self.assertAlmostEqual(segments[0]["start"], 0.0)
+        for previous, current in zip(segments, segments[1:]):
+            self.assertAlmostEqual(previous["end"], current["start"], places=6)
+        self.assertAlmostEqual(segments[-1]["end"], duration, places=6)
+        self.assertEqual(result.diagnostics["voice"], "zf_xiaobei")
+        self.assertEqual(result.diagnostics["language"], "zh-CN")
+        self.assertEqual(result.diagnostics["lang"], "zh")
+        self.assertEqual(artifact.metadata["voice"], "zf_xiaobei")
+        self.assertEqual(artifact.metadata["language"], "zh-CN")
+        self.assertEqual(artifact.metadata["lang"], "zh")
+
+    def test_english_generation_passes_selected_voice_and_lang_to_runtime(self):
+        voiceover = load_voiceover_module(self)
+        runtime_root = self.root / "runtime"
+        captured = {}
+
+        def synthesize(root, text, voice, lang, destination):
+            captured.update(root=root, text=text, voice=voice, lang=lang)
+            self._write_test_wav(destination)
+
+        with mock.patch.object(
+            voiceover, "professional_tts_available", return_value=True
+        ), mock.patch.object(
+            voiceover, "_synthesize_kokoro", side_effect=synthesize
+        ), mock.patch.object(voiceover, "_audio_duration", return_value=1.0):
+            result = voiceover.KokoroVoiceoverProvider(runtime_root).generate(
+                "Turn a product page into promotional media.", "en", self.root
+            )
+
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(captured["root"], runtime_root)
+        self.assertEqual(captured["voice"], "af_heart")
+        self.assertEqual(captured["lang"], "en-us")
+        self.assertEqual(result.artifacts[0].metadata["voice"], "af_heart")
+
+    def test_sapi_success_is_degraded_review_audio(self):
+        voiceover = load_voiceover_module(self)
+
+        with mock.patch.object(
+            voiceover,
+            "_synthesize_windows_sapi",
+            side_effect=lambda _text, destination: self._write_test_wav(destination),
+        ), mock.patch.object(voiceover, "_audio_duration", return_value=1.0):
+            result = voiceover.SapiVoiceoverProvider().generate(
+                "Review voice only.", "en", self.root
+            )
+
+        self.assertEqual(result.status, "degraded")
+        self.assertEqual(result.provider, "windows_sapi")
+        self.assertEqual(result.warnings, ("review_voice_only",))
+        artifact = result.artifacts[0]
+        self.assertEqual(artifact.type, "voiceover_audio")
+        self.assertEqual(artifact.provider, "windows_sapi")
+        self.assertEqual(artifact.license, "")
+        self.assertGreater(Path(artifact.path).stat().st_size, 4096)
+
+    def test_sapi_missing_powershell_fails_explicitly(self):
+        voiceover = load_voiceover_module(self)
+
+        with mock.patch.object(voiceover.shutil, "which", return_value=None):
+            result = voiceover.SapiVoiceoverProvider().generate(
+                "Review voice only.", "en", self.root
+            )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.provider, "windows_sapi")
+        self.assertEqual(result.error_code, "sapi_unavailable")
+        self.assertFalse(result.artifacts)
+
+    def test_sapi_passes_text_over_stdin_instead_of_command_arguments(self):
+        voiceover = load_voiceover_module(self)
+        dangerous_text = "'); Remove-Item -Recurse C:\\\\; #"
+
+        with mock.patch.object(
+            voiceover.shutil, "which", return_value="C:/Windows/powershell.exe"
+        ), mock.patch.object(voiceover.subprocess, "run") as run:
+            voiceover._synthesize_windows_sapi(
+                dangerous_text, self.root / "review.wav"
+            )
+
+        arguments = run.call_args.args[0]
+        self.assertNotIn(dangerous_text, arguments)
+        self.assertEqual(run.call_args.kwargs["input"], dangerous_text)
+        self.assertFalse(run.call_args.kwargs["shell"])
+
+    def test_corrupt_pinned_runtime_is_unavailable_and_never_falls_back(self):
+        voiceover = load_voiceover_module(self)
+        runtime_root = self.root / "runtime"
+        model_root = runtime_root / "models" / "kokoro"
+        model_root.mkdir(parents=True)
+        (model_root / "kokoro-v1.0.onnx").write_bytes(b"wrong model")
+        (model_root / "voices-v1.0.bin").write_bytes(b"wrong voices")
+        (self.root / "kokoro-v1.0.onnx").write_bytes(b"global-looking model")
+        (self.root / "voices-v1.0.bin").write_bytes(b"global-looking voices")
+
+        self.assertFalse(voiceover.professional_tts_available(runtime_root))
+        result = voiceover.KokoroVoiceoverProvider(runtime_root).generate(
+            "Must not use global files.", "en", self.root / "output"
+        )
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_code, "tts_runtime_unavailable")
+        self.assertFalse(result.artifacts)
+
+    def test_empty_text_fails_without_claiming_ready_audio(self):
+        voiceover = load_voiceover_module(self)
+
+        result = voiceover.KokoroVoiceoverProvider(self.root).generate(
+            "   ", "en", self.root / "output"
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_code, "empty_voiceover_text")
+        self.assertFalse(result.artifacts)
 
 
 class MediaSecurityTest(unittest.TestCase):
