@@ -733,13 +733,38 @@ class MediaSecurityTest(unittest.TestCase):
                         allow_localhost=True,
                     )
 
-    def test_capture_handles_canonical_ip_loopback_hosts(self):
-        self.assertIsNone(
-            validate_capture_shot(
-                "https://203.0.113.10/product",
-                {"selector": "main"},
-            )
+    def test_capture_rejects_encoded_and_non_ascii_hosts(self):
+        ambiguous_sources = (
+            "http://%6cocalhost/product",
+            "http://127%2e0%2e0%2e1/product",
+            "http://%31%32%37.0.0.1/product",
+            "http://127。0。0。1/product",
+            "http://１２７.０.０.１/product",
         )
+
+        for source in ambiguous_sources:
+            with self.subTest(source=source, allow_localhost="default"):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(source, {"selector": "main"})
+            with self.subTest(source=source, allow_localhost=True):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(
+                        source,
+                        {"selector": "main"},
+                        allow_localhost=True,
+                    )
+
+    def test_capture_handles_canonical_ip_loopback_hosts(self):
+        for source in (
+            "https://203.0.113.10/product",
+            "http://[2001:db8::1]/product",
+        ):
+            self.assertIsNone(
+                validate_capture_shot(
+                    source,
+                    {"selector": "main"},
+                )
+            )
 
         for source in (
             "http://127.0.0.1/product",

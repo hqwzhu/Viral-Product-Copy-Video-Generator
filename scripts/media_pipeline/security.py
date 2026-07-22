@@ -65,6 +65,8 @@ def _parsed_origin(url: str) -> tuple[str, str, int, str]:
     hostname = parsed.hostname.casefold().rstrip(".")
     if not hostname:
         raise MediaSecurityError("Capture URL hostname is required")
+    if "%" in hostname or not hostname.isascii():
+        raise MediaSecurityError("Capture URL hostname must be canonical ASCII")
     port = parsed.port if parsed.port is not None else _DEFAULT_PORTS[scheme]
     return scheme, hostname, port, parsed.path
 
