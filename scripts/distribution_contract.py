@@ -10,7 +10,7 @@ import stat
 from pathlib import Path
 
 
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 PUBLISHED_STORE_VERSION = "0.5.3"
 STORE_ITEM_ID = "dloklkbnmoigemnfigbkibogmgbieppl"
 STORE_LISTING_URL = (

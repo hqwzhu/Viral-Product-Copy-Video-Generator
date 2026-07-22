@@ -1,12 +1,12 @@
 # ENHE Product Promo Maker Extension Store Submission
 
-Version: 0.5.3
+Source/release candidate: 0.5.4
 
 This guide turns `browser-extension/` into the Chrome Web Store and Microsoft Edge Add-ons submission package for ENHE Product Promo Maker.
 
 ## Current Published Release
 
-Chrome Web Store item `dloklkbnmoigemnfigbkibogmgbieppl` has version `0.5.3` published. Its validated archive is `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`; this is an immutable historical verification asset, not a package to upload again. Its artwork, checksums, and release evidence are also immutable. Do not repackage, re-upload, or replace v0.5.3. For the next version, first increment the extension version, create a new release directory and evidence set, then submit that new version as an update to the same item.
+Chrome Web Store item `dloklkbnmoigemnfigbkibogmgbieppl` has version `0.5.3` published. Its validated archive is `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`; this is an immutable historical verification asset, not a package to upload again. Its artwork, checksums, and release evidence are also immutable. Do not repackage, re-upload, or replace v0.5.3. Source/release candidate v0.5.4 has not yet been submitted to the Chrome Web Store for review. Its new package and evidence must use `dist\v0.5.4` before a later submission to the same item.
 
 Localized store names:
 
@@ -44,7 +44,7 @@ Upload the next-version ZIP to the existing store item. Keep its reports as rele
 
 ## Pre-Submission Checklist
 
-- The current published release remains v0.5.3 and unchanged; the next version and package output use a new `dist\v<NEXT_VERSION>` directory.
+- The current published Chrome release remains v0.5.3 and unchanged; source/release candidate v0.5.4 is not yet store-reviewed and uses a new `dist\v0.5.4` directory.
 - Manifest is MV3.
 - Popup code and CSS are packaged locally.
 - No remote code is loaded by `<script src="https://...">`, dynamic imports, `importScripts`, `eval`, or `new Function`.
@@ -102,8 +102,8 @@ Use the detailed localized descriptions from `docs/store/chrome-listing.md` and 
 1. Create or open a Chrome Web Store Developer Dashboard account.
 2. Pay any required developer registration fee in the dashboard.
 3. Open item `dloklkbnmoigemnfigbkibogmgbieppl`; do not create a new item.
-4. Confirm that v0.5.3 is published, then increment the manifest version for the next version; do not change the v0.5.3 archive or listing history.
-5. Package the next version and upload `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` as an update to this item.
+4. Confirm that v0.5.3 is published; do not change the v0.5.3 archive or listing history.
+5. Package v0.5.4 and upload `dist\v0.5.4\enhe-promotion-manager-0.5.4.zip` as a later update to this item.
 6. Upload next-version icons and both reviewed localized screenshots from `dist\v<NEXT_VERSION>\store-assets`.
 7. Fill the localized name, short description, detailed description, category, product website, support URL, and privacy policy fields from the committed documents.
 8. Fill privacy practices using the permission justifications above. State that the extension does not collect platform passwords, cookies, payment secrets, or API tokens.

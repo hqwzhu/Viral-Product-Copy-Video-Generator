@@ -292,7 +292,7 @@ npm run migrate
 9. 在本地打包插件。
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 10. 把生成的 ZIP 提交到 Chrome Web Store 和 Microsoft Edge Add-ons。

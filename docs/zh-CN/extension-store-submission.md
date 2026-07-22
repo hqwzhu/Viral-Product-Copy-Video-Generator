@@ -1,12 +1,12 @@
 # ENHE 产品推广素材生成器浏览器扩展上架指南
 
-版本：0.5.3
+源码/发行候选：0.5.4
 
 本文用于把 `browser-extension/` 打包为可提交到 Chrome Web Store 和 Microsoft Edge Add-ons 的 ENHE Product Promo Maker 扩展包。
 
 ## 当前已发布版本
 
-Chrome Web Store 条目 `dloklkbnmoigemnfigbkibogmgbieppl` 的 v0.5.3 已发布。其已验证归档为 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`；它只是不可修改的历史验证资产，不是再次上传的操作指令。其商店图片、校验和与发行证据也均不可更改；不得重新打包、重新上传或替换 v0.5.3。下一版升级时，先提高扩展版本号，创建新的发行目录和证据集，再作为同一条目的更新提交。
+Chrome Web Store 条目 `dloklkbnmoigemnfigbkibogmgbieppl` 的 v0.5.3 已发布。其已验证归档为 `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`；它只是不可修改的历史验证资产，不是再次上传的操作指令。其商店图片、校验和与发行证据也均不可更改；不得重新打包、重新上传或替换 v0.5.3。源码/发行候选 v0.5.4 尚未提交 Chrome 商店审核；后续向同一条目提交前，必须为它创建新的 `dist\v0.5.4` 包和证据集。
 
 商店本地化名称：
 
@@ -44,7 +44,7 @@ python scripts\package_browser_extension.py --out-dir ".\dist\v<NEXT_VERSION>"
 
 ## 上架前检查
 
-- 当前已发布版本保持 v0.5.3 不变；下一版与打包输出使用新的 `dist\v<NEXT_VERSION>` 目录。
+- Chrome 当前已发布版本保持 v0.5.3 不变；源码/发行候选 v0.5.4 尚未经过商店审核，并使用新的 `dist\v0.5.4` 目录。
 - Manifest 使用 MV3。
 - popup、CSS 和 JavaScript 均随扩展包本地提供。
 - 不加载 remote code：没有远程 `<script src="https://...">`、动态 import、`importScripts`、`eval` 或 `new Function`。
@@ -100,8 +100,8 @@ python scripts\package_browser_extension.py --out-dir ".\dist\v<NEXT_VERSION>"
 1. 创建或登录 Chrome Web Store Developer Dashboard 账号。
 2. 按后台要求完成开发者注册和费用支付。
 3. 打开条目 `dloklkbnmoigemnfigbkibogmgbieppl`，不要创建新条目。
-4. 确认 v0.5.3 已发布后，再提高 manifest 的版本号；不要改动 v0.5.3 归档或条目历史。
-5. 打包下一版，并将 `dist\v<NEXT_VERSION>\enhe-promotion-manager-<NEXT_VERSION>.zip` 作为该条目的更新上传。
+4. 确认 v0.5.3 已发布；不要改动 v0.5.3 归档或条目历史。
+5. 打包 v0.5.4，并在后续将 `dist\v0.5.4\enhe-promotion-manager-0.5.4.zip` 作为该条目的更新上传。
 6. 上传 `dist\v<NEXT_VERSION>\store-assets` 中下一版图标和两张已审核的本地化截图。
 7. 按已提交文档填写本地化名称、简短说明、详细说明、分类、产品网站、支持网址和隐私政策字段。
 8. 使用上面的权限说明填写 privacy practices，并说明扩展不收集平台密码、Cookie、支付密钥或 API token。

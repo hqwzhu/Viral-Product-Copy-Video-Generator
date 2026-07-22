@@ -141,14 +141,14 @@ python scripts\real_evidence_inbox.py `
 打包 Chrome Web Store / Microsoft Edge Add-ons 提交包：
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.3"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 输出：
 
-- `dist\v0.5.3\enhe-promotion-manager-0.5.3.zip`
-- `dist\v0.5.3\browser-extension-package-report.json`
-- `dist\v0.5.3\browser-extension-package-report.md`
+- `dist\v0.5.4\enhe-promotion-manager-0.5.4.zip`
+- `dist\v0.5.4\browser-extension-package-report.json`
+- `dist\v0.5.4\browser-extension-package-report.md`
 
 提交前确认 package report 的 `status` 为 `ready`。上架步骤、privacy policy、remote code 审核说明和收费订阅话术见：
 

@@ -7127,7 +7127,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         popup = (BROWSER_EXTENSION / "popup.html").read_text(encoding="utf-8")
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
 
-        self.assertEqual(manifest["version"], "0.5.3")
+        self.assertEqual(manifest["version"], "0.5.4")
         self.assertEqual(manifest["default_locale"], "en")
         self.assertEqual(manifest["name"], "__MSG_extensionName__")
         self.assertEqual(manifest["action"]["default_title"], "__MSG_actionTitle__")
@@ -7171,7 +7171,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         script = (BROWSER_EXTENSION / "popup.js").read_text(encoding="utf-8")
         contract = json.loads((BROWSER_EXTENSION / "billing-contract.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["version"], "0.5.3")
+        self.assertEqual(manifest["version"], "0.5.4")
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["permissions"], ["activeTab", "storage", "clipboardWrite"])
         self.assertEqual(manifest["host_permissions"], ["https://www.enhe-tech.com.cn/*"])
@@ -7389,9 +7389,9 @@ Prompt templates for product copy, SEO content, and video scripts.
 
         report = json.loads((out_dir / "dist/browser-extension-package-report.json").read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.3")
+        self.assertEqual(report["version"], "0.5.4")
         package_path = Path(report["package"])
-        self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.3.zip")
+        self.assertEqual(package_path.name, "enhe-promotion-manager-0.5.4.zip")
         self.assertTrue(package_path.exists())
         archive_sha256 = hashlib.sha256(package_path.read_bytes()).hexdigest().upper()
         self.assertEqual(report.get("archiveName"), package_path.name)
@@ -7399,7 +7399,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         report_markdown = (out_dir / "dist/browser-extension-package-report.md").read_text(encoding="utf-8")
         self.assertIn(f"- Archive: `{package_path.name}`", report_markdown)
         self.assertIn(f"- SHA-256: `{archive_sha256}`", report_markdown)
-        self.assertIn("- Version: `0.5.3`", report_markdown)
+        self.assertIn("- Version: `0.5.4`", report_markdown)
         self.assertTrue(report["checks"]["manifestV3"])
         self.assertTrue(report["checks"]["icons"])
         self.assertTrue(report["checks"]["noRemoteExecutableCode"])
@@ -7424,7 +7424,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("_locales/en/messages.json", names)
         self.assertIn("_locales/zh_CN/messages.json", names)
 
-    def test_browser_extension_package_defaults_to_versioned_dist_without_touching_v052_artifacts(self) -> None:
+    def test_browser_extension_package_defaults_to_v054_without_touching_v053_archive(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="browser-extension-default-package-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
         project_dir = out_dir / "mini-project"
@@ -7447,9 +7447,9 @@ Prompt templates for product copy, SEO content, and video scripts.
             shutil.copy2(BROWSER_EXTENSION / relative_path, destination)
 
         historical_paths = [
-            project_dir / "dist" / "enhe-promotion-manager-0.5.2.zip",
-            project_dir / "dist" / "browser-extension-package-report.json",
-            project_dir / "dist" / "browser-extension-package-report.md",
+            project_dir / "dist" / "v0.5.3" / "enhe-promotion-manager-0.5.3.zip",
+            project_dir / "dist" / "v0.5.3" / "browser-extension-package-report.json",
+            project_dir / "dist" / "v0.5.3" / "browser-extension-package-report.md",
         ]
         historical_contents = {
             path: f"controlled historical sentinel: {path.name}".encode("utf-8")
@@ -7465,18 +7465,18 @@ Prompt templates for product copy, SEO content, and video scripts.
             cwd=project_dir,
         )
 
-        versioned_dir = project_dir / "dist" / "v0.5.3"
+        versioned_dir = project_dir / "dist" / "v0.5.4"
         report_path = versioned_dir / "browser-extension-package-report.json"
         self.assertTrue(report_path.exists())
         report = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["version"], "0.5.3")
-        self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.3.zip").exists())
+        self.assertEqual(report["version"], "0.5.4")
+        self.assertTrue((versioned_dir / "enhe-promotion-manager-0.5.4.zip").exists())
         for path, expected in historical_contents.items():
             self.assertEqual(path.read_bytes(), expected, str(path))
 
-    def test_current_readmes_use_isolated_v053_package_command(self) -> None:
-        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+    def test_current_readmes_use_isolated_v054_package_command(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.4"'
         retired_tokens = [
             'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
             r"dist\enhe-promotion-manager-<version>.zip",
@@ -7495,12 +7495,12 @@ Prompt templates for product copy, SEO content, and video scripts.
                 for retired_token in retired_tokens:
                     self.assertNotIn(retired_token, readme)
 
-    def test_browser_extension_guides_use_isolated_v053_package_outputs(self) -> None:
-        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.3"'
+    def test_browser_extension_guides_use_isolated_v054_package_outputs(self) -> None:
+        expected_command = 'python scripts\\package_browser_extension.py --out-dir ".\\dist\\v0.5.4"'
         expected_outputs = [
-            r"dist\v0.5.3\enhe-promotion-manager-0.5.3.zip",
-            r"dist\v0.5.3\browser-extension-package-report.json",
-            r"dist\v0.5.3\browser-extension-package-report.md",
+            r"dist\v0.5.4\enhe-promotion-manager-0.5.4.zip",
+            r"dist\v0.5.4\browser-extension-package-report.json",
+            r"dist\v0.5.4\browser-extension-package-report.md",
         ]
         retired_tokens = [
             'python scripts\\package_browser_extension.py --out-dir ".\\dist"',
@@ -7516,7 +7516,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         ]:
             guide = guide_path.read_text(encoding="utf-8")
             with self.subTest(guide=guide_path):
-                self.assertIn("0.5.3", guide)
+                self.assertIn("0.5.4", guide)
                 self.assertIn(expected_command, guide)
                 for output in expected_outputs:
                     self.assertIn(output, guide)
@@ -7873,8 +7873,8 @@ Prompt templates for product copy, SEO content, and video scripts.
         for asset_line in [
             "- `browser-extension/icons/icon128.png` — global store icon with the ENHE logo and "
             "the label `ENHE Promo Maker`.",
-            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
-            "- `dist/v0.5.3/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
+            "- `dist/v0.5.4/store-assets/enhe-product-promo-maker-en-1280x800.png` — English popup.",
+            "- `dist/v0.5.4/store-assets/enhe-product-promo-maker-zh-1280x800.png` — Simplified Chinese popup.",
         ]:
             self.assertIn(asset_line, screenshot_lines)
 
@@ -7919,9 +7919,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         )
 
         chrome_upload_step_en = (
-            "Package the next version and upload "
-            "`dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
-            "as an update to this item."
+            "Package v0.5.4 and upload "
+            "`dist\\v0.5.4\\enhe-promotion-manager-0.5.4.zip` "
+            "as a later update to this item."
         )
         screenshots_step_en = (
             "Upload next-version icons and both reviewed localized screenshots from "
@@ -7949,7 +7949,7 @@ Prompt templates for product copy, SEO content, and video scripts.
             "required, pause for the account owner to complete it."
         )
         chrome_upload_step_zh = (
-            "打包下一版，并将 `dist\\v<NEXT_VERSION>\\enhe-promotion-manager-<NEXT_VERSION>.zip` "
+            "打包 v0.5.4，并在后续将 `dist\\v0.5.4\\enhe-promotion-manager-0.5.4.zip` "
             "作为该条目的更新上传。"
         )
         screenshots_step_zh = (
