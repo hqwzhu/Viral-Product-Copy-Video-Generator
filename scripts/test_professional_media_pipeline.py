@@ -14,7 +14,7 @@ from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from unittest import mock
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from scripts.media_pipeline.contracts import (
     Artifact,
@@ -49,6 +49,16 @@ PRODUCT_FIXTURE = (
 class QuietFixtureHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, _format, *_args):
         pass
+
+    def do_GET(self):
+        path = self.path.partition("?")[0]
+        if path == "/status/404":
+            self.send_error(404)
+            return
+        if path == "/status/500":
+            self.send_error(500)
+            return
+        super().do_GET()
 
 
 @contextlib.contextmanager
@@ -1469,6 +1479,76 @@ class ProductCaptureTest(unittest.TestCase):
 
                 start.assert_not_called()
                 launch.assert_not_called()
+
+    def test_http_errors_fail_without_ready_artifacts(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        with serve_product_fixture() as source_url, tempfile.TemporaryDirectory() as temp:
+            fixture_root = source_url.rsplit("/", 1)[0]
+            initial_404 = capture.build_default_capture_plan(
+                f"{fixture_root}/status/404"
+            )
+            shot_500 = capture.build_default_capture_plan(source_url)
+            shot_500["shots"][1]["url"] = f"{fixture_root}/status/500"
+
+            for plan, error_code in (
+                (initial_404, "navigate_source_failed"),
+                (shot_500, "navigate_workflow_failed"),
+            ):
+                with self.subTest(error_code=error_code):
+                    result = capture.PlaywrightCaptureProvider(
+                        allow_localhost=True
+                    ).capture(plan, Path(temp) / error_code)
+
+                    self.assertEqual(result.status, "failed", result.to_dict())
+                    self.assertEqual(result.error_code, error_code)
+                    self.assertEqual(result.artifacts, ())
+
+    def test_malformed_selector_fails_instead_of_using_fallback(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        with serve_product_fixture() as source_url, tempfile.TemporaryDirectory() as temp:
+            plan = capture.build_default_capture_plan(source_url)
+            plan["shots"] = [dict(plan["shots"][0], selector="[bad")]
+
+            result = capture.PlaywrightCaptureProvider(
+                allow_localhost=True
+            ).capture(plan, Path(temp))
+
+            self.assertEqual(result.status, "failed", result.to_dict())
+            self.assertEqual(result.error_code, "capture_hero_failed")
+            self.assertEqual(result.artifacts, ())
+
+    def test_artifact_urls_remove_sensitive_query_and_fragment(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        secret = "SECRET123"
+        with serve_product_fixture() as source_url, tempfile.TemporaryDirectory() as temp:
+            private_source_url = (
+                f"{source_url}?token={secret}&view=demo#private-fragment"
+            )
+            result = capture.PlaywrightCaptureProvider(
+                allow_localhost=True
+            ).capture(
+                capture.build_default_capture_plan(private_source_url), Path(temp)
+            )
+
+            self.assertEqual(result.status, "ready", result.to_dict())
+            serialized = json.dumps(result.to_dict(), sort_keys=True)
+            self.assertNotIn(secret, serialized)
+            for artifact in result.artifacts:
+                final_url = urlsplit(artifact.to_dict()["metadata"]["finalUrl"])
+                self.assertEqual(final_url.scheme, "http")
+                self.assertEqual(final_url.hostname, "127.0.0.1")
+                self.assertEqual(final_url.path, "/product.html")
+                self.assertEqual(final_url.query, "")
+                self.assertEqual(final_url.fragment, "")
 
 
 if __name__ == "__main__":

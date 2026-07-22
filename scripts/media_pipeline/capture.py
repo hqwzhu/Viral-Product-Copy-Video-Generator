@@ -3,6 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from scripts.media_pipeline.contracts import Artifact, StageResult
 from scripts.media_pipeline.security import MediaSecurityError, validate_capture_shot
@@ -154,14 +155,26 @@ def playwright_chromium_available() -> bool:
 
 
 def _resolve_locator(page: Any, requested_selector: str) -> tuple[Any, str]:
-    for selector in (requested_selector, *_FALLBACK_SELECTORS):
-        try:
-            locator = page.locator(selector).first
-            if locator.count() and locator.is_visible():
-                return locator, selector
-        except Exception:
-            continue
-    raise RuntimeError("No visible capture selector was found")
+    requested = page.locator(requested_selector).first
+    if requested.count() > 0:
+        return requested, requested_selector
+
+    for selector in _FALLBACK_SELECTORS:
+        locator = page.locator(selector).first
+        if locator.count() > 0:
+            return locator, selector
+    raise RuntimeError("No capture selector was found")
+
+
+def _goto_checked(page: Any, url: str) -> None:
+    response = page.goto(url, wait_until="domcontentloaded")
+    if response is None or response.status >= 400:
+        raise RuntimeError("Capture navigation did not return a successful response")
+
+
+def _safe_metadata_url(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 def _validate_final_url(
@@ -212,7 +225,7 @@ class PlaywrightCaptureProvider:
             video = page.video
 
             phase = "navigate_source"
-            page.goto(source_url, wait_until="domcontentloaded")
+            _goto_checked(page, source_url)
             _validate_final_url(source_url, page.url, self.allow_localhost)
 
             for shot in shots:
@@ -225,8 +238,10 @@ class PlaywrightCaptureProvider:
                     {"width": viewport[0], "height": viewport[1]}
                 )
                 if page.url != target_url:
-                    page.goto(target_url, wait_until="domcontentloaded")
+                    phase = f"navigate_{shot_id}"
+                    _goto_checked(page, target_url)
                     _validate_final_url(source_url, page.url, self.allow_localhost)
+                    phase = f"capture_{shot_id}"
 
                 requested_selector = shot["selector"]
                 locator, resolved_selector = _resolve_locator(
@@ -261,7 +276,7 @@ class PlaywrightCaptureProvider:
                             "resolvedSelector": resolved_selector,
                             "selectorFallback": resolved_selector
                             != requested_selector,
-                            "finalUrl": page.url,
+                            "finalUrl": _safe_metadata_url(page.url),
                             "viewport": viewport,
                             "action": action,
                             "duration": shot["duration"],
@@ -277,6 +292,7 @@ class PlaywrightCaptureProvider:
             context.close()
             context = None
             video_path = Path(video.path())
+            video = None
             video_artifact = Artifact.from_file(
                 "product_capture_video",
                 video_path,
@@ -288,7 +304,7 @@ class PlaywrightCaptureProvider:
                 replace(
                     video_artifact,
                     metadata={
-                        "finalUrl": final_url,
+                        "finalUrl": _safe_metadata_url(final_url),
                         "viewport": list(_DEFAULT_VIEWPORT),
                         "shotIds": [shot["id"] for shot in shots],
                     },
@@ -317,6 +333,11 @@ class PlaywrightCaptureProvider:
         finally:
             _close_quietly(page)
             _close_quietly(context)
+            if video is not None:
+                try:
+                    video.path()
+                except Exception:
+                    pass
             _close_quietly(browser)
             if playwright is not None:
                 try:
