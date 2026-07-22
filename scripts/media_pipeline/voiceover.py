@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -199,9 +200,10 @@ def _audio_duration(path: Path) -> float:
         capture_output=True,
         text=True,
         shell=False,
+        timeout=30,
     )
     duration = float(result.stdout.strip())
-    if duration <= 0:
+    if not math.isfinite(duration) or duration <= 0:
         raise RuntimeError("Voiceover duration is not positive")
     return duration
 
@@ -253,6 +255,36 @@ def _diagnostics(
     }
 
 
+def _segments_are_valid(segments: list[dict[str, Any]], duration: float) -> bool:
+    if not segments or not math.isfinite(duration) or duration <= 0:
+        return False
+    previous_end = 0.0
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict) or not str(segment.get("text", "")).strip():
+            return False
+        try:
+            start = float(segment["start"])
+            end = float(segment["end"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if (
+            not math.isfinite(start)
+            or not math.isfinite(end)
+            or start < 0
+            or start > end
+            or end > duration
+            or (index == 0 and not math.isclose(start, 0.0, abs_tol=1e-6))
+            or (index > 0 and not math.isclose(start, previous_end, abs_tol=1e-6))
+        ):
+            return False
+        previous_end = end
+    return math.isclose(previous_end, duration, rel_tol=1e-6, abs_tol=1e-6)
+
+
+def _has_readable_text(text: str) -> bool:
+    return any(character.isalnum() or character.isalpha() for character in text)
+
+
 class KokoroVoiceoverProvider:
     def __init__(self, runtime_root: str | Path | None = None) -> None:
         self.runtime_root = (
@@ -268,6 +300,12 @@ class KokoroVoiceoverProvider:
                 status="failed",
                 provider="kokoro_onnx",
                 error_code="empty_voiceover_text",
+            )
+        if not _has_readable_text(normalized):
+            return StageResult(
+                status="failed",
+                provider="kokoro_onnx",
+                error_code="unreadable_voiceover_text",
             )
         if not professional_tts_available(self.runtime_root):
             return StageResult(
@@ -288,14 +326,18 @@ class KokoroVoiceoverProvider:
             duration = _audio_duration(partial)
             partial.replace(destination)
             metadata = {"voice": voice, "language": language, "lang": lang}
+            diagnostics = _diagnostics(normalized, duration, voice, language, lang)
+            if not _segments_are_valid(diagnostics["segments"], duration):
+                raise RuntimeError("Voiceover segments are invalid")
             artifact = _artifact(destination, "kokoro_onnx", "Apache-2.0", metadata)
             return StageResult.ready(
                 "kokoro_onnx",
                 (artifact,),
-                _diagnostics(normalized, duration, voice, language, lang),
+                diagnostics,
             )
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             partial.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
             return StageResult(
                 status="failed",
                 provider="kokoro_onnx",
@@ -311,6 +353,12 @@ class SapiVoiceoverProvider:
                 status="failed",
                 provider="windows_sapi",
                 error_code="empty_voiceover_text",
+            )
+        if not _has_readable_text(normalized):
+            return StageResult(
+                status="failed",
+                provider="windows_sapi",
+                error_code="unreadable_voiceover_text",
             )
         if shutil.which("powershell") is None and shutil.which("pwsh") is None:
             return StageResult(
@@ -329,18 +377,20 @@ class SapiVoiceoverProvider:
             duration = _audio_duration(partial)
             partial.replace(destination)
             metadata = {"voice": voice, "language": language, "lang": lang}
+            diagnostics = _diagnostics(normalized, duration, voice, language, lang)
+            if not _segments_are_valid(diagnostics["segments"], duration):
+                raise RuntimeError("Voiceover segments are invalid")
             artifact = _artifact(destination, "windows_sapi", "", metadata)
             return StageResult(
                 status="degraded",
                 provider="windows_sapi",
                 artifacts=(artifact,),
                 warnings=("review_voice_only",),
-                diagnostics=_diagnostics(
-                    normalized, duration, voice, language, lang
-                ),
+                diagnostics=diagnostics,
             )
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             partial.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
             return StageResult(
                 status="failed",
                 provider="windows_sapi",

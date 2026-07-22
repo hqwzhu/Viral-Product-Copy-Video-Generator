@@ -857,6 +857,117 @@ class VoiceoverTest(unittest.TestCase):
         self.assertEqual(result.error_code, "empty_voiceover_text")
         self.assertFalse(result.artifacts)
 
+    def test_nonfinite_ffprobe_duration_never_returns_ready(self):
+        voiceover = load_voiceover_module(self)
+
+        for stdout in ("nan\n", "inf\n"):
+            with self.subTest(stdout=stdout.strip()), mock.patch.object(
+                voiceover, "professional_tts_available", return_value=True
+            ), mock.patch.object(
+                voiceover,
+                "_synthesize_kokoro",
+                side_effect=lambda _root, _text, _voice, _lang, destination: self._write_test_wav(
+                    destination
+                ),
+            ), mock.patch.object(
+                voiceover.shutil, "which", return_value="ffprobe.exe"
+            ), mock.patch.object(
+                voiceover.subprocess,
+                "run",
+                return_value=SimpleNamespace(stdout=stdout),
+            ):
+                result = voiceover.KokoroVoiceoverProvider(self.root).generate(
+                    "Speak this sentence.", "en", self.root / stdout.strip()
+                )
+
+            self.assertEqual(result.status, "failed")
+            self.assertFalse(result.artifacts)
+
+    def test_ffprobe_duration_call_has_a_bounded_timeout(self):
+        voiceover = load_voiceover_module(self)
+        audio = self.root / "audio.wav"
+        audio.write_bytes(b"RIFF" + b"\x00" * 40 + b"WAVE")
+
+        with mock.patch.object(
+            voiceover.shutil, "which", return_value="ffprobe.exe"
+        ), mock.patch.object(
+            voiceover.subprocess,
+            "run",
+            return_value=SimpleNamespace(stdout="1.25\n"),
+        ) as run:
+            self.assertEqual(voiceover._audio_duration(audio), 1.25)
+
+        self.assertEqual(run.call_args.kwargs.get("timeout"), 30)
+
+    def test_invalid_segments_never_return_ready(self):
+        voiceover = load_voiceover_module(self)
+        invalid_segments = [
+            [{"text": "one", "start": 0.0, "end": 0.4}, {"text": "two", "start": 0.5, "end": 1.0}],
+            [{"text": "one", "start": -0.1, "end": 0.4}],
+            [{"text": "one", "start": 0.0, "end": 1.1}],
+        ]
+
+        for segments in invalid_segments:
+            with self.subTest(segments=segments), mock.patch.object(
+                voiceover, "professional_tts_available", return_value=True
+            ), mock.patch.object(
+                voiceover,
+                "_synthesize_kokoro",
+                side_effect=lambda _root, _text, _voice, _lang, destination: self._write_test_wav(
+                    destination
+                ),
+            ), mock.patch.object(
+                voiceover, "_audio_duration", return_value=1.0
+            ), mock.patch.object(
+                voiceover, "_sentence_segments", return_value=segments
+            ):
+                result = voiceover.KokoroVoiceoverProvider(self.root).generate(
+                    "Speak this sentence.", "en", self.root / "invalid-segments"
+                )
+
+            self.assertEqual(result.status, "failed")
+            self.assertFalse(result.artifacts)
+            self.assertFalse(
+                (self.root / "invalid-segments" / "voiceover.wav").exists()
+            )
+
+    def test_english_and_chinese_punctuation_only_text_never_returns_ready(self):
+        voiceover = load_voiceover_module(self)
+
+        for text in ("!!!", "，！？"):
+            with self.subTest(text=text), mock.patch.object(
+                voiceover, "professional_tts_available", return_value=True
+            ), mock.patch.object(
+                voiceover,
+                "_synthesize_kokoro",
+                side_effect=lambda _root, _text, _voice, _lang, destination: self._write_test_wav(
+                    destination
+                ),
+            ), mock.patch.object(voiceover, "_audio_duration", return_value=1.0):
+                result = voiceover.KokoroVoiceoverProvider(self.root).generate(
+                    text, "en", self.root / "punctuation"
+                )
+
+            self.assertEqual(result.status, "failed")
+            self.assertFalse(result.artifacts)
+
+    def test_sapi_punctuation_only_text_never_returns_degraded_ready(self):
+        voiceover = load_voiceover_module(self)
+
+        with mock.patch.object(
+            voiceover.shutil, "which", return_value="powershell.exe"
+        ), mock.patch.object(
+            voiceover,
+            "_synthesize_windows_sapi",
+            side_effect=lambda _text, destination: self._write_test_wav(destination),
+        ), mock.patch.object(voiceover, "_audio_duration", return_value=1.0):
+            result = voiceover.SapiVoiceoverProvider().generate(
+                "!!!", "en", self.root / "sapi-punctuation"
+            )
+
+        self.assertEqual(result.status, "failed")
+        self.assertFalse(result.artifacts)
+
 
 class MediaSecurityTest(unittest.TestCase):
     def setUp(self):
