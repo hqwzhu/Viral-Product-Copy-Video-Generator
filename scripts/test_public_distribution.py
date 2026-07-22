@@ -1124,19 +1124,30 @@ class DistributionContractTest(unittest.TestCase):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         self.assertIn("on", workflow)
         self.assertEqual(set(workflow["on"]), {"push", "pull_request"})
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
         job = workflow["jobs"]["test"]
+        self.assertIs(job["strategy"]["fail-fast"], False)
         self.assertEqual(job["strategy"]["matrix"]["os"], ["windows-latest", "ubuntu-latest"])
         self.assertEqual(job["runs-on"], "${{ matrix.os }}")
-        self.assertEqual(job["steps"][0], {"uses": "actions/checkout@v4"})
+        self.assertEqual(job["steps"][0]["uses"], "actions/checkout@v4")
         self.assertEqual(job["steps"][1]["uses"], "actions/setup-python@v5")
         self.assertEqual(job["steps"][1]["with"]["python-version"], "3.12")
+        self.assertEqual(job["steps"][1]["with"]["cache"], "pip")
+        self.assertEqual(
+            job["steps"][1]["with"]["cache-dependency-path"], "requirements-test.txt"
+        )
         self.assertEqual(
             [step["run"] for step in job["steps"] if "run" in step],
             [
                 "python -m pip install -r requirements-test.txt",
+                "python scripts/build_release.py --build-extension-from-component",
                 "python scripts/verify_distribution.py",
                 "python -m unittest discover -s tests -v",
             ],
+        )
+        self.assertEqual(
+            (distribution / ".gitattributes").read_text(encoding="utf-8"),
+            "* text=auto eol=lf\nrelease-manifest.json -text\n",
         )
         self.assertIn("PyYAML==6.0.3", (distribution / "requirements-test.txt").read_text(encoding="utf-8"))
         self.assertIn("PyYAML==6.0.3", (ROOT / "requirements-test.txt").read_text(encoding="utf-8"))

@@ -244,7 +244,7 @@ def _extension_source_files() -> dict[str, Path]:
     }
 
 
-def copy_validated_extension(source_zip: Path, output: Path) -> None:
+def validate_extension_zip(source_zip: Path) -> None:
     expected = _extension_source_files()
     with zipfile.ZipFile(source_zip) as archive:
         try:
@@ -263,6 +263,25 @@ def copy_validated_extension(source_zip: Path, output: Path) -> None:
         for name, path in expected.items():
             if archive.read(name) != path.read_bytes():
                 raise RuntimeError(f"validated extension ZIP differs from public source: {name}")
+
+
+def build_extension_zip_from_component(output: Path) -> None:
+    expected = _extension_source_files()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(
+        output,
+        "w",
+        compression=contract.FIXED_ZIP_COMPRESSION,
+        compresslevel=contract.FIXED_ZIP_COMPRESSLEVEL,
+    ) as archive:
+        archive.comment = b""
+        for name, path in sorted(expected.items()):
+            add_bytes(archive, name, path.read_bytes())
+    validate_extension_zip(output)
+
+
+def copy_validated_extension(source_zip: Path, output: Path) -> None:
+    validate_extension_zip(source_zip)
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source_zip, output)
 
@@ -271,8 +290,16 @@ def canonical_tree_digest(release: dict) -> str:
     return verify_distribution.canonical_tree_digest(ROOT, release)
 
 
-def build_release(validated_extension_zip: Path) -> Path:
-    if not validated_extension_zip.is_file():
+def build_release(
+    validated_extension_zip: Path | None = None,
+    *,
+    build_extension_from_component: bool = False,
+) -> Path:
+    if (validated_extension_zip is None) == (not build_extension_from_component):
+        raise ValueError(
+            "select exactly one extension input: validated ZIP or public component bootstrap"
+        )
+    if validated_extension_zip is not None and not validated_extension_zip.is_file():
         raise FileNotFoundError(
             f"validated extension ZIP is missing: {validated_extension_zip}"
         )
@@ -305,9 +332,13 @@ def build_release(validated_extension_zip: Path) -> Path:
         build_skill_zip(skill_temp)
         validate_skill_zip(skill_temp)
         _fsync_file(skill_temp)
-        copy_validated_extension(validated_extension_zip, extension_temp)
-        if extension_temp.read_bytes() != validated_extension_zip.read_bytes():
-            raise RuntimeError("staged extension ZIP bytes differ from validated input")
+        if build_extension_from_component:
+            build_extension_zip_from_component(extension_temp)
+        else:
+            assert validated_extension_zip is not None
+            copy_validated_extension(validated_extension_zip, extension_temp)
+            if extension_temp.read_bytes() != validated_extension_zip.read_bytes():
+                raise RuntimeError("staged extension ZIP bytes differ from validated input")
         _fsync_file(extension_temp)
 
         _validate_release_path(ROOT, skill_zip, destination=True)
@@ -387,9 +418,19 @@ def build_release(validated_extension_zip: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--validated-extension-zip", required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--validated-extension-zip")
+    inputs.add_argument("--build-extension-from-component", action="store_true")
     args = parser.parse_args()
-    dist = build_release(Path(args.validated_extension_zip).resolve())
+    validated = (
+        Path(args.validated_extension_zip).resolve()
+        if args.validated_extension_zip is not None
+        else None
+    )
+    dist = build_release(
+        validated,
+        build_extension_from_component=args.build_extension_from_component,
+    )
     print(f"Release assets ready: {dist}")
 
 

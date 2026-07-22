@@ -43,6 +43,7 @@ REQUIRED_FILES = (
     "NOTICE.md",
     "SECURITY.md",
     "CHANGELOG.md",
+    ".gitattributes",
     ".gitignore",
     "requirements-test.txt",
     ".github/workflows/tests.yml",
@@ -96,12 +97,34 @@ EXPECTED_VALIDATOR_COMMANDS = (
     "python -m unittest discover -s tests -v",
 )
 EXPECTED_GITIGNORE_RULES = (".env", ".env.*", "!.env.example")
+EXPECTED_GITATTRIBUTES_RULES = ("* text=auto eol=lf", "release-manifest.json -text")
 EXPECTED_CI_STEPS = [
-    {"uses": "actions/checkout@v4"},
-    {"uses": "actions/setup-python@v5", "with": {"python-version": "3.12"}},
-    {"run": "python -m pip install -r requirements-test.txt"},
-    {"run": "python scripts/verify_distribution.py"},
-    {"run": "python -m unittest discover -s tests -v"},
+    {"name": "Check out repository", "uses": "actions/checkout@v4"},
+    {
+        "name": "Set up Python",
+        "uses": "actions/setup-python@v5",
+        "with": {
+            "python-version": "3.12",
+            "cache": "pip",
+            "cache-dependency-path": "requirements-test.txt",
+        },
+    },
+    {
+        "name": "Install test dependencies",
+        "run": "python -m pip install -r requirements-test.txt",
+    },
+    {
+        "name": "Build deterministic release archives",
+        "run": "python scripts/build_release.py --build-extension-from-component",
+    },
+    {
+        "name": "Verify distribution contract",
+        "run": "python scripts/verify_distribution.py",
+    },
+    {
+        "name": "Run distribution tests",
+        "run": "python -m unittest discover -s tests -v",
+    },
 ]
 
 
@@ -223,6 +246,11 @@ def verify_ci_contract(root: Path) -> list[str]:
     for path in root.rglob(".env*"):
         if path.is_file() and path.name != ".env.example":
             errors.append(f"environment file is not allowed in public distribution: {path.relative_to(root).as_posix()}")
+    gitattributes = _effective_gitignore_rules(
+        (root / ".gitattributes").read_text(encoding="utf-8")
+    )
+    if tuple(gitattributes) != EXPECTED_GITATTRIBUTES_RULES:
+        errors.append(".gitattributes release normalization is incorrect")
     try:
         workflow = yaml.safe_load(
             (root / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
@@ -231,6 +259,8 @@ def verify_ci_contract(root: Path) -> list[str]:
         return errors + [f"GitHub Actions workflow is invalid YAML: {exc}"]
     if not isinstance(workflow, dict):
         return errors + ["GitHub Actions workflow must be a mapping"]
+    if workflow.get("permissions") != {"contents": "read"}:
+        errors.append("GitHub Actions permissions are incorrect")
     triggers = workflow.get("on")
     if (
         not isinstance(triggers, dict)
@@ -249,6 +279,8 @@ def verify_ci_contract(root: Path) -> list[str]:
     if not isinstance(strategy, dict):
         errors.append("GitHub Actions strategy must be a mapping")
     else:
+        if strategy.get("fail-fast") is not False:
+            errors.append("GitHub Actions fail-fast policy is incorrect")
         matrix = strategy.get("matrix")
         if not isinstance(matrix, dict):
             errors.append("GitHub Actions matrix must be a mapping")
