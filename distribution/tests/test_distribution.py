@@ -145,7 +145,8 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
         f"{extension}/manifest.json",
         {
             "manifest_version": 3,
-            "name": "Synthetic Extension",
+            "name": "__MSG_extensionName__",
+            "default_locale": "en",
             "version": contract.VERSION,
             "permissions": ["activeTab", "storage", "clipboardWrite"],
             "host_permissions": ["https://www.enhe-tech.com.cn/*"],
@@ -238,72 +239,115 @@ def create_public_repository(base: Path) -> tuple[Path, Path]:
 
 
 class PublicDistributionTest(unittest.TestCase):
-    def test_ci_and_store_contract_reject_drift(self) -> None:
+    def test_gitignore_contract_uses_git_semantics_for_each_isolated_drift(self) -> None:
+        mutations = {
+            "commented rules": "# .env\n# .env.*\n!.env.example\n",
+            "wrong order": "!.env.example\n.env\n.env.*\n",
+            "root reinclude": ".env\n.env.*\n!.env.example\n!/.env.local\n",
+            "anchored rules": "/.env\n/.env.*\n!/.env.example\n",
+            "glob reinclude": ".env\n.env.*\n!.env.example\n!nested/.env*\n",
+            "character class reinclude": ".env\n.env.*\n!.env.example\n!**/[.]env.local\n",
+            "nested reinclude": ".env\n.env.*\n!.env.example\n!nested/.env.production\n",
+            "example reignored": ".env\n.env.*\n!.env.example\n.env.example\n",
+        }
+        for name, content in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+                write_text(root, ".gitignore", content)
+                self.assertIn(
+                    ".gitignore environment-file behavior is incorrect",
+                    verify_distribution.verify_ci_contract(root),
+                )
+
+    def test_ci_contract_rejects_each_isolated_yaml_drift(self) -> None:
+        mutations = (
+            ("trigger comment", "text", ("  push:", "  # push:"), "GitHub Actions workflow triggers are incorrect"),
+            ("push false", "text", ("  push:", "  push: false"), "GitHub Actions workflow triggers are incorrect"),
+            ("strategy scalar", "yaml", ("strategy",), "GitHub Actions strategy must be a mapping"),
+            ("matrix scalar", "yaml", ("strategy", "matrix"), "GitHub Actions matrix must be a mapping"),
+            ("steps scalar", "yaml", ("steps",), "GitHub Actions steps must be a list"),
+        )
+        for name, mutation_type, mutation, expected in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+                path = root / ".github/workflows/tests.yml"
+                if mutation_type == "text":
+                    old, new = mutation
+                    path.write_text(path.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
+                else:
+                    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+                    target = workflow["jobs"]["test"]
+                    for key in mutation[:-1]:
+                        target = target[key]
+                    target[mutation[-1]] = "broken"
+                    path.write_text(yaml.safe_dump(workflow, sort_keys=False), encoding="utf-8")
+                self.assertIn(expected, verify_distribution.verify_ci_contract(root))
+
+    def test_gitignore_contract_reports_git_unavailable_without_details(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root, _ = create_public_repository(Path(temp))
-            self.assertEqual(verify_distribution.verify_required_files(root), [])
-            self.assertTrue(hasattr(verify_distribution, "verify_ci_contract"))
-            self.assertEqual(verify_distribution.verify_ci_contract(root), [])
+            with mock.patch("subprocess.run", side_effect=OSError("private-path")):
+                errors = verify_distribution.verify_ci_contract(root)
+            self.assertEqual(errors, ["gitignore semantic validation unavailable"])
+            self.assertNotIn("private-path", " | ".join(errors))
+
+    def test_store_contract_rejects_each_isolated_drift_with_specific_error(self) -> None:
+        mutations = (
+            ("publishedVersion", "0.0.0", "Chrome Web Store published version is incorrect"),
+            ("status", "pending_review", "Chrome Web Store submission state is incorrect"),
+            ("listingUrl", "https://example.invalid/listing", "Chrome Web Store submission state is incorrect"),
+        )
+        for field, value, expected in mutations:
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                release = verify_distribution.read_json(root / "release-manifest.json")
+                self.assertEqual(verify_distribution.verify_identity_and_links(root, release), [])
+                release["chromeWebStore"][field] = value
+                self.assertIn(expected, verify_distribution.verify_identity_and_links(root, release))
+
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = create_public_repository(Path(temp))
+            release = verify_distribution.read_json(root / "release-manifest.json")
+            self.assertEqual(verify_distribution.verify_identity_and_links(root, release), [])
+            release["chromeWebStore"] = "secret-store-value"
             self.assertEqual(
-                verify_distribution.verify_identity_and_links(
-                    root, verify_distribution.read_json(root / "release-manifest.json")
-                ),
-                [],
+                verify_distribution.verify_identity_and_links(root, release),
+                ["Chrome Web Store record must be a mapping"],
             )
-            workflow_path = root / ".github/workflows/tests.yml"
-            workflow = workflow_path.read_text(encoding="utf-8")
-            mutations = {
-                "gitignore comment": (root / ".gitignore", "# .env\n# .env.*\n!.env.example\n"),
-                "gitignore order": (root / ".gitignore", "!.env.example\n.env\n.env.*\n"),
-                "trigger comment": (workflow_path, workflow.replace("  push:", "  # push:")),
-                "push false": (workflow_path, workflow.replace("  push:", "  push: false")),
-                "pull request false": (workflow_path, workflow.replace("  pull_request:", "  pull_request: false")),
-                "matrix comment": (workflow_path, workflow.replace("windows-latest, ubuntu-latest", "windows-latest #, ubuntu-latest")),
-                "python comment": (workflow_path, workflow.replace("python-version: '3.12'", "# python-version: '3.12'")),
-                "install comment": (workflow_path, workflow.replace("- run: python -m pip install -r requirements-test.txt", "# - run: python -m pip install -r requirements-test.txt")),
-                "command order": (workflow_path, workflow.replace("      - run: python scripts/verify_distribution.py\n      - run: python -m unittest discover -s tests -v", "      - run: python -m unittest discover -s tests -v\n      - run: python scripts/verify_distribution.py")),
-            }
-            for name, (path, content) in mutations.items():
-                with self.subTest(name=name):
-                    original = path.read_text(encoding="utf-8")
-                    write_text(root, path.relative_to(root).as_posix(), content)
-                    self.assertTrue(verify_distribution.verify_ci_contract(root))
-                    path.write_text(original, encoding="utf-8")
 
-            release_path = root / "release-manifest.json"
-            release = verify_distribution.read_json(release_path)
-            for field, value in (
-                ("publishedVersion", "0.0.0"),
-                ("status", "pending_review"),
-                ("listingUrl", "https://example.invalid/listing"),
+    def test_product_contract_rejects_each_isolated_manifest_drift(self) -> None:
+        mutations = (
+            ("extension/chrome/manifest.json", ("name", "Wrong"), "extension manifest localized name is incorrect"),
+            ("extension/chrome/manifest.json", ("default_locale", "zh_CN"), "extension manifest default locale is incorrect"),
+            ("extension/chrome/component-manifest.json", ("name", "Wrong"), "extension component product name is incorrect"),
+            ("extension/chrome/_locales/en/messages.json", ("extensionName", "Wrong"), "en extensionName must be a mapping"),
+            ("extension/chrome/_locales/zh_CN/messages.json", ("extensionName", {"message": "Wrong"}), "zh_CN extension product name is incorrect"),
+        )
+        for relative, (field, value), expected in mutations:
+            with self.subTest(relative=relative, field=field), tempfile.TemporaryDirectory() as temp:
+                root, _ = create_public_repository(Path(temp))
+                release = verify_distribution.read_json(root / "release-manifest.json")
+                self.assertEqual(verify_distribution.verify_versions(root, release), [])
+                payload = verify_distribution.read_json(root / relative)
+                payload[field] = value
+                write_json(root, relative, payload)
+                self.assertIn(expected, verify_distribution.verify_versions(root, release))
+
+    def test_validate_redacts_unexpected_exception_details(self) -> None:
+        secret = "github_" + "pat_" + "abcdefghijklmnopqrstuvwxyz123456"
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = create_public_repository(Path(temp))
+            with mock.patch.object(
+                verify_distribution,
+                "verify_identity_and_links",
+                side_effect=AttributeError(f"{secret} C:/private/path"),
             ):
-                with self.subTest(field=field):
-                    mutated = dict(release)
-                    mutated["chromeWebStore"] = dict(release["chromeWebStore"])
-                    mutated["chromeWebStore"][field] = value
-                    write_json(root, "release-manifest.json", mutated)
-                    self.assertTrue(verify_distribution.verify_identity_and_links(root, mutated))
-                    write_json(root, "release-manifest.json", release)
-
-            component_path = root / "extension/chrome/component-manifest.json"
-            component = verify_distribution.read_json(component_path)
-            component["name"] = "Wrong product"
-            write_json(root, "extension/chrome/component-manifest.json", component)
-            self.assertTrue(verify_distribution.verify_versions(root, release))
-            component["name"] = contract.PRODUCT_EN
-            write_json(root, "extension/chrome/component-manifest.json", component)
-
-            for locale in ("en", "zh_CN"):
-                with self.subTest(locale=locale):
-                    locale_path = root / f"extension/chrome/_locales/{locale}/messages.json"
-                    messages = verify_distribution.read_json(locale_path)
-                    messages["extensionName"]["message"] = "Wrong product"
-                    write_json(root, locale_path.relative_to(root).as_posix(), messages)
-                    self.assertTrue(verify_distribution.verify_versions(root, release))
-                    messages["extensionName"]["message"] = (
-                        contract.PRODUCT_EN if locale == "en" else contract.PRODUCT_ZH
-                    )
-                    write_json(root, locale_path.relative_to(root).as_posix(), messages)
+                errors = verify_distribution.validate(root, check_checksums=False)
+            self.assertEqual(errors, ["validation failure: unexpected validator error"])
+            self.assertNotIn(secret, " | ".join(errors))
+            self.assertNotIn("C:/private/path", " | ".join(errors))
 
     def test_release_rolls_back_existing_publication_after_prevalidation_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

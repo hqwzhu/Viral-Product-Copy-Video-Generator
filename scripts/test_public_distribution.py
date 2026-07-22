@@ -1189,10 +1189,20 @@ class DistributionContractTest(unittest.TestCase):
                 ".gitignore",
                 (ROOT / "distribution" / ".gitignore").read_text(encoding="utf-8"),
             )
-            for path, ignored in ((".env", True), (".env.local", True), (".env.example", False)):
+            cases = (
+                (".env", True),
+                (".env.local", True),
+                (".env.production", True),
+                ("nested/.env", True),
+                ("nested/.env.local", True),
+                ("nested/.env.production", True),
+                (".env.example", False),
+                ("nested/.env.example", False),
+            )
+            for path, ignored in cases:
                 with self.subTest(path=path):
                     result = subprocess.run(
-                        ["git", "check-ignore", "-q", "--", path],
+                        ["git", "check-ignore", "--no-index", "-q", "--", path],
                         cwd=root,
                         capture_output=True,
                         check=False,
