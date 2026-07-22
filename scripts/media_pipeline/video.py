@@ -405,6 +405,8 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
     output_path = Path(output).resolve()
     workspace = Path(project_dir).resolve() if project_dir else output_path.parent / f".{output_path.stem}-hyperframes"
     raw = workspace / "raw.mp4"
+    staged_output = output_path.with_name(output_path.name + ".quality.part.mp4")
+    staged_output.unlink(missing_ok=True)
     try:
         materialize_hyperframes_project(clean, workspace)
         executable = hyperframes_executable()
@@ -429,11 +431,11 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
         voiceover_sha256 = _file_sha256(voice_path) if voice_path else None
         source_asset_count = len(source_hashes) + (1 if voice_path else 0)
         contains_user_data = bool(clean.get("containsUserData", clean.get("contains_user_data", False)))
-        _encode_final(raw, output_path, voice_path, float(clean["duration"]))
-        probe = probe_media(output_path)
+        _encode_final(raw, staged_output, voice_path, float(clean["duration"]))
+        probe = probe_media(staged_output)
         quality_errors = _quality_errors(clean, probe)
         if quality_errors:
-            output_path.unlink(missing_ok=True)
+            staged_output.unlink(missing_ok=True)
             return StageResult(
                 status="failed",
                 provider="hyperframes_ffmpeg_local",
@@ -441,6 +443,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
                 warnings=tuple(quality_errors),
                 diagnostics={"project": str(workspace), "probe": probe, "qualityErrors": quality_errors},
             )
+        staged_output.replace(output_path)
         artifact = Artifact.from_file(
             "professional_product_demo_video",
             output_path,
@@ -498,9 +501,11 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
             },
         )
     except subprocess.CalledProcessError as exc:
+        staged_output.unlink(missing_ok=True)
         detail = (exc.stderr or exc.stdout or str(exc)).strip()
         return StageResult(status="failed", provider="hyperframes_ffmpeg_local", error_code="professional_video_failed", warnings=(detail[-4000:],), diagnostics={"project": str(workspace), "command": exc.cmd})
     except Exception as exc:
+        staged_output.unlink(missing_ok=True)
         return StageResult(status="failed", provider="hyperframes_ffmpeg_local", error_code="professional_video_failed", warnings=(str(exc),), diagnostics={"project": str(workspace)})
 
 
