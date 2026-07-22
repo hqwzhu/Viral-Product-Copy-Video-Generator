@@ -11,6 +11,7 @@ from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from unittest import mock
+from urllib.parse import quote
 
 from scripts.media_pipeline.contracts import (
     Artifact,
@@ -695,6 +696,100 @@ class MediaSecurityTest(unittest.TestCase):
                         {"selector": "main"},
                         allow_localhost=allow_localhost,
                     )
+
+    def test_capture_rejects_browser_ambiguous_urls(self):
+        source = "https://enhe.test/product"
+        ambiguous_targets = (
+            r"https://evil.test\@enhe.test/product",
+            "https://user@enhe.test/product",
+            "https://enhe.test/prod\nuct",
+            "https://enhe.test/prod\x85uct",
+        )
+
+        for target in ambiguous_targets:
+            with self.subTest(target=repr(target)):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(source, {"url": target, "selector": "main"})
+
+        self.assertIsNone(
+            validate_capture_shot(
+                source,
+                {"url": "https://ENHE.TEST:443/products/guide", "selector": "main"},
+            )
+        )
+
+    def test_capture_rejects_nonstandard_numeric_ipv4_hosts(self):
+        for hostname in (
+            "127.1",
+            "2130706433",
+            "0x7f000001",
+            "017700000001",
+        ):
+            with self.subTest(hostname=hostname):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(
+                        f"http://{hostname}/product",
+                        {"selector": "main"},
+                        allow_localhost=True,
+                    )
+
+    def test_capture_handles_canonical_ip_loopback_hosts(self):
+        self.assertIsNone(
+            validate_capture_shot(
+                "https://203.0.113.10/product",
+                {"selector": "main"},
+            )
+        )
+
+        for source in (
+            "http://127.0.0.1/product",
+            "http://[::ffff:127.0.0.1]/product",
+        ):
+            with self.subTest(source=source):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(source, {"selector": "main"})
+                self.assertIsNone(
+                    validate_capture_shot(
+                        source,
+                        {"selector": "main"},
+                        allow_localhost=True,
+                    )
+                )
+
+    def test_capture_rejects_nested_private_and_backslash_paths(self):
+        source = "https://enhe.test/product"
+        private_targets = (
+            r"https://enhe.test/safe\..\admin",
+            "https://enhe.test/%2561dmin",
+            "https://enhe.test/%252561dmin",
+            "https://enhe.test/safe%255c..%255cadmin",
+        )
+
+        for target in private_targets:
+            with self.subTest(target=target):
+                with self.assertRaises(MediaSecurityError):
+                    validate_capture_shot(source, {"url": target, "selector": "main"})
+
+        self.assertIsNone(
+            validate_capture_shot(
+                source,
+                {
+                    "url": "https://enhe.test/products%252Fguide",
+                    "selector": "main",
+                },
+            )
+        )
+
+    def test_capture_rejects_paths_beyond_decode_limit(self):
+        encoded_path = "/safe%2Fguide"
+        for _ in range(8):
+            encoded_path = quote(encoded_path, safe="/")
+
+        with self.assertRaises(MediaSecurityError):
+            validate_capture_shot(
+                "https://enhe.test/product",
+                {"url": f"https://enhe.test{encoded_path}", "selector": "main"},
+            )
 
     def test_cloud_media_requires_flag_and_exact_allowlist_membership(self):
         allowed = self.root / "approved" / "product.png"

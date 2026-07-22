@@ -22,6 +22,12 @@ SECRET_KEY_PATTERN = re.compile(
 )
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+_MAX_PATH_DECODE_PASSES = 8
+_NONSTANDARD_IPV4_PATTERN = re.compile(
+    r"(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*",
+    re.I,
+)
+_URL_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _SENSITIVE_PATH_NAMES = {
     "cookie",
     "cookies",
@@ -48,10 +54,14 @@ _SENSITIVE_PATH_WORDS = {
 
 
 def _parsed_origin(url: str) -> tuple[str, str, int, str]:
+    if not isinstance(url, str) or "\\" in url or _URL_CONTROL_PATTERN.search(url):
+        raise MediaSecurityError("Ambiguous capture URL")
     parsed = urlsplit(url)
     scheme = parsed.scheme.casefold()
     if scheme not in _DEFAULT_PORTS or not parsed.hostname:
         raise MediaSecurityError("Capture URLs must use HTTP or HTTPS")
+    if parsed.username is not None or parsed.password is not None:
+        raise MediaSecurityError("Capture URLs cannot contain user information")
     hostname = parsed.hostname.casefold().rstrip(".")
     if not hostname:
         raise MediaSecurityError("Capture URL hostname is required")
@@ -63,9 +73,31 @@ def _is_loopback(hostname: str) -> bool:
     if hostname == "localhost" or hostname.endswith(".localhost"):
         return True
     try:
-        return ipaddress.ip_address(hostname).is_loopback
+        address = ipaddress.ip_address(hostname)
     except ValueError:
+        if _NONSTANDARD_IPV4_PATTERN.fullmatch(hostname):
+            raise MediaSecurityError("Non-canonical numeric IP address")
         return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        return address.is_loopback or address.ipv4_mapped.is_loopback
+    return address.is_loopback
+
+
+def _normalized_capture_path(path: str) -> str:
+    current = path
+    for _ in range(_MAX_PATH_DECODE_PASSES):
+        if "\\" in current or _URL_CONTROL_PATTERN.search(current):
+            raise MediaSecurityError("Ambiguous capture path")
+        decoded = unquote(current)
+        if decoded == current:
+            return current.casefold()
+        current = decoded
+
+    if "\\" in current or _URL_CONTROL_PATTERN.search(current):
+        raise MediaSecurityError("Ambiguous capture path")
+    if unquote(current) != current:
+        raise MediaSecurityError("Capture path exceeds decode limit")
+    return current.casefold()
 
 
 def validate_capture_shot(
@@ -85,13 +117,15 @@ def validate_capture_shot(
         target = _parsed_origin(target_url)
         if source[:3] != target[:3]:
             raise MediaSecurityError("Capture target must use the source origin")
+        source_is_loopback = _is_loopback(source[1])
+        target_is_loopback = _is_loopback(target[1])
         if allow_localhost is not True and (
-            _is_loopback(source[1]) or _is_loopback(target[1])
+            source_is_loopback or target_is_loopback
         ):
             raise MediaSecurityError("Localhost capture requires explicit permission")
 
         for path in (source[3], target[3]):
-            normalized_path = unquote(path).casefold()
+            normalized_path = _normalized_capture_path(path)
             if any(part in normalized_path for part in DENIED_ROUTE_PARTS):
                 raise MediaSecurityError("Private routes cannot be captured")
     except MediaSecurityError:
