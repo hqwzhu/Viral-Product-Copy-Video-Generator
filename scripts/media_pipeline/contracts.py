@@ -1,8 +1,28 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal
+
+
+def _freeze_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze_json(item) for key, item in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _thaw_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json(item) for item in value]
+    return value
 
 
 def atomic_write_json(path: str | Path, value: Any) -> None:
@@ -33,6 +53,9 @@ class Artifact:
     contains_user_data: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _freeze_json(self.metadata))
+
     @classmethod
     def from_file(
         cls,
@@ -43,10 +66,12 @@ class Artifact:
         license_id: str = "",
     ) -> "Artifact":
         resolved = Path(path).resolve()
+        with resolved.open("rb") as handle:
+            sha256 = hashlib.file_digest(handle, "sha256").hexdigest()
         return cls(
             type=artifact_type,
             path=str(resolved),
-            sha256=hashlib.sha256(resolved.read_bytes()).hexdigest(),
+            sha256=sha256,
             source=source,
             license=license_id,
             provider=provider,
@@ -61,7 +86,7 @@ class Artifact:
             "license": self.license,
             "provider": self.provider,
             "containsUserData": self.contains_user_data,
-            "metadata": self.metadata,
+            "metadata": _thaw_json(self.metadata),
         }
 
     @classmethod
@@ -87,6 +112,11 @@ class StageResult:
     error_code: str = ""
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "artifacts", tuple(self.artifacts))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(self, "diagnostics", _freeze_json(self.diagnostics))
+
     @classmethod
     def ready(
         cls,
@@ -108,7 +138,7 @@ class StageResult:
             "artifacts": [artifact.to_dict() for artifact in self.artifacts],
             "warnings": list(self.warnings),
             "errorCode": self.error_code,
-            "diagnostics": self.diagnostics,
+            "diagnostics": _thaw_json(self.diagnostics),
         }
 
     @classmethod
@@ -143,6 +173,13 @@ class MediaJob:
     capture_plan_path: str
     presenter: str = "none"
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "target_platforms", tuple(self.target_platforms))
+        object.__setattr__(self, "aspect_ratios", tuple(self.aspect_ratios))
+        object.__setattr__(self, "duration_range", tuple(self.duration_range))
+        object.__setattr__(self, "providers", _freeze_json(self.providers))
+        object.__setattr__(self, "brand_assets", tuple(self.brand_assets))
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "runId": self.run_id,
@@ -153,7 +190,7 @@ class MediaJob:
             "qualityTarget": self.quality_target,
             "aspectRatios": list(self.aspect_ratios),
             "durationRange": list(self.duration_range),
-            "providers": self.providers,
+            "providers": _thaw_json(self.providers),
             "allowCloudMedia": self.allow_cloud_media,
             "productDataPath": self.product_data_path,
             "brandAssets": list(self.brand_assets),

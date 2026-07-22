@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from dataclasses import fields
+from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -628,6 +628,54 @@ class RuntimeSetupTest(unittest.TestCase):
 
 
 class PathContractTest(unittest.TestCase):
+    def test_artifact_and_stage_result_freeze_nested_json_and_thaw_copies(self):
+        metadata = {"origin": {"tags": ["capture"]}}
+        artifact = Artifact(
+            type="product_capture_image",
+            path="C:/captures/product.png",
+            sha256="a" * 64,
+            source="user-authorized",
+            license="owned",
+            provider="playwright",
+            metadata=metadata,
+        )
+        stage_payload = {
+            "status": "ready",
+            "provider": "playwright",
+            "artifacts": [artifact.to_dict()],
+            "warnings": ["reviewed"],
+            "errorCode": "",
+            "diagnostics": {"steps": [{"name": "capture"}]},
+        }
+        result = StageResult.from_dict(stage_payload)
+
+        metadata["origin"]["tags"].append("mutated-input")
+        stage_payload["diagnostics"]["steps"][0]["name"] = "mutated-input"
+        self.assertEqual(artifact.metadata["origin"]["tags"], ("capture",))
+        self.assertEqual(result.diagnostics["steps"][0]["name"], "capture")
+        self.assertIsInstance(result.artifacts, tuple)
+        self.assertIsInstance(result.warnings, tuple)
+
+        artifact_payload = artifact.to_dict()
+        result_payload = result.to_dict()
+        artifact_payload["metadata"]["origin"]["tags"].append("mutated-output")
+        result_payload["diagnostics"]["steps"][0]["name"] = "mutated-output"
+        self.assertEqual(artifact.metadata["origin"]["tags"], ("capture",))
+        self.assertEqual(result.diagnostics["steps"][0]["name"], "capture")
+        self.assertIsInstance(artifact_payload["metadata"]["origin"]["tags"], list)
+
+        with self.assertRaises(TypeError):
+            artifact.metadata["new"] = "value"
+        with self.assertRaises(FrozenInstanceError):
+            artifact.metadata = {}
+        with self.assertRaises(TypeError):
+            result.diagnostics["new"] = "value"
+        with self.assertRaises(FrozenInstanceError):
+            result.diagnostics = {}
+
+        self.assertEqual(Artifact.from_dict(artifact.to_dict()), artifact)
+        self.assertEqual(StageResult.from_dict(result.to_dict()), result)
+
     def test_atomic_write_json_preserves_valid_file_after_write_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             destination = Path(temp) / "job.json"
@@ -660,22 +708,30 @@ class PathContractTest(unittest.TestCase):
             self.assertFalse(destination.with_suffix(".json.tmp").exists())
 
     def test_media_job_uses_camel_case_json_and_preserves_tuples(self):
+        providers = {"capture": "playwright", "voice": "kokoro"}
         job = MediaJob(
             run_id="20260723-120000-enhe-api",
             product_name="ENHE API",
             source_url="https://example.com/enhe",
             language="zh-CN",
-            target_platforms=("douyin", "xiaohongshu"),
+            target_platforms=["douyin", "xiaohongshu"],
             quality_target="professional",
-            aspect_ratios=("9:16", "1:1"),
-            duration_range=(30, 60),
-            providers={"capture": "playwright", "voice": "kokoro"},
+            aspect_ratios=["9:16", "1:1"],
+            duration_range=[30, 60],
+            providers=providers,
             allow_cloud_media=False,
             product_data_path="source-assets_源素材/product.json",
-            brand_assets=("logo.png", "palette.json"),
+            brand_assets=["logo.png", "palette.json"],
             generated_content_path="generated-content_生成内容/content.json",
             capture_plan_path="product-captures_产品录屏/plan.json",
         )
+
+        providers["capture"] = "mutated-input"
+        self.assertEqual(job.providers["capture"], "playwright")
+        self.assertIsInstance(job.target_platforms, tuple)
+        self.assertIsInstance(job.aspect_ratios, tuple)
+        self.assertIsInstance(job.duration_range, tuple)
+        self.assertIsInstance(job.brand_assets, tuple)
 
         payload = job.to_dict()
 
@@ -719,21 +775,32 @@ class PathContractTest(unittest.TestCase):
                 "presenter": "none",
             },
         )
-        self.assertEqual(MediaJob.from_dict(payload), job)
-        self.assertIsInstance(MediaJob.from_dict(payload).target_platforms, tuple)
-        self.assertIsInstance(MediaJob.from_dict(payload).providers, dict)
+        round_trip = MediaJob.from_dict(payload)
+        self.assertEqual(round_trip, job)
+        payload["providers"]["capture"] = "mutated-output"
+        self.assertEqual(job.providers["capture"], "playwright")
+        self.assertEqual(round_trip.providers["capture"], "playwright")
+        with self.assertRaises(TypeError):
+            job.providers["capture"] = "mutated-item"
+        with self.assertRaises(FrozenInstanceError):
+            job.providers = {}
 
     def test_artifact_and_ready_stage_result_round_trip(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "capture.png"
             source.write_bytes(b"capture")
 
-            artifact = Artifact.from_file(
-                "product_capture_image",
-                source,
-                "playwright",
-                "user-authorized",
-            )
+            with mock.patch.object(
+                Path,
+                "read_bytes",
+                side_effect=AssertionError("Artifact hashing must stream the file"),
+            ):
+                artifact = Artifact.from_file(
+                    "product_capture_image",
+                    source,
+                    "playwright",
+                    "user-authorized",
+                )
             result = StageResult.ready(
                 "playwright", [artifact], diagnostics={"captureCount": 1}
             )
@@ -769,6 +836,50 @@ class PathContractTest(unittest.TestCase):
             )
             self.assertEqual(StageResult.from_dict(payload), result)
 
+    def test_chinese_products_get_distinct_stable_slugged_roots(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output_root = Path(temp)
+            first = new_run_paths(
+                output_root, "产品甲", now="20260723-120000"
+            )
+            second = new_run_paths(
+                output_root, "产品乙", now="20260723-120000"
+            )
+
+            self.assertNotEqual(first.root, second.root)
+            self.assertRegex(
+                first.root.name,
+                r"^20260723-120000-product-[0-9a-f]{8}$",
+            )
+            self.assertRegex(
+                second.root.name,
+                r"^20260723-120000-product-[0-9a-f]{8}$",
+            )
+            self.assertEqual(slugify("产品甲"), "product-8547c721")
+            self.assertEqual(slugify("产品乙"), "product-bf689d1d")
+
+    def test_existing_run_root_gets_next_sequence_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output_root = Path(temp)
+            first = new_run_paths(
+                output_root, "中文产品", now="20260723-120000"
+            ).create()
+            sentinel = first.root / "existing.txt"
+            sentinel.write_text("keep", encoding="utf-8")
+
+            second = new_run_paths(
+                output_root, "中文产品", now="20260723-120000"
+            )
+            self.assertEqual(second.root.name, f"{first.root.name}-002")
+            second.create()
+            third = new_run_paths(
+                output_root, "中文产品", now="20260723-120000"
+            )
+
+            self.assertEqual(third.root.name, f"{first.root.name}-003")
+            self.assertNotEqual(first.root, second.root)
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
     def test_new_run_paths_uses_bilingual_layout(self):
         paths = new_run_paths(
             Path("C:/work/promotion-output_推广输出"),
@@ -779,7 +890,7 @@ class PathContractTest(unittest.TestCase):
         self.assertEqual(DEFAULT_OUTPUT_ROOT, Path("promotion-output_推广输出"))
         self.assertEqual(RUNS_DIR, "runs_运行记录")
         self.assertEqual(slugify("ENHE API"), "enhe-api")
-        self.assertEqual(slugify("中文"), "product")
+        self.assertRegex(slugify("中文"), r"^product-[0-9a-f]{8}$")
         self.assertEqual(paths.root.parent.name, RUNS_DIR)
         self.assertEqual(paths.root.name, "20260723-120000-enhe-api")
         self.assertEqual(

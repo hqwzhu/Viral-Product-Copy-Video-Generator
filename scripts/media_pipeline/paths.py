@@ -1,4 +1,6 @@
+import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass, fields
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +11,12 @@ RUNS_DIR = "runs_运行记录"
 
 
 def slugify(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "product"
+    normalized = unicodedata.normalize("NFKC", value).strip().casefold()
+    ascii_slug = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
+    if ascii_slug:
+        return ascii_slug
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]
+    return f"product-{digest}"
 
 
 @dataclass(frozen=True)
@@ -37,7 +44,12 @@ def new_run_paths(
     output_root: Path, product: str, now: str | None = None
 ) -> RunPaths:
     timestamp = now or datetime.now().strftime("%Y%m%d-%H%M%S")
-    root = output_root / RUNS_DIR / f"{timestamp}-{slugify(product)}"
+    base_root = output_root / RUNS_DIR / f"{timestamp}-{slugify(product)}"
+    root = base_root
+    sequence = 2
+    while root.exists():
+        root = base_root.with_name(f"{base_root.name}-{sequence:03d}")
+        sequence += 1
     return RunPaths(
         root=root,
         source_assets=root / "source-assets_源素材",
