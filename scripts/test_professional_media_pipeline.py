@@ -7,9 +7,25 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import fields
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from scripts.media_pipeline.contracts import (
+    Artifact,
+    MediaJob,
+    StageResult,
+    atomic_write_json,
+)
+from scripts.media_pipeline.paths import (
+    DEFAULT_OUTPUT_ROOT,
+    RUNS_DIR,
+    RunPaths,
+    find_existing,
+    new_run_paths,
+    slugify,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -609,6 +625,204 @@ class RuntimeSetupTest(unittest.TestCase):
         )
 
         self.assertFalse(self.setup.check_runtime(runtime_root)["installed"]["flux"])
+
+
+class PathContractTest(unittest.TestCase):
+    def test_atomic_write_json_preserves_valid_file_after_write_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "job.json"
+            destination.write_text('{"status": "valid"}\n', encoding="utf-8")
+            unrelated = Path(temp) / "unrelated.tmp"
+            unrelated.write_text("keep", encoding="utf-8")
+
+            with self.assertRaises(TypeError):
+                atomic_write_json(destination, {"invalid": object()})
+
+            self.assertEqual(
+                destination.read_text(encoding="utf-8"),
+                '{"status": "valid"}\n',
+            )
+            self.assertFalse(destination.with_suffix(".json.tmp").exists())
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep")
+
+    def test_atomic_write_json_preserves_unicode_and_replaces_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "nested" / "job.json"
+
+            atomic_write_json(destination, {"标题": "产品录屏", "version": 1})
+            atomic_write_json(destination, {"标题": "专业视频", "version": 2})
+
+            text = destination.read_text(encoding="utf-8")
+            self.assertIn("专业视频", text)
+            self.assertNotIn("产品录屏", text)
+            self.assertTrue(text.endswith("\n"))
+            self.assertEqual(json.loads(text), {"标题": "专业视频", "version": 2})
+            self.assertFalse(destination.with_suffix(".json.tmp").exists())
+
+    def test_media_job_uses_camel_case_json_and_preserves_tuples(self):
+        job = MediaJob(
+            run_id="20260723-120000-enhe-api",
+            product_name="ENHE API",
+            source_url="https://example.com/enhe",
+            language="zh-CN",
+            target_platforms=("douyin", "xiaohongshu"),
+            quality_target="professional",
+            aspect_ratios=("9:16", "1:1"),
+            duration_range=(30, 60),
+            providers={"capture": "playwright", "voice": "kokoro"},
+            allow_cloud_media=False,
+            product_data_path="source-assets_源素材/product.json",
+            brand_assets=("logo.png", "palette.json"),
+            generated_content_path="generated-content_生成内容/content.json",
+            capture_plan_path="product-captures_产品录屏/plan.json",
+        )
+
+        payload = job.to_dict()
+
+        self.assertEqual(
+            tuple(field.name for field in fields(MediaJob)),
+            (
+                "run_id",
+                "product_name",
+                "source_url",
+                "language",
+                "target_platforms",
+                "quality_target",
+                "aspect_ratios",
+                "duration_range",
+                "providers",
+                "allow_cloud_media",
+                "product_data_path",
+                "brand_assets",
+                "generated_content_path",
+                "capture_plan_path",
+                "presenter",
+            ),
+        )
+        self.assertEqual(
+            payload,
+            {
+                "runId": "20260723-120000-enhe-api",
+                "productName": "ENHE API",
+                "sourceUrl": "https://example.com/enhe",
+                "language": "zh-CN",
+                "targetPlatforms": ["douyin", "xiaohongshu"],
+                "qualityTarget": "professional",
+                "aspectRatios": ["9:16", "1:1"],
+                "durationRange": [30, 60],
+                "providers": {"capture": "playwright", "voice": "kokoro"},
+                "allowCloudMedia": False,
+                "productDataPath": "source-assets_源素材/product.json",
+                "brandAssets": ["logo.png", "palette.json"],
+                "generatedContentPath": "generated-content_生成内容/content.json",
+                "capturePlanPath": "product-captures_产品录屏/plan.json",
+                "presenter": "none",
+            },
+        )
+        self.assertEqual(MediaJob.from_dict(payload), job)
+        self.assertIsInstance(MediaJob.from_dict(payload).target_platforms, tuple)
+        self.assertIsInstance(MediaJob.from_dict(payload).providers, dict)
+
+    def test_artifact_and_ready_stage_result_round_trip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "capture.png"
+            source.write_bytes(b"captured product pixels")
+
+            artifact = Artifact.from_file(
+                "product_capture_image",
+                source,
+                "playwright",
+                "user-authorized",
+            )
+            result = StageResult.ready(
+                "playwright", [artifact], diagnostics={"captureCount": 1}
+            )
+            payload = result.to_dict()
+
+            self.assertEqual(len(artifact.sha256), 64)
+            self.assertEqual(artifact.path, str(source.resolve()))
+            self.assertEqual(
+                payload,
+                {
+                    "status": "ready",
+                    "provider": "playwright",
+                    "artifacts": [
+                        {
+                            "type": "product_capture_image",
+                            "path": str(source.resolve()),
+                            "sha256": artifact.sha256,
+                            "source": "user-authorized",
+                            "license": "",
+                            "provider": "playwright",
+                            "containsUserData": False,
+                            "metadata": {},
+                        }
+                    ],
+                    "warnings": [],
+                    "errorCode": "",
+                    "diagnostics": {"captureCount": 1},
+                },
+            )
+            self.assertEqual(StageResult.from_dict(payload), result)
+
+    def test_new_run_paths_uses_bilingual_layout(self):
+        paths = new_run_paths(
+            Path("C:/work/promotion-output_推广输出"),
+            "ENHE API",
+            now="20260723-120000",
+        )
+
+        self.assertEqual(DEFAULT_OUTPUT_ROOT, Path("promotion-output_推广输出"))
+        self.assertEqual(RUNS_DIR, "runs_运行记录")
+        self.assertEqual(slugify("ENHE API"), "enhe-api")
+        self.assertEqual(slugify("中文"), "product")
+        self.assertEqual(paths.root.parent.name, RUNS_DIR)
+        self.assertEqual(paths.root.name, "20260723-120000-enhe-api")
+        self.assertEqual(paths.captures.name, "product-captures_产品录屏")
+        self.assertEqual(paths.reports.name, "reports_报告")
+        self.assertNotIn(
+            "promotion-output/product-batch-runs", paths.root.as_posix()
+        )
+
+    def test_create_builds_every_directory_and_find_existing_prefers_new(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = new_run_paths(root, "ENHE API", now="20260723-120000")
+
+            returned = paths.create()
+
+            self.assertIs(returned, paths)
+            self.assertEqual(
+                tuple(field.name for field in fields(RunPaths)),
+                (
+                    "root",
+                    "source_assets",
+                    "captures",
+                    "generated_content",
+                    "voiceovers",
+                    "b_roll",
+                    "ai_scenes",
+                    "videos",
+                    "covers",
+                    "detail_images",
+                    "publish_packs",
+                    "reports",
+                ),
+            )
+            self.assertTrue(
+                all(
+                    getattr(paths, field.name).is_dir()
+                    for field in fields(RunPaths)
+                )
+            )
+
+            new = root / "new"
+            legacy = root / "legacy"
+            self.assertEqual(find_existing(new, legacy), new)
+            legacy.mkdir()
+            self.assertEqual(find_existing(new, legacy), legacy)
+            new.mkdir()
+            self.assertEqual(find_existing(new, legacy), new)
 
 
 if __name__ == "__main__":
