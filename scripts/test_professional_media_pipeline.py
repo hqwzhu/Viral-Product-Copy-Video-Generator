@@ -2243,5 +2243,214 @@ class ProductCaptureTest(unittest.TestCase):
                 self.assertEqual(final_url.fragment, "")
 
 
+class CommercialVisualTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        from PIL import Image, ImageDraw
+
+        self.background = self.root / "ai-background.png"
+        self.capture = self.root / "product-capture.png"
+        self.logo = self.root / "brand-logo.png"
+        Image.new("RGB", (1200, 1200), (34, 62, 118)).save(self.background)
+        capture = Image.new("RGB", (800, 500), (245, 246, 250))
+        draw = ImageDraw.Draw(capture)
+        draw.rectangle((50, 40, 750, 105), fill=(29, 78, 216))
+        draw.text((80, 60), "REAL PRODUCT CAPTURE", fill="white")
+        draw.rectangle((75, 145, 725, 430), outline=(16, 185, 129), width=12)
+        capture.save(self.capture)
+        Image.new("RGBA", (200, 100), (239, 68, 68, 255)).save(self.logo)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_xiaohongshu_render_is_ready_with_product_provenance(self):
+        visuals = importlib.import_module("scripts.media_pipeline.visuals")
+        result = visuals.CommercialVisualCompositor().render(
+            platform="xiaohongshu",
+            title="把产品网页变成推广素材",
+            subtitle="真实录屏 · 有声视频 · 商业视觉",
+            background=self.background,
+            product_capture=self.capture,
+            logo=self.logo,
+            out_dir=self.root / "outputs",
+            background_source={"provider": "local-internal", "source": "test-fixture", "license": "fixture-license"},
+        )
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.provider, "local_compositor")
+        self.assertGreaterEqual(len(result.artifacts), 5)
+        cover = next(a for a in result.artifacts if a.type == "cover_image")
+        with self.subTest(cover=cover.path):
+            from PIL import Image, ImageStat
+
+            with Image.open(cover.path) as cover_image:
+                self.assertEqual(cover_image.size, (1080, 1440))
+                self.assertEqual(cover_image.format, "PNG")
+                self.assertTrue(Path(cover.path).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+                # The central product frame contains source pixels, rather than
+                # a generated dashboard/card substitute.
+                frame_stats = ImageStat.Stat(cover_image.crop((100, 650, 980, 1250)))
+                self.assertGreater(max(frame_stats.stddev), 8.0)
+        contact = next(a for a in result.artifacts if a.type == "contact_sheet")
+        self.assertEqual(contact.metadata["count"], 4)
+        self.assertEqual(contact.metadata["platforms"], ("xiaohongshu",))
+        expected_hash = hashlib.sha256(self.capture.read_bytes()).hexdigest()
+        for artifact in result.artifacts:
+            if artifact.type in {"cover_image", "detail_image"}:
+                metadata = artifact.to_dict()["metadata"]
+                self.assertTrue(metadata["containsProductCapture"])
+                self.assertEqual(metadata["productCaptureSha256"], expected_hash)
+                self.assertTrue(metadata["hasBrand"])
+                self.assertTrue(metadata["usesAiScene"])
+                self.assertEqual(artifact.license, "fixture-license")
+                self.assertEqual(metadata["dimensions"], [1080, 1440])
+                self.assertEqual(metadata["logoSha256"], hashlib.sha256(self.logo.read_bytes()).hexdigest())
+                self.assertIn(metadata["capturePixelMode"], {"native", "resized"})
+                self.assertTrue(metadata["sourcePixelsEmbedded"])
+                self.assertEqual(metadata["productCaptureProvenance"]["source"], "local-input")
+                self.assertEqual(
+                    metadata["aiSceneProvenance"],
+                    {
+                        "provider": "local-internal",
+                        "source": "test-fixture",
+                        "license": "fixture-license",
+                        "sha256": hashlib.sha256(self.background.read_bytes()).hexdigest(),
+                    },
+                )
+                self.assertTrue(
+                    all(
+                        metadata["safeMargins"][side] >= 0.05
+                        for side in ("top", "right", "bottom", "left")
+                    )
+                )
+
+    def test_all_supported_platform_dimensions_and_details(self):
+        visuals = importlib.import_module("scripts.media_pipeline.visuals")
+        expected = {
+            "youtube": (1920, 1080),
+            "zhihu": (1200, 628),
+            "xiaohongshu": (1080, 1440),
+            "douyin": (1080, 1920),
+            "github": (1280, 640),
+        }
+        for platform, dimensions in expected.items():
+            with self.subTest(platform=platform):
+                result = visuals.CommercialVisualCompositor().render(
+                    platform=platform,
+                    title="Product promotion",
+                    subtitle="Local capture",
+                    background=self.background,
+                    product_capture=self.capture,
+                    logo=self.logo,
+                    out_dir=self.root / platform,
+                    background_source={"provider": "local-internal", "source": "test-fixture", "license": "fixture-license"},
+                )
+                self.assertEqual(result.status, "ready")
+                covers = [a for a in result.artifacts if a.type == "cover_image"]
+                details = [a for a in result.artifacts if a.type == "detail_image"]
+                self.assertEqual(len(covers), 1)
+                self.assertGreaterEqual(len(details), 2)
+                from PIL import Image
+
+                with Image.open(covers[0].path) as cover_image:
+                    self.assertEqual(cover_image.size, dimensions)
+                for detail in details:
+                    with Image.open(detail.path) as detail_image:
+                        self.assertEqual(detail_image.size, dimensions)
+                self.assertGreaterEqual(len({a.sha256 for a in details}), 2)
+
+    def test_invalid_input_fails_without_ready_artifacts(self):
+        visuals = importlib.import_module("scripts.media_pipeline.visuals")
+        result = visuals.CommercialVisualCompositor().render(
+            platform="xiaohongshu",
+            title="Title",
+            subtitle="Subtitle",
+            background=self.root / "missing.png",
+            product_capture=self.capture,
+            logo=self.logo,
+            out_dir=self.root / "invalid",
+        )
+        self.assertEqual(result.status, "failed")
+        self.assertFalse(result.artifacts)
+        self.assertTrue(result.error_code)
+
+    def test_missing_or_unlicensed_ai_provenance_fails_closed(self):
+        visuals = importlib.import_module("scripts.media_pipeline.visuals")
+        for provenance in (None, {"provider": "local", "source": "fixture", "license": ""}):
+            with self.subTest(provenance=provenance):
+                result = visuals.CommercialVisualCompositor().render(
+                    platform="xiaohongshu",
+                    title="Title",
+                    subtitle="Subtitle",
+                    background=self.background,
+                    product_capture=self.capture,
+                    logo=self.logo,
+                    out_dir=self.root / "missing-provenance",
+                    background_source=provenance,
+                )
+                self.assertEqual(result.status, "failed")
+                self.assertFalse(result.artifacts)
+                self.assertIn(result.error_code, {"missing_ai_scene_provenance", "invalid_ai_scene_provenance"})
+
+    def test_failed_rerender_removes_stale_compositor_targets(self):
+        visuals = importlib.import_module("scripts.media_pipeline.visuals")
+        output = self.root / "stale-output"
+        provenance = {"provider": "local-internal", "source": "test-fixture", "license": "fixture-license"}
+        compositor = visuals.CommercialVisualCompositor()
+        ready = compositor.render(
+            platform="xiaohongshu",
+            title="Title",
+            subtitle="Subtitle",
+            background=self.background,
+            product_capture=self.capture,
+            logo=self.logo,
+            out_dir=output,
+            background_source=provenance,
+        )
+        self.assertEqual(ready.status, "ready")
+        targets = [
+            output / "xiaohongshu-cover.png",
+            output / "xiaohongshu-detail-01.png",
+            output / "xiaohongshu-detail-02.png",
+            output / "xiaohongshu-detail-03.png",
+            output / "xiaohongshu-contact-sheet.png",
+        ]
+        self.assertTrue(all(path.is_file() for path in targets))
+        original_save = visuals._atomic_save
+        calls = {"count": 0}
+
+        def fail_third(image, path):
+            calls["count"] += 1
+            if calls["count"] == 3:
+                raise RuntimeError("injected_atomic_failure")
+            return original_save(image, path)
+
+        with mock.patch.object(visuals, "_atomic_save", side_effect=fail_third):
+            failed = compositor.render(
+                platform="xiaohongshu",
+                title="Title",
+                subtitle="Subtitle",
+                background=self.background,
+                product_capture=self.capture,
+                logo=self.logo,
+                out_dir=output,
+                background_source=provenance,
+            )
+        self.assertEqual(failed.status, "failed")
+        self.assertTrue(all(not path.exists() for path in targets))
+
+        missing = compositor.render(
+            platform="xiaohongshu",
+            title="Title",
+            subtitle="Subtitle",
+            background=self.background,
+            product_capture=self.capture,
+            logo=self.logo,
+            out_dir=output,
+        )
+        self.assertEqual(missing.status, "failed")
+        self.assertTrue(all(not path.exists() for path in targets))
+
+
 if __name__ == "__main__":
     unittest.main()
