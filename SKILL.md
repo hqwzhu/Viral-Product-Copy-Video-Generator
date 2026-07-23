@@ -55,10 +55,12 @@ Default one-command workflow:
 ```bash
 python scripts/skill_entry.py \
   --link "https://example.com/product-or-site" \
+  --media-quality professional \
+  --brand-logo "C:\path\to\brand-logo.png" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
   --github-repo owner/repo \
   --business-csv "./orders-and-revenue.csv" \
-  --out-dir "./promotion-output"
+  --out-dir "./promotion-output_推广输出"
 ```
 
 For the Chrome extension operator UI, load `browser-extension/` as an unpacked Manifest V3 extension. It captures the active product tab, estimates subscription credits, stores a license key locally, validates licenses, reserves hosted usage credits before hosted runs, copies or submits hosted run payloads, links to ENHE website traffic pages, and generates safe Codex commands for one-link Skill runs, browser publish sessions, launch unlock packs, real evidence inbox setup/recovery, post-publish performance monitoring, final readiness audits, periodic automation configs, due scheduled runs, and Windows Task Scheduler scripts. To build a Chrome/Edge submission zip, run `scripts/package_browser_extension.py --out-dir "./dist"` and review `docs/extension-store-submission.md`. See `docs/browser-extension.md` and `docs/subscription-pricing.md`.
@@ -231,8 +233,10 @@ Lower-level workflow:
 ```bash
 python scripts/run_promotion_workflow.py \
   --browser-url "https://example.com/product" \
+  --media-quality professional \
+  --brand-logo "C:\path\to\brand-logo.png" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
-  --out-dir "./promotion-output"
+  --out-dir "./promotion-output_推广输出"
 ```
 
 Highest-automation safe runner:
@@ -303,8 +307,10 @@ For static pages or environments without Playwright Chromium, use static HTML in
 ```bash
 python scripts/run_promotion_workflow.py \
   --product-url "https://example.com/product" \
+  --media-quality professional \
+  --brand-logo "C:\path\to\brand-logo.png" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
-  --out-dir "./promotion-output"
+  --out-dir "./promotion-output_推广输出"
 ```
 
 For dynamic pages, Codex can capture the rendered page first and pass a structured snapshot:
@@ -318,8 +324,10 @@ python scripts/browser_snapshot.py \
 ```bash
 python scripts/run_promotion_workflow.py \
   --structured-json "./rendered-product-page.json" \
+  --media-quality professional \
+  --brand-logo "C:\path\to\brand-logo.png" \
   --platforms youtube,zhihu,xiaohongshu,douyin,github \
-  --out-dir "./promotion-output"
+  --out-dir "./promotion-output_推广输出"
 ```
 
 Example:

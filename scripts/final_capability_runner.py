@@ -65,6 +65,7 @@ def main() -> None:
     report["summary"]["finalReadinessStatus"] = readiness_matrix.get("status", "")
     write_report(out_dir, report)
     print(f"Final capability run written to: {(report_dir(out_dir) / 'final-capability-run.json').resolve()}")
+    raise SystemExit(report_exit_code(report))
 
 
 def parse_args() -> argparse.Namespace:
@@ -241,7 +242,7 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
     if args.discovery_allow_localhost:
         command.append("--discovery-allow-localhost")
     append_common_batch_args(command, args)
-    step = run_command("product_batch_runner", command)
+    step = run_command("product_batch_runner", command, check=False)
     steps.append(step)
     report_path = out_dir / "reports/promotion-manager/batch/product-batch-runner.json"
     report = read_json(report_path)
@@ -1061,6 +1062,10 @@ def final_status(
     if batch.get("status") == "ready" and publish_readiness:
         return "partial_ready"
     return "partial_ready"
+
+
+def report_exit_code(report: dict[str, Any]) -> int:
+    return 0 if report.get("status") == "partial_ready" else 1
 
 
 def external_gates() -> list[dict[str, str]]:

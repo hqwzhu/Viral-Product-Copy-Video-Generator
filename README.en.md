@@ -166,8 +166,10 @@ Run the one-link Codex Skill entry:
 ```powershell
 python scripts\skill_entry.py `
   --link "https://example.com/product" `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 Run a website URL and discover product pages from it:
@@ -176,8 +178,10 @@ Run a website URL and discover product pages from it:
 python scripts\skill_entry.py `
   --link "https://example.com" `
   --link-mode site `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 Run the final capability runner directly:

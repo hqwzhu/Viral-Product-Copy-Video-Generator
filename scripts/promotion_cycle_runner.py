@@ -58,6 +58,7 @@ def main() -> None:
     )
     write_cycle_report(out_dir, report)
     print(f"Promotion cycle report written to: {(cycle_dir(out_dir) / 'promotion-cycle.json').resolve()}")
+    raise SystemExit(report_exit_code(report))
 
 
 def parse_args() -> argparse.Namespace:
@@ -573,6 +574,18 @@ def write_cycle_report(out_dir: Path, report: dict[str, Any]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "promotion-cycle.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (directory / "promotion-cycle.md").write_text(render_cycle_markdown(report) + "\n", encoding="utf-8")
+
+
+def report_exit_code(report: dict[str, Any]) -> int:
+    status = str(
+        report.get("status") or report.get("automationStatus") or ""
+    )
+    return (
+        0
+        if status == "waiting_real_data"
+        or status.startswith(("ready", "partial_ready"))
+        else 1
+    )
 
 
 def render_cycle_markdown(report: dict[str, Any]) -> str:

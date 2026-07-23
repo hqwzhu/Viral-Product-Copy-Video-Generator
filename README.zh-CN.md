@@ -52,8 +52,10 @@ python scripts/skill_entry.py `
 ```powershell
 python scripts\skill_entry.py `
   --link "https://example.com/product" `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 当公开产品页无法被本机 Chromium 或静态 HTML 抓取读取时，`product_url_reader.py` 会保存公开网页文本 fallback，并让后续流程通过 `--text-file` 继续运行。若不希望使用第三方公开网页文本读取，可加 `--disable-web-text-fallback`；若 Codex 已经读取并保存网页文本，可传 `--web-text-fallback-file`。
@@ -64,8 +66,10 @@ python scripts\skill_entry.py `
 python scripts\skill_entry.py `
   --link "https://example.com" `
   --link-mode site `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 每个主要阶段完成后，使用 `reports\promotion-manager\final-readiness\final-capability-readiness.md` 做阶段进度报告，汇报当前阶段、已实现目标、未实现目标、下一步计划和预计剩余时间。

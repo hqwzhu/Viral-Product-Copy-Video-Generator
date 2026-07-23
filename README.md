@@ -177,8 +177,10 @@ python -m compileall -q scripts
 ```powershell
 python scripts\skill_entry.py `
   --link "https://example.com/product" `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 如果输入的是网站首页，让系统先发现产品页：
@@ -187,8 +189,10 @@ python scripts\skill_entry.py `
 python scripts\skill_entry.py `
   --link "https://example.com" `
   --link-mode site `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 在 Codex 里也可以直接这样说：

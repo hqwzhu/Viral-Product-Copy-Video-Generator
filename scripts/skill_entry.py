@@ -319,12 +319,12 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
         command.append("--skip-self-evolution-audit")
     command.extend(["--out-dir", str(out_dir)])
 
-    step = run_command("final_capability_runner", command)
+    step = run_command("final_capability_runner", command, check=False)
     steps.append(step)
     report_path = out_dir / "reports/promotion-manager/final-run/final-capability-run.json"
     report = read_json(report_path)
     return {
-        "status": report.get("status", "error") if step["exitCode"] == 0 and report_path.exists() else "error",
+        "status": report.get("status", "error") if report_path.exists() else "error",
         "report": str(report_path) if report_path.exists() else "",
         "summary": report.get("summary", {}) if isinstance(report.get("summary"), dict) else {},
     }
@@ -500,7 +500,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def run_command(name: str, command: list[str]) -> dict[str, Any]:
+def run_command(name: str, command: list[str], check: bool = True) -> dict[str, Any]:
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
     step = {
         "name": name,
@@ -509,7 +509,7 @@ def run_command(name: str, command: list[str]) -> dict[str, Any]:
         "stdoutTail": tail(result.stdout),
         "stderrTail": tail(result.stderr),
     }
-    if result.returncode != 0:
+    if check and result.returncode != 0:
         raise SystemExit(f"{name} failed: {step['stderrTail'] or step['stdoutTail']}")
     return step
 

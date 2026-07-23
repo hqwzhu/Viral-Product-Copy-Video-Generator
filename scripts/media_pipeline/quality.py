@@ -177,7 +177,7 @@ def _contains_sensitive(value: Any, key_path: str = "") -> str | None:
                 userinfo = False
         if (
             "bearer " in lowered
-            or re.search(r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*=", lowered)
+            or re.search(r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*[:=]", lowered)
             or userinfo
             or "leak_" in lowered
             or lowered.startswith(("sk-", "fc-", "ghp_", "xox"))

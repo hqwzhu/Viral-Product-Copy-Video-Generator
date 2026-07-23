@@ -12,6 +12,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from scripts.media_pipeline.paths import RUNS_DIR, new_run_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -22,7 +24,7 @@ VIDEO_PLATFORMS = {"youtube", "xiaohongshu", "douyin", "tiktok"}
 
 def main() -> None:
     args = parse_args()
-    out_dir = Path(args.out_dir)
+    out_dir = resolve_workflow_out_dir(args)
     out_dir.mkdir(parents=True, exist_ok=True)
     steps: list[dict[str, Any]] = []
 
@@ -123,6 +125,41 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_workflow_out_dir(args: argparse.Namespace) -> Path:
+    requested = Path(args.out_dir).expanduser()
+    if (
+        getattr(args, "media_quality", "draft") != "professional"
+        or getattr(args, "skip_video", False)
+        or requested.parent.name == RUNS_DIR
+    ):
+        return requested
+    seed = (
+        str(getattr(args, "product_name", "") or "").strip()
+        or Path(str(getattr(args, "product_url", "") or "")).name
+        or Path(str(getattr(args, "browser_url", "") or "")).name
+        or "product"
+    )
+    return new_run_paths(requested, seed).root
+
+
+def generated_content_dir(args: argparse.Namespace, out_dir: Path) -> Path:
+    if (
+        getattr(args, "media_quality", "draft") == "professional"
+        and not getattr(args, "skip_video", False)
+    ):
+        return out_dir / "generated-content_生成内容"
+    return out_dir / "reports/promotion-manager/generated-content"
+
+
+def publish_pack_dir(args: argparse.Namespace, out_dir: Path) -> Path:
+    if (
+        getattr(args, "media_quality", "draft") == "professional"
+        and not getattr(args, "skip_video", False)
+    ):
+        return out_dir / "publish-packs_发布包"
+    return out_dir / "reports/promotion-manager/publish-packs"
+
+
 def run_product_intake(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
     intake_dir = out_dir / "intake"
     command = [sys.executable, str(SCRIPTS / "product_intake.py"), "--out-dir", str(intake_dir)]
@@ -211,6 +248,15 @@ def run_promotion_manager(args: argparse.Namespace, product: dict[str, Any], out
         "--out-dir",
         str(out_dir),
     ]
+    if args.media_quality == "professional" and not args.skip_video:
+        command.extend(
+            [
+                "--generated-content-dir",
+                str(generated_content_dir(args, out_dir)),
+                "--publish-pack-dir",
+                str(publish_pack_dir(args, out_dir)),
+            ]
+        )
     steps.append(run_command("promotion_manager_all", command))
 
 
@@ -535,7 +581,7 @@ def run_competitor_content_enhancer(
     if args.skip_competitor_informed_content:
         return {"status": "skipped", "reason": "--skip-competitor-informed-content was supplied."}
 
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
     if not content_json.exists():
         return {"status": "blocked", "reason": f"Generated content JSON not found: {content_json}"}
 
@@ -546,7 +592,7 @@ def run_competitor_content_enhancer(
     if not viral_path and not deep_path:
         return {"status": "skipped", "reason": "No viral or deep competitor library was available."}
 
-    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     command = [
         sys.executable,
         str(SCRIPTS / "competitor_content_enhancer.py"),
@@ -566,9 +612,9 @@ def run_competitor_content_enhancer(
     step = run_command("competitor_content_enhancer", command, check=False)
     steps.append(step)
     slug = content_json.stem.replace("-platform-content", "") or "product"
-    content_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.json"
-    markdown_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.md"
-    strategy_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-strategy.json"
+    content_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-content.json"
+    markdown_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-content.md"
+    strategy_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-strategy.json"
     backup_path = content_json.with_suffix(".base.json")
     status = "ready" if step["exitCode"] == 0 and content_report.exists() and strategy_report.exists() else "error"
     summary: dict[str, Any] = {
@@ -607,7 +653,7 @@ def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path 
 def render_video_artifacts(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if args.skip_video:
         return [{"status": "skipped", "reason": "--skip-video was supplied."}]
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
     if not content_json.exists():
         return [{"status": "blocked", "reason": f"Generated content JSON not found: {content_json}"}]
     if not shutil.which("ffmpeg"):
@@ -654,8 +700,8 @@ def run_media_asset_pack(
     steps: list[dict[str, Any]],
     videos: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
-    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     if not content_json.exists() or not publish_pack.exists():
         return {
             "status": "blocked",
@@ -706,8 +752,8 @@ def run_professional_media(
             "videos": [],
         }
     slug = slugify(product["name"])
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-platform-content.json"
-    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slug}-publish-pack.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slug}-platform-content.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slug}-publish-pack.json"
     if not content_json.is_file() or not publish_pack.is_file():
         return {
             "status": "blocked",
@@ -865,7 +911,7 @@ def build_manifest(
     steps: list[dict[str, Any]],
     out_dir: Path,
 ) -> dict[str, Any]:
-    publish_packs = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    publish_packs = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     publish_queue = []
     if publish_packs.exists():
         for item in json.loads(publish_packs.read_text(encoding="utf-8")):
@@ -890,7 +936,7 @@ def build_manifest(
         "artifacts": {
             "intakeProfile": str(out_dir / "intake/product-profile.json"),
             "browserSnapshot": str(out_dir / "browser-snapshot/product-page-snapshot.json") if args.browser_url else "",
-            "contentJson": str(out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"),
+            "contentJson": str(generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"),
             "publishPack": str(publish_packs),
             "competitorDiscovery": str(out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"),
             "viralContentLibrary": viral_library.get("library", ""),

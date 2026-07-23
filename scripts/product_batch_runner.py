@@ -35,6 +35,7 @@ def main() -> None:
     report = build_report(args, out_dir, discovery, reader, runs, steps)
     write_report(out_dir, report)
     print(f"Product batch runner report written to: {(batch_dir(out_dir) / 'product-batch-runner.json').resolve()}")
+    raise SystemExit(report_exit_code(report))
 
 
 def parse_args() -> argparse.Namespace:
@@ -625,6 +626,20 @@ def batch_status(runs: list[dict[str, Any]]) -> str:
     if any(status == "ready" for status in cycle_statuses):
         return "partial_ready"
     return "blocked"
+
+
+def report_exit_code(report: dict[str, Any]) -> int:
+    if report.get("status") == "blocked":
+        return 1
+    summary = report.get("summary") or {}
+    failed_keys = (
+        "failedPromotionRuns",
+        "failedPromotionCycles",
+        "blockedPromotionRuns",
+        "failedMultiQueryDiscoveryRuns",
+        "failedNextRoundOptimizationRuns",
+    )
+    return 1 if any(int(summary.get(key) or 0) > 0 for key in failed_keys) else 0
 
 
 def aggregate_multi_query_summaries(runs: list[dict[str, Any]]) -> dict[str, int]:

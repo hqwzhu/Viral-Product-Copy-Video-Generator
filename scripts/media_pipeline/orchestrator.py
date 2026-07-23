@@ -36,7 +36,7 @@ from scripts.media_pipeline.visuals import CommercialVisualCompositor, PLATFORM_
 STAGES = ("capture", "voiceover", "scenes", "visuals", "video", "quality")
 SCHEMA_VERSION = "1.0"
 _SECRET_VALUE_PATTERN = re.compile(
-    r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*=",
+    r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*[:=]",
     re.IGNORECASE,
 )
 
@@ -322,6 +322,7 @@ class MediaOrchestrator:
             capture_plan = self._validate_job(media_job, root, publish_pack_path)
         except (MediaSecurityError, ValueError, OSError) as exc:
             return self._finish_failed(paths, media_job, "job_validation_failed", str(exc))
+        self._write_authoritative_inputs(media_job, paths, capture_plan)
 
         manifest_path = root / "manifest.json"
         receipt_path = root / "run-receipt.json"
@@ -492,6 +493,21 @@ class MediaOrchestrator:
                 raise ValueError("capture plan sourceUrl must match job source URL")
             capture_plan = plan
         return capture_plan
+
+    def _write_authoritative_inputs(
+        self,
+        job: MediaJob,
+        paths: RunPaths,
+        capture_plan: Mapping[str, Any],
+    ) -> None:
+        atomic_write_json(
+            paths.reports / "media-job.json",
+            redact_secrets(job.to_dict()),
+        )
+        atomic_write_json(
+            paths.reports / "capture-plan.json",
+            redact_secrets(dict(capture_plan)),
+        )
 
     def _load_manifest(self, path: Path) -> dict[str, Any]:
         try:
@@ -734,6 +750,7 @@ class MediaOrchestrator:
             if result.status in {"failed", "skipped"}:
                 return result
             had_degraded = had_degraded or result.status == "degraded"
+            result = self._separate_visual_artifacts(result, paths, platform)
             artifacts.extend(result.artifacts)
             warnings.extend(result.warnings)
         if any(not _safe_path(artifact.path, paths.root).is_file() for artifact in artifacts):
@@ -847,11 +864,61 @@ class MediaOrchestrator:
             raise MediaSecurityError("cloud upload is disabled")
         return result
 
+    def _separate_visual_artifacts(
+        self,
+        result: StageResult,
+        paths: RunPaths,
+        platform: str,
+    ) -> StageResult:
+        separated: list[Artifact] = []
+        detail_root = _safe_path(paths.detail_images / platform, paths.root)
+        detail_root.mkdir(parents=True, exist_ok=True)
+        for artifact in result.artifacts:
+            if artifact.type != "detail_image":
+                separated.append(artifact)
+                continue
+            source = _safe_path(artifact.path, paths.root)
+            destination = _safe_path(detail_root / source.name, paths.root)
+            if source.resolve() != destination.resolve():
+                shutil.move(str(source), str(destination))
+            separated.append(
+                replace(
+                    artifact,
+                    path=str(destination.resolve()),
+                    sha256=_sha256(destination),
+                )
+            )
+        return replace(result, artifacts=tuple(separated))
+
     def _clear_stage_output(self, stage: str, paths: RunPaths) -> None:
-        target = {"capture": paths.captures, "voiceover": paths.voiceovers, "scenes": paths.ai_scenes, "visuals": paths.covers, "video": paths.videos, "quality": paths.reports}[stage]
-        if target.exists():
+        if stage == "quality":
+            (paths.reports / "media-quality-report.json").unlink(missing_ok=True)
+            return
+        primary = {
+            "capture": paths.captures,
+            "voiceover": paths.voiceovers,
+            "scenes": paths.ai_scenes,
+            "visuals": paths.covers,
+            "video": paths.videos,
+        }[stage]
+        targets = (primary, paths.detail_images) if stage == "visuals" else (primary,)
+        for target in targets:
+            if target.parent.resolve() != paths.root.resolve():
+                raise MediaSecurityError("stage output must be a direct child of the run root")
+            is_junction = getattr(target, "is_junction", lambda: False)
+            if target.is_symlink() or is_junction():
+                target.unlink() if target.is_symlink() else target.rmdir()
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            if not target.exists():
+                continue
             for child in target.iterdir():
-                if child.is_dir():
+                child_is_junction = getattr(child, "is_junction", lambda: False)
+                if child.is_symlink():
+                    child.unlink(missing_ok=True)
+                elif child_is_junction():
+                    child.rmdir()
+                elif child.is_dir():
                     shutil.rmtree(child)
                 else:
                     child.unlink(missing_ok=True)
