@@ -222,6 +222,11 @@ def materialize_hyperframes_project(data: Mapping[str, Any], project_dir: str | 
         '<script id="composition-data"></script>',
         f'<script id="composition-data" type="application/json">{payload}</script>',
     )
+    composition_script = (project / "composition.js").read_text(encoding="utf-8")
+    index = index.replace(
+        '<script src="./composition.js"></script>',
+        f"<script>\n{composition_script}\n</script>",
+    )
     (project / "index.html").write_text(index, encoding="utf-8")
     style_path = project / "style.css"
     style = style_path.read_text(encoding="utf-8")
@@ -296,6 +301,25 @@ def probe_media(path: str | Path) -> dict[str, Any]:
             mean_volume = float(line.split("mean_volume:", 1)[1].split("dB", 1)[0].strip())
         elif "max_volume:" in line:
             max_volume = float(line.split("max_volume:", 1)[1].split("dB", 1)[0].strip())
+    visual_frames = _run([
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(video),
+        "-vf",
+        "fps=1/2,scale=160:90:flags=area,format=gray",
+        "-an",
+        "-f",
+        "framemd5",
+        "-",
+    ]).stdout
+    frame_hashes = [
+        line.rsplit(",", 1)[-1].strip()
+        for line in visual_frames.splitlines()
+        if line.strip() and not line.lstrip().startswith("#") and "," in line
+    ]
     width = int(video_stream.get("width", 0) or 0)
     height = int(video_stream.get("height", 0) or 0)
     return {
@@ -310,6 +334,8 @@ def probe_media(path: str | Path) -> dict[str, Any]:
         "nonSilent": mean_volume is not None and mean_volume > -50,
         "videoStreams": sum(item.get("codec_type") == "video" for item in streams),
         "audioStreams": sum(item.get("codec_type") == "audio" for item in streams),
+        "sampledVisualFrames": len(frame_hashes),
+        "distinctVisualFrames": len(set(frame_hashes)),
     }
 
 
@@ -357,6 +383,8 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
         errors.append("audio_silent")
     if int(probe.get("shortEdge", 0) or 0) < 1080:
         errors.append("resolution_below_1080_short_edge")
+    if int(probe.get("sampledVisualFrames", 0) or 0) < 3 or int(probe.get("distinctVisualFrames", 0) or 0) < 3:
+        errors.append("video_visuals_static")
     duration = float(probe.get("duration", 0) or 0)
     target_duration = float(clean.get("duration", 0) or 0)
     if not math.isfinite(duration) or duration <= 0:

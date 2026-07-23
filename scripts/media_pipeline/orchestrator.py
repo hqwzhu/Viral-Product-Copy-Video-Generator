@@ -18,7 +18,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from scripts.media_pipeline.capture import PlaywrightCaptureProvider, build_default_capture_plan
 from scripts.media_pipeline.contracts import (
@@ -185,10 +185,24 @@ def _contains_sensitive_text(value: Any) -> bool:
     if isinstance(value, (list, tuple, set)):
         return any(_contains_sensitive_text(item) for item in value)
     if isinstance(value, str):
-        lowered = value.casefold().replace("\\", "/").replace("_", " ").replace("-", " ")
-        if _SECRET_VALUE_PATTERN.search(value) or "bearer " in lowered:
-            return True
-        return any(token in lowered for token in ("cookie", "local storage", "login data", "user data", "profile lock", "credential", "access token", "refresh token"))
+        current = value
+        for decode_pass in range(9):
+            lowered = current.casefold().replace("\\", "/").replace("_", " ").replace("-", " ")
+            if _SECRET_VALUE_PATTERN.search(current) or "bearer " in lowered:
+                return True
+            if any(token in lowered for token in ("cookie", "local storage", "login data", "user data", "profile lock", "credential", "access token", "refresh token")):
+                return True
+            for key, _ in parse_qsl(urlsplit(current).query, keep_blank_values=True):
+                name = key.casefold().replace("-", "_").replace(" ", "_")
+                if name in {"api_key", "apikey", "access_token", "refresh_token", "authorization", "cookie", "cookies", "password", "secret", "secrets", "credential", "credentials"} or any(marker in name for marker in ("token", "secret", "password", "cookie")):
+                    return True
+            decoded = unquote(current)
+            if decoded == current:
+                return False
+            if decode_pass == 8:
+                return True
+            current = decoded
+        return False
     return False
 
 
@@ -294,7 +308,7 @@ class MediaOrchestrator:
         root = self._prepare_run_root(media_job, output_root, run_dir, resume)
         paths = self._paths_for_root(root).create()
         try:
-            self._validate_job(media_job, root, publish_pack_path)
+            capture_plan = self._validate_job(media_job, root, publish_pack_path)
         except (MediaSecurityError, ValueError, OSError) as exc:
             return self._finish_failed(paths, media_job, "job_validation_failed", str(exc))
 
@@ -316,7 +330,9 @@ class MediaOrchestrator:
                 self._write_state(manifest_path, receipt_path, media_job, paths, records)
                 continue
 
-            input_value = self._stage_inputs(stage, media_job, paths, stages)
+            input_value = self._stage_inputs(
+                stage, media_job, paths, stages, capture_plan
+            )
             input_hash = _fingerprint(input_value)
             resumed = self._resume_result(stage, previous, input_hash, root)
             if resumed is not None:
@@ -327,7 +343,9 @@ class MediaOrchestrator:
 
             self._clear_stage_output(stage, paths)
             try:
-                result = self._execute_stage(stage, media_job, paths, stages)
+                result = self._execute_stage(
+                    stage, media_job, paths, stages, capture_plan
+                )
                 result = self._safe_result(result, root)
             except Exception as exc:  # provider boundaries are fail-closed
                 result = StageResult(status="failed", provider="orchestrator", error_code="stage_exception", diagnostics={"stage": stage, "exceptionType": type(exc).__name__})
@@ -402,7 +420,7 @@ class MediaOrchestrator:
             reports=root / "reports_报告",
         )
 
-    def _validate_job(self, job: MediaJob, root: Path, publish_pack_path: str | Path | None = None) -> None:
+    def _validate_job(self, job: MediaJob, root: Path, publish_pack_path: str | Path | None = None) -> dict[str, Any]:
         _safe_path(root, root)
         for item in (job.product_data_path, job.capture_plan_path, job.generated_content_path, *job.brand_assets, publish_pack_path):
             if item:
@@ -423,7 +441,46 @@ class MediaOrchestrator:
                 raise ValueError("publish pack path must be a file")
         if _contains_sensitive_text(job.source_url):
             raise MediaSecurityError("source URL contains sensitive query data")
+        job_source = urlsplit(job.source_url)
+        if job_source.fragment:
+            raise ValueError("capture source URLs cannot include fragments")
         validate_capture_shot(job.source_url, {"url": job.source_url, "action": "none"}, allow_localhost=self.allow_localhost)
+
+        capture_plan = build_default_capture_plan(job.source_url)
+        if job.capture_plan_path:
+            plan = _load_json(job.capture_plan_path, required=True)
+            plan_url = plan.get("sourceUrl")
+            if not isinstance(plan_url, str) or not plan_url.strip():
+                raise ValueError("capture plan sourceUrl is required")
+            if _contains_sensitive_text(plan_url):
+                raise MediaSecurityError("capture plan source URL contains sensitive query data")
+            validate_capture_shot(
+                job.source_url,
+                {"url": plan_url, "action": "none"},
+                allow_localhost=self.allow_localhost,
+            )
+            plan_source = urlsplit(plan_url)
+            if plan_source.fragment:
+                raise ValueError("capture source URLs cannot include fragments")
+            default_ports = {"http": 80, "https": 443}
+            job_identity = (
+                job_source.scheme.casefold(),
+                (job_source.hostname or "").casefold().rstrip("."),
+                job_source.port or default_ports.get(job_source.scheme.casefold()),
+                job_source.path.rstrip("/") or "/",
+                job_source.query,
+            )
+            plan_identity = (
+                plan_source.scheme.casefold(),
+                (plan_source.hostname or "").casefold().rstrip("."),
+                plan_source.port or default_ports.get(plan_source.scheme.casefold()),
+                plan_source.path.rstrip("/") or "/",
+                plan_source.query,
+            )
+            if plan_identity != job_identity:
+                raise ValueError("capture plan sourceUrl must match job source URL")
+            capture_plan = plan
+        return capture_plan
 
     def _load_manifest(self, path: Path) -> dict[str, Any]:
         try:
@@ -458,7 +515,7 @@ class MediaOrchestrator:
             return None
         return replace(result, diagnostics={**dict(result.diagnostics), "resumed": True})
 
-    def _stage_inputs(self, stage: str, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult]) -> dict[str, Any]:
+    def _stage_inputs(self, stage: str, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], capture_plan: Mapping[str, Any]) -> dict[str, Any]:
         content = self._content(job)
         previous = {
             name: {
@@ -482,8 +539,7 @@ class MediaOrchestrator:
             for name, result in stages.items()
         }
         if stage == "capture":
-            plan = self._capture_plan(job)
-            return {"stage": stage, "plan": plan, "provider": _provider_name(self.capture_provider, stage)}
+            return {"stage": stage, "plan": capture_plan, "provider": _provider_name(self.capture_provider, stage)}
         if stage == "voiceover":
             return {"stage": stage, "text": self._narration(content), "language": job.language, "provider": _provider_name(self.voiceover_provider, stage), "capture": previous.get("capture", [])}
         if stage == "scenes":
@@ -499,10 +555,6 @@ class MediaOrchestrator:
         if not content:
             content = _load_json(job.product_data_path)
         return content
-
-    def _capture_plan(self, job: MediaJob) -> dict[str, Any]:
-        plan = _load_json(job.capture_plan_path)
-        return plan or build_default_capture_plan(job.source_url)
 
     @staticmethod
     def _title(content: Mapping[str, Any], job: MediaJob) -> str:
@@ -520,10 +572,10 @@ class MediaOrchestrator:
     def _scene_prompt(content: Mapping[str, Any]) -> str:
         return str(content.get("scenePrompt") or content.get("scene_prompt") or content.get("visualPrompt") or content.get("title") or "Professional product marketing scene").strip()
 
-    def _execute_stage(self, stage: str, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult]) -> StageResult:
+    def _execute_stage(self, stage: str, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], capture_plan: Mapping[str, Any]) -> StageResult:
         content = self._content(job)
         if stage == "capture":
-            return self.capture_provider.capture(self._capture_plan(job), paths.captures)
+            return self.capture_provider.capture(capture_plan, paths.captures)
         if stage == "voiceover":
             if self.voiceover_provider is None:
                 return StageResult(status="failed", provider="orchestrator", error_code="voiceover_provider_not_configured")

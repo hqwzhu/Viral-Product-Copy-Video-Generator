@@ -29,6 +29,7 @@ def build_default_capture_plan(source_url: str) -> dict[str, Any]:
                 "selector": "#hero",
                 "action": "none",
                 "viewport": [1440, 900],
+                "screenshotMode": "viewport",
                 "duration": 3,
             },
             {
@@ -37,6 +38,7 @@ def build_default_capture_plan(source_url: str) -> dict[str, Any]:
                 "selector": "#workflow",
                 "action": "scroll",
                 "viewport": [1440, 900],
+                "screenshotMode": "viewport",
                 "duration": 4,
             },
             {
@@ -45,6 +47,7 @@ def build_default_capture_plan(source_url: str) -> dict[str, Any]:
                 "selector": "#features",
                 "action": "scroll",
                 "viewport": [1440, 900],
+                "screenshotMode": "viewport",
                 "duration": 4,
             },
             {
@@ -53,6 +56,7 @@ def build_default_capture_plan(source_url: str) -> dict[str, Any]:
                 "selector": "#proof",
                 "action": "scroll",
                 "viewport": [1440, 900],
+                "screenshotMode": "viewport",
                 "duration": 3,
             },
             {
@@ -61,6 +65,7 @@ def build_default_capture_plan(source_url: str) -> dict[str, Any]:
                 "selector": "#cta",
                 "action": "scroll",
                 "viewport": [1440, 900],
+                "screenshotMode": "viewport",
                 "duration": 3,
             },
         ],
@@ -117,6 +122,11 @@ def _validate_plan(
         duration = shot.get("duration")
         if not _positive_int(duration):
             raise MediaSecurityError("Capture shot duration must be a positive integer")
+        screenshot_mode = shot.get("screenshotMode", "element")
+        if screenshot_mode not in {"element", "viewport"}:
+            raise MediaSecurityError(
+                "Capture shot screenshotMode must be element or viewport"
+            )
         validated.append(dict(shot))
 
     return source_url, tuple(validated)
@@ -259,7 +269,11 @@ class PlaywrightCaptureProvider:
 
                 _validate_final_url(source_url, page.url, self.allow_localhost)
                 image_path = output_dir / f"{shot_id}.png"
-                locator.screenshot(path=str(image_path))
+                screenshot_mode = shot.get("screenshotMode", "element")
+                if screenshot_mode == "viewport":
+                    page.screenshot(path=str(image_path), full_page=False)
+                else:
+                    locator.screenshot(path=str(image_path))
                 artifact = Artifact.from_file(
                     "product_capture_image",
                     image_path,
@@ -278,6 +292,7 @@ class PlaywrightCaptureProvider:
                             != requested_selector,
                             "finalUrl": _safe_metadata_url(page.url),
                             "viewport": viewport,
+                            "screenshotMode": screenshot_mode,
                             "action": action,
                             "duration": shot["duration"],
                         },

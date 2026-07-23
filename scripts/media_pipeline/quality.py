@@ -54,6 +54,7 @@ PROFESSIONAL_CHECKS = (
     "captions_synced",
     "short_edge_1080",
     "h264_aac",
+    "visual_frames_distinct",
     "ai_photographic_scene",
     "commercial_cover",
     "commercial_details",
@@ -104,6 +105,7 @@ _VIDEO_TYPES = {
     "professional_product_demo_video",
     "video",
 }
+_FINAL_VIDEO_TYPES = {"professional_product_demo_video", "video"}
 _IMAGE_TYPES = {
     "product_capture_image",
     "ai_scene_image",
@@ -287,6 +289,14 @@ def _check_evidence(evidence: Mapping[str, Any], name: str) -> tuple[bool, Any, 
         return value >= 1080, value, "video_resolution_too_small"
     if name == "h264_aac":
         return str(probe.get("videoCodec", "")).casefold() == "h264" and str(probe.get("audioCodec", "")).casefold() == "aac", _safe_report_value(dict(probe)), "video_codec_mismatch"
+    if name == "visual_frames_distinct":
+        try:
+            sampled = int(probe.get("sampledVisualFrames", 0) or 0)
+            distinct = int(probe.get("distinctVisualFrames", 0) or 0)
+        except (TypeError, ValueError):
+            sampled = 0
+            distinct = 0
+        return sampled >= 3 and distinct >= 3, {"sampled": sampled, "distinct": distinct}, "video_visuals_static"
     if name == "ai_photographic_scene":
         return any(_bool_metadata(item, "aiGenerated") for item in ai_scenes), len(ai_scenes), "ai_photographic_scene_missing"
     if name == "commercial_cover":
@@ -488,22 +498,34 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
             codec_ok = str(probe.get("videoCodec", "")).casefold() == "h264" and str(probe.get("audioCodec", "")).casefold() == "aac"
             duration = float(probe.get("duration", 0) or 0)
             duration_ok = math.isfinite(duration) and duration > 0
-            short_edge_ok = int(probe.get("shortEdge", 0) or 0) >= 1080
-            non_silent_ok = probe.get("nonSilent") is True
-            checks.extend([
-                _check("video_codec", codec_ok, details={"video": probe.get("videoCodec"), "audio": probe.get("audioCodec")}, blocker="video_codec_mismatch"),
-                _check("video_duration", duration_ok, details=duration, blocker="video_duration_invalid"),
-                _check("video_resolution", short_edge_ok, details=probe.get("shortEdge"), blocker="video_resolution_too_small"),
-                _check("video_non_silent", non_silent_ok, details=probe.get("nonSilent"), blocker="video_silent"),
-            ])
-            if not codec_ok:
-                failures.append("video_codec_mismatch")
+            checks.append(
+                _check(
+                    "video_duration",
+                    duration_ok,
+                    details=duration,
+                    blocker="video_duration_invalid",
+                )
+            )
             if not duration_ok:
                 failures.append("video_duration_invalid")
-            if not short_edge_ok:
-                failures.append("video_resolution_too_small")
-            if not non_silent_ok:
-                failures.append("video_silent")
+            if artifact_type in _FINAL_VIDEO_TYPES:
+                short_edge_ok = int(probe.get("shortEdge", 0) or 0) >= 1080
+                non_silent_ok = probe.get("nonSilent") is True
+                visual_activity_ok = int(probe.get("sampledVisualFrames", 0) or 0) >= 3 and int(probe.get("distinctVisualFrames", 0) or 0) >= 3
+                checks.extend([
+                    _check("video_codec", codec_ok, details={"video": probe.get("videoCodec"), "audio": probe.get("audioCodec")}, blocker="video_codec_mismatch"),
+                    _check("video_resolution", short_edge_ok, details=probe.get("shortEdge"), blocker="video_resolution_too_small"),
+                    _check("video_non_silent", non_silent_ok, details=probe.get("nonSilent"), blocker="video_silent"),
+                    _check("video_visual_activity", visual_activity_ok, details={"sampled": probe.get("sampledVisualFrames"), "distinct": probe.get("distinctVisualFrames")}, blocker="video_visuals_static"),
+                ])
+                if not codec_ok:
+                    failures.append("video_codec_mismatch")
+                if not short_edge_ok:
+                    failures.append("video_resolution_too_small")
+                if not non_silent_ok:
+                    failures.append("video_silent")
+                if not visual_activity_ok:
+                    failures.append("video_visuals_static")
         except Exception as exc:
             safe_error = _safe_report_value(str(exc))
             diagnostics["probeError"] = safe_error
@@ -582,7 +604,7 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
 def _family_for_type(artifact_type: str) -> str | None:
     if artifact_type == "product_capture_image":
         return "productCaptures"
-    if artifact_type in {"professional_product_demo_video", "product_capture_video", "video"}:
+    if artifact_type in _FINAL_VIDEO_TYPES:
         return "videos"
     if artifact_type == "voiceover_audio":
         return "voiceovers"
@@ -618,7 +640,7 @@ def _artifact_summary(value: Mapping[str, Any], inspection: Mapping[str, Any]) -
         "passed": bool(inspection.get("passed")),
         "failures": failures,
     }
-    for key in ("aiGenerated", "shotId", "shotIds", "motionTypes", "captionCount", "containsProductCapture", "hasBrand", "usesAiScene", "dimensions", "safeMargins", "cloudUpload"):
+    for key in ("aiGenerated", "shotId", "shotIds", "motionTypes", "captionCount", "containsProductCapture", "hasBrand", "usesAiScene", "dimensions", "safeMargins", "screenshotMode", "cloudUpload"):
         if key in metadata:
             summary[key] = _safe_report_value(metadata[key])
     if "probe" in inspection.get("diagnostics", {}):

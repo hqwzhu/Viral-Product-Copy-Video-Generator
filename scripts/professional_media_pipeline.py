@@ -29,6 +29,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--content-json", required=True, help="Generated bilingual content JSON.")
     parser.add_argument("--publish-pack", default="", help="Optional publish-pack JSON to update after a complete run.")
     parser.add_argument("--run-dir", default="", help="Explicit run directory; otherwise the bilingual output root is used.")
+    parser.add_argument("--capture-plan", default="", help="Optional JSON capture plan with selectors for the real product page.")
     parser.add_argument("--language", default="zh-CN", choices=("zh-CN", "en", "en-US"))
     parser.add_argument("--platforms", default="youtube", help="Comma-separated target platforms.")
     parser.add_argument("--brand-logo", action="append", default=[], help="Local brand logo path; may be repeated.")
@@ -58,6 +59,15 @@ def build_job(args: argparse.Namespace) -> MediaJob:
     content = Path(args.content_json).expanduser().resolve()
     if not content.is_file():
         raise FileNotFoundError(content)
+    capture_plan = ""
+    if args.capture_plan:
+        plan_path = Path(args.capture_plan).expanduser().resolve()
+        if not plan_path.is_file():
+            raise FileNotFoundError(plan_path)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        if not isinstance(plan, dict):
+            raise ValueError("capture plan JSON must contain an object")
+        capture_plan = str(plan_path)
     platforms = _platforms(args.platforms)
     run_id = Path(args.run_dir).expanduser().name if args.run_dir else datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return MediaJob(
@@ -74,7 +84,7 @@ def build_job(args: argparse.Namespace) -> MediaJob:
         product_data_path=str(content),
         brand_assets=tuple(Path(item).expanduser().resolve() for item in args.brand_logo),
         generated_content_path=str(content),
-        capture_plan_path="",
+        capture_plan_path=capture_plan,
         presenter=args.presenter,
     )
 

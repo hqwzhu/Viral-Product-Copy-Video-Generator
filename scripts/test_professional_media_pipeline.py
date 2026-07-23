@@ -2024,6 +2024,7 @@ class ProductCaptureTest(unittest.TestCase):
                         "selector": "#hero",
                         "action": "none",
                         "viewport": [1440, 900],
+                        "screenshotMode": "viewport",
                         "duration": 3,
                     },
                     {
@@ -2032,6 +2033,7 @@ class ProductCaptureTest(unittest.TestCase):
                         "selector": "#workflow",
                         "action": "scroll",
                         "viewport": [1440, 900],
+                        "screenshotMode": "viewport",
                         "duration": 4,
                     },
                     {
@@ -2040,6 +2042,7 @@ class ProductCaptureTest(unittest.TestCase):
                         "selector": "#features",
                         "action": "scroll",
                         "viewport": [1440, 900],
+                        "screenshotMode": "viewport",
                         "duration": 4,
                     },
                     {
@@ -2048,6 +2051,7 @@ class ProductCaptureTest(unittest.TestCase):
                         "selector": "#proof",
                         "action": "scroll",
                         "viewport": [1440, 900],
+                        "screenshotMode": "viewport",
                         "duration": 3,
                     },
                     {
@@ -2056,6 +2060,7 @@ class ProductCaptureTest(unittest.TestCase):
                         "selector": "#cta",
                         "action": "scroll",
                         "viewport": [1440, 900],
+                        "screenshotMode": "viewport",
                         "duration": 3,
                     },
                 ],
@@ -2102,11 +2107,17 @@ class ProductCaptureTest(unittest.TestCase):
                 "selectorFallback",
                 "finalUrl",
                 "viewport",
+                "screenshotMode",
             }
             for artifact in images:
                 metadata = artifact.to_dict()["metadata"]
                 self.assertTrue(image_keys.issubset(metadata), metadata)
                 self.assertEqual(metadata["viewport"], [1440, 900])
+                self.assertEqual(metadata["screenshotMode"], "viewport")
+                from PIL import Image
+
+                with Image.open(artifact.path) as image:
+                    self.assertEqual(image.size, (1440, 900))
 
             for artifact in videos:
                 metadata = artifact.to_dict()["metadata"]
@@ -2197,6 +2208,20 @@ class ProductCaptureTest(unittest.TestCase):
                     self.assertEqual(result.status, "failed", result.to_dict())
                     self.assertEqual(result.error_code, error_code)
                     self.assertEqual(result.artifacts, ())
+
+    def test_invalid_screenshot_mode_is_rejected_before_playwright_launch(self):
+        capture = load_capture_module(self)
+        plan = capture.build_default_capture_plan("https://example.com/product")
+        plan["shots"][0]["screenshotMode"] = "full-page"
+
+        with tempfile.TemporaryDirectory() as temp, mock.patch.object(
+            capture, "sync_playwright"
+        ) as start:
+            with self.assertRaisesRegex(
+                MediaSecurityError, "screenshotMode must be element or viewport"
+            ):
+                capture.PlaywrightCaptureProvider().capture(plan, Path(temp))
+            start.assert_not_called()
 
     def test_malformed_selector_fails_instead_of_using_fallback(self):
         capture = load_capture_module(self)
@@ -2490,6 +2515,19 @@ class ProfessionalVideoTest(unittest.TestCase):
                 all(not Path(shot["src"]).is_absolute() for shot in serialised["shots"])
             )
 
+    def test_project_inlines_data_driven_timeline_for_hyperframes_compiler(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            project = video.materialize_hyperframes_project(
+                video.sample_composition_data(root), root / "project"
+            )
+            index = (project / "index.html").read_text(encoding="utf-8")
+
+            self.assertNotIn('<script src="./composition.js"></script>', index)
+            self.assertIn("shots.forEach(addShot);", index)
+            self.assertIn("window.__timelines.root = timeline;", index)
+
     def test_professional_render_has_h264_aac_and_non_silent_audio(self):
         video = self.load_video()
         if not video.professional_render_available():
@@ -2609,6 +2647,8 @@ class ProfessionalVideoTest(unittest.TestCase):
                 "nonSilent": True,
                 "shortEdge": 1080,
                 "duration": 20.0,
+                "sampledVisualFrames": 10,
+                "distinctVisualFrames": 5,
             }
             errors = video._quality_errors(clean, probe)
             self.assertIn("product_sources_not_distinct", errors)
@@ -2625,6 +2665,28 @@ class ProfessionalVideoTest(unittest.TestCase):
             clean["duration"] = 60
             self.assertIn("rendered_duration_out_of_range", video._quality_errors(clean, {**probe, "duration": 60.4}))
 
+    def test_quality_gate_rejects_static_visual_video(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            clean = video._normalise_data(video.sample_composition_data(Path(temp)))
+            clean["sourceHashes"] = [
+                {"shotId": shot["id"], "sha256": f"{index + 1:064x}"}
+                for index, shot in enumerate(clean["shots"])
+            ]
+            probe = {
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "videoStreams": 1,
+                "audioStreams": 1,
+                "nonSilent": True,
+                "shortEdge": 1080,
+                "duration": 20.0,
+                "sampledVisualFrames": 10,
+                "distinctVisualFrames": 1,
+            }
+
+            self.assertIn("video_visuals_static", video._quality_errors(clean, probe))
+
 
 class MediaQualityTest(unittest.TestCase):
     """Offline regression tests for the fail-closed quality gate."""
@@ -2638,6 +2700,8 @@ class MediaQualityTest(unittest.TestCase):
                 "shortEdge": 1080,
                 "duration": 20.0,
                 "nonSilent": True,
+                "sampledVisualFrames": 10,
+                "distinctVisualFrames": 5,
             },
             "productCaptures": [{"sha256": f"capture-{index}"} for index in range(3)],
             "videos": [{"shotIds": [f"shot-{index}" for index in range(5)]}],
@@ -2671,6 +2735,21 @@ class MediaQualityTest(unittest.TestCase):
         report = quality.evaluate_media_quality(evidence, target="professional")
         self.assertEqual(report["status"], "standard_ready")
         self.assertIn("ai_photographic_scene_missing", report["blockers"])
+
+    def test_static_visual_probe_downgrades_professional_quality(self):
+        quality = importlib.import_module("scripts.media_pipeline.quality")
+        evidence = self.complete_evidence()
+        evidence["probe"]["distinctVisualFrames"] = 1
+
+        report = quality.evaluate_media_quality(evidence, target="professional")
+
+        self.assertEqual(report["status"], "standard_ready")
+        self.assertIn("video_visuals_static", report["blockers"])
+
+        evidence["probe"]["sampledVisualFrames"] = "not-a-number"
+        report = quality.evaluate_media_quality(evidence, target="professional")
+        self.assertEqual(report["status"], "standard_ready")
+        self.assertIn("video_visuals_static", report["blockers"])
 
     def test_missing_capture_or_visual_family_is_partial(self):
         quality = importlib.import_module("scripts.media_pipeline.quality")
@@ -2713,12 +2792,38 @@ class MediaQualityTest(unittest.TestCase):
             silent.write_bytes(b"fake mp4")
             video_artifact = Artifact.from_file("professional_product_demo_video", silent, "local", "composition")
             video_artifact = replace(video_artifact, metadata={"cloudUpload": False})
-            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": False}):
+            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": False, "sampledVisualFrames": 2, "distinctVisualFrames": 2}):
                 video_report = quality.build_quality_report({"video": StageResult.ready("local", [video_artifact])})
             self.assertIn("video_silent", video_report["artifacts"][0]["failures"])
-            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": True, "sourceUrl": "https://example.test/?token=LEAK_PROBE"}):
+            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": True, "sampledVisualFrames": 2, "distinctVisualFrames": 2, "sourceUrl": "https://example.test/?token=LEAK_PROBE"}):
                 probe_report = quality.build_quality_report({"video": StageResult.ready("local", [video_artifact])})
             self.assertNotIn("LEAK_PROBE", json.dumps(probe_report, ensure_ascii=False))
+
+            interaction = root / "interaction.webm"
+            interaction.write_bytes(b"fake webm")
+            interaction_artifact = replace(
+                Artifact.from_file(
+                    "product_capture_video", interaction, "playwright", "product_page"
+                ),
+                metadata={"cloudUpload": False},
+            )
+            interaction_probe = {
+                "videoCodec": "vp8",
+                "audioCodec": "",
+                "shortEdge": 900,
+                "duration": 8.0,
+                "nonSilent": False,
+            }
+            with mock.patch.object(quality, "probe_media", return_value=interaction_probe):
+                interaction_report = quality.build_quality_report(
+                    {"capture": StageResult.ready("playwright", [interaction_artifact])}
+                )
+            interaction_check = interaction_report["artifacts"][0]
+            self.assertTrue(interaction_check["passed"])
+            self.assertNotIn("video_codec_mismatch", interaction_check["failures"])
+            self.assertNotIn("video_resolution_too_small", interaction_check["failures"])
+            self.assertNotIn("video_silent", interaction_check["failures"])
+            self.assertIn("videos", interaction_report["missingFamilies"])
 
             leaky_provenance = replace(capture, provider="Bearer LEAK_PROVIDER", source="https://example.test/?token=LEAK_SOURCE")
             provenance_report = quality.build_quality_report({"capture": StageResult.ready("local", [leaky_provenance])})

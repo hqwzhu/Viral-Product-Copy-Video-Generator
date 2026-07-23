@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 promotion-output/
+promotion-output_推广输出/
 tools/hyperframes-runtime/node_modules/
 .env
 .env.*

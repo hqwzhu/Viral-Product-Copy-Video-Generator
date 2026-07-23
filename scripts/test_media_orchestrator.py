@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from scripts import professional_media_pipeline as professional_cli
 from scripts.media_pipeline.contracts import Artifact, MediaJob, StageResult
 from scripts.media_pipeline.orchestrator import MediaOrchestrator
 
@@ -24,9 +25,11 @@ class _Capture:
 
     def __init__(self):
         self.calls = 0
+        self.plan = None
 
-    def capture(self, _plan, out_dir):
+    def capture(self, plan, out_dir):
         self.calls += 1
+        self.plan = plan
         out = Path(out_dir)
         return StageResult.ready(self.provider, [_artifact("product_capture_image", _png(out / f"shot-{i}.png")) for i in range(5)])
 
@@ -97,6 +100,38 @@ class _Quality:
         return StageResult.ready("fake_quality", [_artifact("quality_report", report)], {"target": target, "status": "professional_ready"})
 
 
+def _fixture_content(root: Path) -> Path:
+    content = root / "content.json"
+    content.write_text(json.dumps({"title": "Fixture"}), encoding="utf-8")
+    return content
+
+
+def _guard_job(root: Path, run_id: str, source_url: str, capture_plan_path: str) -> MediaJob:
+    content = _fixture_content(root)
+    return MediaJob(
+        run_id=run_id,
+        product_name="Fixture",
+        source_url=source_url,
+        language="en",
+        target_platforms=("youtube",),
+        quality_target="draft",
+        aspect_ratios=("16:9",),
+        duration_range=(20, 60),
+        providers={},
+        allow_cloud_media=False,
+        product_data_path=str(content),
+        brand_assets=(),
+        generated_content_path=str(content),
+        capture_plan_path=capture_plan_path,
+    )
+
+
+def _run_guard(root: Path, job: MediaJob, capture: _Capture, orchestrator_type=MediaOrchestrator):
+    return orchestrator_type(
+        capture, _Voice(), _Scenes(), _Visuals(), _Video(), _Quality()
+    ).run(job, run_dir=root / "run", resume=False)
+
+
 class MediaOrchestratorTest(unittest.TestCase):
     def test_offline_pipeline_writes_atomic_state_and_resumes(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -118,7 +153,7 @@ class MediaOrchestratorTest(unittest.TestCase):
                 product_data_path=str(content),
                 brand_assets=(str(logo),),
                 generated_content_path=str(content),
-                capture_plan_path=str(root / "missing-plan.json"),
+                capture_plan_path="",
             )
             capture, voice, video, quality = _Capture(), _Voice(), _Video(), _Quality()
             orchestrator = MediaOrchestrator(capture, voice, _Scenes(), _Visuals(), video, quality)
@@ -217,6 +252,139 @@ class MediaOrchestratorTest(unittest.TestCase):
             leaky = MediaOrchestrator(_LeakyCapture(), _Voice(), _Scenes(), _Visuals(), _Video(), _Quality()).run(dict(base, allowCloudMedia=False), run_dir=root / "leak", resume=False)
             self.assertEqual(leaky.status, "failed")
             self.assertEqual(leaky.stages["capture"].error_code, "stage_exception")
+
+    def test_cli_rejects_missing_capture_plan(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text(json.dumps({"title": "Fixture"}), encoding="utf-8")
+            args = professional_cli.parse_args(
+                [
+                    "--product-url",
+                    "https://example.com/product",
+                    "--product-name",
+                    "Fixture",
+                    "--content-json",
+                    str(content),
+                    "--capture-plan",
+                    str(root / "missing-plan.json"),
+                ]
+            )
+
+            with self.assertRaises(FileNotFoundError):
+                professional_cli.build_job(args)
+
+    def test_cli_rejects_non_object_capture_plan(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text(json.dumps({"title": "Fixture"}), encoding="utf-8")
+            plan = root / "capture-plan.json"
+            plan.write_text("[]", encoding="utf-8")
+            args = professional_cli.parse_args(
+                [
+                    "--product-url",
+                    "https://example.com/product",
+                    "--product-name",
+                    "Fixture",
+                    "--content-json",
+                    str(content),
+                    "--capture-plan",
+                    str(plan),
+                ]
+            )
+
+            with self.assertRaisesRegex(ValueError, "capture plan JSON must contain an object"):
+                professional_cli.build_job(args)
+
+    def test_orchestrator_rejects_missing_capture_plan_before_provider(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            capture = _Capture()
+            job = _guard_job(
+                root,
+                "missing-plan",
+                "https://example.com/product",
+                str(root / "missing-plan.json"),
+            )
+
+            result = _run_guard(root, job, capture)
+
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.stages["capture"].error_code, "job_validation_failed")
+            self.assertEqual(capture.calls, 0)
+
+    def test_orchestrator_rejects_invalid_capture_sources_before_provider(self):
+        cases = (
+            ("path", "https://example.com/product", "https://example.com/other-product"),
+            ("query", "https://example.com/product?id=1", "https://example.com/product?id=2"),
+            ("sensitive", "https://example.com/product", "https://example.com/product?token=do-not-capture"),
+            ("fragment", "https://example.com/product", "https://example.com/product#details"),
+            ("percent-encoded", "https://example.com/product?%74oken=do-not-capture", "https://example.com/product?%74oken=do-not-capture"),
+            ("form-encoded", "https://example.com/product?access+token=do-not-capture", "https://example.com/product?access+token=do-not-capture"),
+        )
+        for name, source_url, plan_url in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                plan_path = root / "capture-plan.json"
+                plan_path.write_text(
+                    json.dumps({"sourceUrl": plan_url, "shots": []}),
+                    encoding="utf-8",
+                )
+                capture = _Capture()
+                job = _guard_job(root, name, source_url, str(plan_path))
+
+                result = _run_guard(root, job, capture)
+
+                self.assertEqual(result.stages["capture"].error_code, "job_validation_failed")
+                self.assertEqual(capture.calls, 0)
+
+    def test_orchestrator_reuses_validated_capture_plan_after_file_replacement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan_path = root / "capture-plan.json"
+            original_plan = {
+                "sourceUrl": "https://example.com/product",
+                "shots": [{"id": "original-shot"}],
+            }
+            plan_path.write_text(json.dumps(original_plan), encoding="utf-8")
+            capture = _Capture()
+            job = _guard_job(root, "plan-replacement", original_plan["sourceUrl"], str(plan_path))
+
+            class _ReplacingOrchestrator(MediaOrchestrator):
+                def _validate_job(self, *args, **kwargs):
+                    validated = super()._validate_job(*args, **kwargs)
+                    plan_path.write_text(
+                        json.dumps(
+                            {
+                                "sourceUrl": "https://example.com/other-product",
+                                "shots": [{"id": "replacement-shot"}],
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    return validated
+
+            _run_guard(root, job, capture, _ReplacingOrchestrator)
+
+            self.assertEqual(capture.calls, 1)
+            self.assertEqual(capture.plan, original_plan)
+
+    def test_orchestrator_rejects_default_capture_fragment_before_provider(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            capture = _Capture()
+            job = _guard_job(
+                root,
+                "default-fragment",
+                "https://example.com/product#details",
+                "",
+            )
+
+            result = _run_guard(root, job, capture)
+
+            self.assertEqual(result.stages["capture"].error_code, "job_validation_failed")
+            self.assertEqual(capture.calls, 0)
 
 
 if __name__ == "__main__":
