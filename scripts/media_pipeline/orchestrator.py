@@ -30,11 +30,15 @@ from scripts.media_pipeline.contracts import (
 )
 from scripts.media_pipeline.paths import RUNS_DIR, RunPaths, new_run_paths
 from scripts.media_pipeline.security import MediaSecurityError, redact_secrets, validate_capture_shot
-from scripts.media_pipeline.visuals import CommercialVisualCompositor
+from scripts.media_pipeline.visuals import CommercialVisualCompositor, PLATFORM_SIZES
 
 
 STAGES = ("capture", "voiceover", "scenes", "visuals", "video", "quality")
 SCHEMA_VERSION = "1.0"
+_SECRET_VALUE_PATTERN = re.compile(
+    r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*=",
+    re.IGNORECASE,
+)
 
 
 def _utc_now() -> str:
@@ -157,7 +161,7 @@ def _sanitize_public(value: Any) -> Any:
                 userinfo = False
         if (
             "bearer " in lowered
-            or re.search(r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*=", lowered)
+            or _SECRET_VALUE_PATTERN.search(lowered)
             or userinfo
             or "leak_" in lowered
             or lowered.startswith(("sk-", "fc-", "ghp_", "xox"))
@@ -171,11 +175,19 @@ def _sanitize_public(value: Any) -> Any:
 
 def _contains_sensitive_text(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return any(_contains_sensitive_text(key) or _contains_sensitive_text(item) for key, item in value.items())
+        for key, item in value.items():
+            name = str(key).casefold().replace("-", "_")
+            if name in {"api_key", "apikey", "access_token", "refresh_token", "authorization", "cookie", "cookies", "password", "secret", "secrets", "credential", "credentials", "headers", "profile_path", "user_data_dir"} or any(marker in name for marker in ("token", "secret", "password", "cookie")):
+                return True
+            if _contains_sensitive_text(key) or _contains_sensitive_text(item):
+                return True
+        return False
     if isinstance(value, (list, tuple, set)):
         return any(_contains_sensitive_text(item) for item in value)
     if isinstance(value, str):
         lowered = value.casefold().replace("\\", "/").replace("_", " ").replace("-", " ")
+        if _SECRET_VALUE_PATTERN.search(value) or "bearer " in lowered:
+            return True
         return any(token in lowered for token in ("cookie", "local storage", "login data", "user data", "profile lock", "credential", "access token", "refresh token"))
     return False
 
@@ -267,9 +279,10 @@ class MediaOrchestrator:
         output_root: str | Path | None = None,
         run_dir: str | Path | None = None,
         resume: bool = True,
+        publish_pack_path: str | Path | None = None,
     ) -> OrchestrationResult:
         media_job = job if isinstance(job, MediaJob) else MediaJob.from_dict(dict(job))
-        if not isinstance(media_job.allow_cloud_media, bool):
+        if type(media_job.allow_cloud_media) is not bool:
             root = self._prepare_run_root(media_job, output_root, run_dir, resume)
             paths = self._paths_for_root(root).create()
             return self._finish_failed(paths, media_job, "job_validation_failed", "allow_cloud_media must be a boolean")
@@ -281,7 +294,7 @@ class MediaOrchestrator:
         root = self._prepare_run_root(media_job, output_root, run_dir, resume)
         paths = self._paths_for_root(root).create()
         try:
-            self._validate_job(media_job, root)
+            self._validate_job(media_job, root, publish_pack_path)
         except (MediaSecurityError, ValueError, OSError) as exc:
             return self._finish_failed(paths, media_job, "job_validation_failed", str(exc))
 
@@ -296,6 +309,7 @@ class MediaOrchestrator:
         failed_dependency: str | None = None
         for stage in STAGES:
             if failed_dependency is not None:
+                self._clear_stage_output(stage, paths)
                 result = StageResult(status="failed", provider="orchestrator", error_code=f"blocked_by_{failed_dependency}")
                 stages[stage] = result
                 records[stage] = self._record(stage, result, "blocked", "")
@@ -317,7 +331,7 @@ class MediaOrchestrator:
                 result = self._safe_result(result, root)
             except Exception as exc:  # provider boundaries are fail-closed
                 result = StageResult(status="failed", provider="orchestrator", error_code="stage_exception", diagnostics={"stage": stage, "exceptionType": type(exc).__name__})
-            if result.status == "failed" and stage != "quality":
+            if result.status in {"failed", "skipped"} and stage != "quality":
                 # A provider may have written a partial PNG/WAV/MP4 before
                 # returning failure.  Remove it before recording the receipt
                 # so a later resume cannot mistake it for evidence.
@@ -326,13 +340,17 @@ class MediaOrchestrator:
             action = "completed" if result.status in {"ready", "degraded"} else "failed"
             records[stage] = self._record(stage, result, action, input_hash)
             self._write_state(manifest_path, receipt_path, media_job, paths, records)
-            if result.status == "failed":
+            if result.status in {"failed", "skipped"}:
                 failed_dependency = stage
 
         # The receipt is written once more with a stable end marker.  The JSON
         # write itself is atomic, so killing the process never leaves a partial
         # manifest that a resume can mistake for ready evidence.
-        self._write_state(manifest_path, receipt_path, media_job, paths, records, complete=failed_dependency is None)
+        complete = failed_dependency is None and all(result.status in {"ready", "degraded"} for result in stages.values())
+        self._write_state(manifest_path, receipt_path, media_job, paths, records, complete=complete)
+        self._write_media_manifest(media_job, paths, stages, complete=complete)
+        if complete and publish_pack_path:
+            self._update_publish_pack(Path(publish_pack_path), media_job, paths, stages)
         return OrchestrationResult(paths, dict(stages), manifest_path.resolve(), receipt_path.resolve())
 
     execute = run
@@ -384,17 +402,27 @@ class MediaOrchestrator:
             reports=root / "reports_报告",
         )
 
-    def _validate_job(self, job: MediaJob, root: Path) -> None:
+    def _validate_job(self, job: MediaJob, root: Path, publish_pack_path: str | Path | None = None) -> None:
         _safe_path(root, root)
-        for item in (job.product_data_path, job.capture_plan_path, job.generated_content_path, *job.brand_assets):
+        for item in (job.product_data_path, job.capture_plan_path, job.generated_content_path, *job.brand_assets, publish_pack_path):
             if item:
                 candidate = Path(item).expanduser()
+                try:
+                    candidate = candidate.resolve(strict=False)
+                except OSError as exc:
+                    raise MediaSecurityError("input path cannot be resolved") from exc
                 # Inputs may be outside the run (the user's public product
                 # JSON/logo); they are still checked for profile/credential
                 # names but are not copied or uploaded by this orchestrator.
                 words = " ".join(part.casefold().replace("_", " ").replace("-", " ") for part in candidate.parts)
-                if any(token in words for token in ("cookie", "profile", "credential", "password", "token", "user data", ".env")):
+                if any(token in words for token in ("cookie", "profile", "credential", "password", "token", "user data", ".env", "secret")):
                     raise MediaSecurityError("sensitive input path is not allowed")
+        if publish_pack_path:
+            pack = Path(publish_pack_path).expanduser().resolve(strict=False)
+            if pack.exists() and pack.is_dir():
+                raise ValueError("publish pack path must be a file")
+        if _contains_sensitive_text(job.source_url):
+            raise MediaSecurityError("source URL contains sensitive query data")
         validate_capture_shot(job.source_url, {"url": job.source_url, "action": "none"}, allow_localhost=self.allow_localhost)
 
     def _load_manifest(self, path: Path) -> dict[str, Any]:
@@ -437,6 +465,17 @@ class MediaOrchestrator:
                 "status": result.status,
                 "provider": result.provider,
                 "artifactHashes": _artifact_hashes(result),
+                "artifacts": [
+                    {
+                        "type": artifact.type,
+                        "provider": artifact.provider,
+                        "source": artifact.source,
+                        "license": artifact.license,
+                        "containsUserData": artifact.contains_user_data,
+                        "metadata": _json_safe(artifact.metadata),
+                    }
+                    for artifact in result.artifacts
+                ],
                 "warnings": list(result.warnings),
                 "errorCode": result.error_code,
             }
@@ -497,7 +536,7 @@ class MediaOrchestrator:
             return self._render_visuals(job, paths, stages, content)
         if stage == "video":
             return self._render_video(job, paths, stages, content)
-        report_path = paths.reports / "quality.json"
+        report_path = paths.reports / "media-quality-report.json"
         provider = self.quality_provider
         if callable(provider):
             return provider(stages, target=job.quality_target, report_path=report_path)
@@ -509,10 +548,41 @@ class MediaOrchestrator:
     @staticmethod
     def _generate_scene(provider: Any, prompt: str, out_dir: Path) -> StageResult:
         try:
-            return provider.generate(prompt, width=1920, height=1080, seed=7, output_dir=out_dir)
+            result = provider.generate(prompt, width=1920, height=1080, seed=7, output_dir=out_dir)
         except TypeError:
             # Tiny fakes often expose a deliberately smaller signature.
-            return provider.generate(prompt, out_dir)
+            result = provider.generate(prompt, out_dir)
+        if not isinstance(result, StageResult) or result.status not in {"ready", "degraded"}:
+            return result
+        distinct = {artifact.sha256 for artifact in result.artifacts}
+        if len(distinct) >= 2:
+            return result
+        # A single AI image is not enough for the professional storyboard. Ask
+        # the same local provider for one alternate supporting scene; no cloud
+        # fallback or credential-bearing state is introduced here.
+        try:
+            try:
+                alternate = provider.generate(
+                    f"{prompt} alternate supporting scene",
+                    width=1920,
+                    height=1080,
+                    seed=8,
+                    output_dir=out_dir,
+                )
+            except TypeError:
+                alternate = provider.generate(f"{prompt} alternate supporting scene", out_dir)
+        except Exception:
+            return result
+        if isinstance(alternate, StageResult) and alternate.status in {"ready", "degraded"}:
+            merged = list(result.artifacts)
+            for artifact in alternate.artifacts:
+                if artifact.sha256 not in distinct:
+                    merged.append(artifact)
+                    distinct.add(artifact.sha256)
+            if len(merged) != len(result.artifacts):
+                status = "degraded" if result.status == "degraded" or alternate.status == "degraded" else "ready"
+                return replace(result, status=status, artifacts=tuple(merged), warnings=tuple(dict.fromkeys((*result.warnings, *alternate.warnings))))
+        return result
 
     def _render_visuals(self, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], content: Mapping[str, Any]) -> StageResult:
         capture = self._first_artifact(stages.get("capture"), "product_capture_image")
@@ -522,17 +592,24 @@ class MediaOrchestrator:
             return StageResult(status="failed", provider="orchestrator", error_code="visual_inputs_missing")
         artifacts: list[Artifact] = []
         warnings: list[str] = []
+        had_degraded = False
         for platform in job.target_platforms:
-            result = self.visual_provider.render(platform, self._title(content, job), self._subtitle(content), scene.path, capture.path, logo, paths.covers / platform, background_source={"provider": scene.provider, "source": scene.source, "license": scene.license})
-            if result.status == "failed":
+            if not isinstance(platform, str) or platform not in PLATFORM_SIZES or Path(platform).name != platform or "/" in platform or "\\" in platform:
+                return StageResult(status="failed", provider="orchestrator", error_code="invalid_platform")
+            output_dir = _safe_path(paths.covers / platform, paths.root)
+            result = self.visual_provider.render(platform, self._title(content, job), self._subtitle(content), scene.path, capture.path, logo, output_dir, background_source={"provider": scene.provider, "source": scene.source, "license": scene.license})
+            if result.status in {"failed", "skipped"}:
                 return result
+            had_degraded = had_degraded or result.status == "degraded"
             artifacts.extend(result.artifacts)
             warnings.extend(result.warnings)
-        return StageResult(status="degraded" if warnings else "ready", provider=_provider_name(self.visual_provider, "visuals"), artifacts=tuple(artifacts), warnings=tuple(warnings), diagnostics={"platforms": list(job.target_platforms), "count": len(artifacts)})
+        if any(not _safe_path(artifact.path, paths.root).is_file() for artifact in artifacts):
+            return StageResult(status="failed", provider="orchestrator", error_code="visual_artifact_missing")
+        return StageResult(status="degraded" if warnings or had_degraded else "ready", provider=_provider_name(self.visual_provider, "visuals"), artifacts=tuple(artifacts), warnings=tuple(warnings), diagnostics={"platforms": list(job.target_platforms), "count": len(artifacts)})
 
     def _render_video(self, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], content: Mapping[str, Any]) -> StageResult:
         captures = [artifact for artifact in (stages.get("capture").artifacts if stages.get("capture") else ()) if artifact.type == "product_capture_image"]
-        scenes = [artifact for artifact in (stages.get("scenes").artifacts if stages.get("scenes") else ()) if artifact.type in {"ai_scene_image", "b_roll_image", "supporting_scene_image", "pexels_b_roll_image"}]
+        scenes = [artifact for artifact in (stages.get("scenes").artifacts if stages.get("scenes") else ()) if artifact.type in {"ai_scene", "ai_scene_image", "b_roll_image", "supporting_scene_image", "pexels_b_roll_image"}]
         voice = self._first_artifact(stages.get("voiceover"), "voiceover_audio")
         shots: list[dict[str, Any]] = []
         for index, artifact in enumerate(captures[:3]):
@@ -541,18 +618,36 @@ class MediaOrchestrator:
             shots.append({"id": f"scene-{index + 1}", "kind": "supporting", "start": (len(shots)) * 4, "duration": 4, "src": artifact.path, "provenance": {"source": artifact.source, "provider": artifact.provider, "aiGenerated": artifact.metadata.get("aiGenerated", True), "sha256": artifact.sha256}})
         if len(shots) < 5 or voice is None:
             return StageResult(status="failed", provider="orchestrator", error_code="video_inputs_missing")
-        duration = max(20, len(shots) * 4)
+        lower, upper = (int(job.duration_range[0]), int(job.duration_range[1]))
+        if upper < lower or lower <= 0:
+            return StageResult(status="failed", provider="orchestrator", error_code="duration_range_invalid")
+        duration = min(upper, max(lower, max(20, len(shots) * 4))) if upper >= 20 else lower
+        shot_duration = duration / len(shots)
+        for index, shot in enumerate(shots):
+            shot["start"] = round(index * shot_duration, 3)
+            shot["duration"] = round(shot_duration, 3)
         language = job.language
         voice_result = stages.get("voiceover")
         captions = []
         if voice_result:
             for segment in voice_result.diagnostics.get("segments", ()):
                 try:
-                    captions.append({"start": float(segment["start"]), "duration": float(segment["end"]) - float(segment["start"]), "text": str(segment["text"])})
+                    start = max(0.0, float(segment["start"]))
+                    end = min(float(duration), float(segment["end"]))
+                    if end > start:
+                        captions.append({"start": start, "duration": end - start, "text": str(segment["text"])})
                 except (KeyError, TypeError, ValueError):
                     pass
-        data = {"width": 1920, "height": 1080, "duration": duration, "durationRange": list(job.duration_range), "fps": 30, "motionTypes": ["zoomPan", "productHighlight", "sceneTransition"], "shots": shots, "captions": captions, "voiceover": voice.path, "provenance": {"provider": "local_orchestrator", "language": language, "cloudUpload": False}}
+        dimensions = self._video_dimensions(job)
+        if dimensions is None:
+            return StageResult(status="failed", provider="orchestrator", error_code="unsupported_aspect_ratio")
+        data = {"width": dimensions[0], "height": dimensions[1], "duration": duration, "durationRange": list(job.duration_range), "fps": 30, "motionTypes": ["zoomPan", "productHighlight", "sceneTransition"], "shots": shots, "captions": captions, "voiceover": voice.path, "provenance": {"provider": "local_orchestrator", "language": language, "cloudUpload": False}}
         return self.video_provider(data, paths.videos / "professional-demo.mp4", paths.videos / ".professional-demo-hyperframes")
+
+    @staticmethod
+    def _video_dimensions(job: MediaJob) -> tuple[int, int] | None:
+        ratio = str(job.aspect_ratios[0] if job.aspect_ratios else "16:9").strip().replace(" ", "")
+        return {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}.get(ratio)
 
     @staticmethod
     def _first_artifact(result: StageResult | None, artifact_type: str) -> Artifact | None:
@@ -564,11 +659,13 @@ class MediaOrchestrator:
     def _first_scene_artifact(result: StageResult | None) -> Artifact | None:
         if result is None:
             return None
-        return next((artifact for artifact in result.artifacts if artifact.type in {"ai_scene_image", "b_roll_image", "supporting_scene_image", "pexels_b_roll_image"}), None)
+        return next((artifact for artifact in result.artifacts if artifact.type in {"ai_scene", "ai_scene_image", "b_roll_image", "supporting_scene_image", "pexels_b_roll_image"}), None)
 
     def _safe_result(self, result: StageResult, root: Path) -> StageResult:
         if not isinstance(result, StageResult):
             raise TypeError("provider must return StageResult")
+        if _contains_sensitive_text(result.to_dict()):
+            raise MediaSecurityError("sensitive provider result is not allowed")
         for artifact in result.artifacts:
             safe_artifact_path = _safe_path(artifact.path, root)
             if not safe_artifact_path.is_file() or _sha256(safe_artifact_path) != artifact.sha256:
@@ -606,11 +703,88 @@ class MediaOrchestrator:
         for name, record in records.items():
             atomic_write_json(stage_receipts / f"{name}.json", {"schemaVersion": SCHEMA_VERSION, "runId": job.run_id, **record, "cloudUpload": False, "hostedWorker": False})
 
+    @staticmethod
+    def _artifact_record(artifact: Artifact) -> dict[str, Any]:
+        return _sanitize_public(_json_safe(artifact.to_dict()))
+
+    def _write_media_manifest(self, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], *, complete: bool) -> Path:
+        inventory: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for stage_name, result in stages.items():
+            if result.status not in {"ready", "degraded"}:
+                continue
+            for artifact in result.artifacts:
+                key = (artifact.type, artifact.sha256)
+                if key in seen:
+                    continue
+                seen.add(key)
+                inventory.append({"stage": stage_name, **self._artifact_record(artifact)})
+        manifest = {
+            "schemaVersion": SCHEMA_VERSION,
+            "runId": job.run_id,
+            "productName": job.product_name,
+            "status": "complete" if complete else "partial",
+            "cloudUpload": False,
+            "hostedWorker": False,
+            "runRoot": str(paths.root),
+            "qualityReport": str((paths.reports / "media-quality-report.json").resolve()),
+            "artifacts": inventory,
+            "stages": {name: {"status": result.status, "artifactCount": len(result.artifacts)} for name, result in stages.items()},
+            "updatedAt": _utc_now(),
+        }
+        destination = paths.reports / "media-manifest.json"
+        atomic_write_json(destination, _sanitize_public(manifest))
+        return destination
+
+    def _update_publish_pack(self, pack_path: Path, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult]) -> None:
+        pack_path = pack_path.expanduser().resolve(strict=False)
+        if _contains_sensitive_text(str(pack_path)):
+            raise MediaSecurityError("publish pack path is sensitive")
+        if not pack_path.is_file():
+            return
+        payload = json.loads(pack_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("publish pack JSON must be a list")
+        video = next((self._artifact_record(item) for item in stages.get("video", StageResult("failed", "orchestrator")).artifacts if item.type == "professional_product_demo_video"), None)
+        visual_artifacts = stages.get("visuals", StageResult("failed", "orchestrator")).artifacts
+        quality = stages.get("quality")
+        quality_summary = {
+            "status": (quality.diagnostics.get("status") if quality else None) or (quality.status if quality else "failed"),
+            "report": str((paths.reports / "media-quality-report.json").resolve()),
+            "target": job.quality_target,
+        }
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            platform = str(item.get("platform") or "")
+            platform_visuals = []
+            for artifact in visual_artifacts:
+                platforms = artifact.metadata.get("platforms", ())
+                parent = Path(artifact.path).parent.name
+                if platform in platforms or parent == platform:
+                    platform_visuals.append(artifact)
+            cover = next((self._artifact_record(item) for item in platform_visuals if item.type == "cover_image"), None)
+            details = [self._artifact_record(item) for item in platform_visuals if item.type == "detail_image"]
+            if video:
+                item["video"] = video
+            if cover:
+                item["cover"] = cover
+            if details:
+                item["detailImages"] = details
+            assets = [record for record in (video, cover, *details) if record]
+            if assets:
+                item["assets"] = assets
+            item["mediaQuality"] = quality_summary
+        atomic_write_json(pack_path, _sanitize_public(payload))
+
     def _finish_failed(self, paths: RunPaths, job: MediaJob, code: str, detail: str) -> OrchestrationResult:
+        for stage in STAGES:
+            self._clear_stage_output(stage, paths)
         result = StageResult(status="failed", provider="orchestrator", error_code=code, diagnostics={"exceptionType": detail.__class__.__name__})
         stages = {stage: result for stage in STAGES}
         records = {stage: self._record(stage, result, "failed" if stage == "capture" else "blocked", "") for stage in STAGES}
         self._write_state(paths.root / "manifest.json", paths.root / "run-receipt.json", job, paths, records)
+        self._write_media_manifest(job, paths, stages, complete=False)
         return OrchestrationResult(paths, stages, (paths.root / "manifest.json").resolve(), (paths.root / "run-receipt.json").resolve())
 
 

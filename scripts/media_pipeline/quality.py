@@ -12,11 +12,14 @@ from __future__ import annotations
 import hashlib
 import math
 import mimetypes
+import re
 import struct
+import wave
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from scripts.media_pipeline.contracts import Artifact, StageResult, atomic_write_json
 
@@ -104,12 +107,15 @@ _VIDEO_TYPES = {
 _IMAGE_TYPES = {
     "product_capture_image",
     "ai_scene_image",
+    "ai_scene",
     "b_roll_image",
     "pexels_b_roll_image",
     "cover_image",
     "detail_image",
     "contact_sheet",
+    "supporting_scene_image",
 }
+_KNOWN_ARTIFACT_TYPES = _VIDEO_TYPES | _IMAGE_TYPES | {"voiceover_audio", "audio"}
 
 
 def _sha256(path: Path) -> str:
@@ -160,9 +166,17 @@ def _contains_sensitive(value: Any, key_path: str = "") -> str | None:
         return None
     if isinstance(value, str):
         lowered = value.casefold()
+        userinfo = False
+        if "://" in lowered:
+            try:
+                parsed = urlsplit(lowered)
+                userinfo = bool(parsed.username or parsed.password)
+            except ValueError:
+                userinfo = False
         if (
             "bearer " in lowered
-            or any(marker in lowered for marker in ("token=", "api_key=", "apikey=", "access_token=", "refresh_token=", "password=", "cookie="))
+            or re.search(r"(?:^|[?&#\s])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|cookie|secret|token)\s*=", lowered)
+            or userinfo
             or "leak_" in lowered
             or lowered.startswith(("sk-", "fc-", "ghp_", "xox"))
         ):
@@ -185,6 +199,25 @@ def _check(name: str, passed: bool, *, details: Any = None, blocker: str | None 
     if blocker and not passed:
         result["blocker"] = blocker
     return result
+
+
+def _safe_report_value(value: Any) -> Any:
+    """Recursively remove bearer tokens and secret-bearing evidence fields."""
+
+    if isinstance(value, Mapping):
+        safe: dict[str, Any] = {}
+        for key, item in value.items():
+            name = str(key).casefold().replace("-", "_")
+            if name in _SENSITIVE_KEYS or any(marker in name for marker in ("token", "secret", "password", "cookie")):
+                safe[str(key)] = "redacted_sensitive_value"
+            else:
+                safe[str(key)] = _safe_report_value(item)
+        return safe
+    if isinstance(value, (list, tuple, set)):
+        return [_safe_report_value(item) for item in value]
+    if isinstance(value, str) and _contains_sensitive(value):
+        return "redacted_sensitive_value"
+    return value
 
 
 def _distinct_hashes(items: Any, key: str = "sha256") -> set[str]:
@@ -253,7 +286,7 @@ def _check_evidence(evidence: Mapping[str, Any], name: str) -> tuple[bool, Any, 
             value = 0
         return value >= 1080, value, "video_resolution_too_small"
     if name == "h264_aac":
-        return str(probe.get("videoCodec", "")).casefold() == "h264" and str(probe.get("audioCodec", "")).casefold() == "aac", dict(probe), "video_codec_mismatch"
+        return str(probe.get("videoCodec", "")).casefold() == "h264" and str(probe.get("audioCodec", "")).casefold() == "aac", _safe_report_value(dict(probe)), "video_codec_mismatch"
     if name == "ai_photographic_scene":
         return any(_bool_metadata(item, "aiGenerated") for item in ai_scenes), len(ai_scenes), "ai_photographic_scene_missing"
     if name == "commercial_cover":
@@ -281,9 +314,9 @@ def evaluate_media_quality(evidence: Mapping[str, Any] | None, target: str = "pr
     checks: list[dict[str, Any]] = []
     required_families = {
         "productCaptures": bool(data.get("productCaptures") or data.get("productCaptureHashes")),
-        # A probe is itself evidence of a video when an older caller has not
-        # yet materialized the normalized ``videos`` list.
-        "videos": bool(data.get("videos") or data.get("video") or data.get("probe")),
+        # A probe alone is not a publishable artifact; require an inspected
+        # video family so callers cannot claim readiness from diagnostics only.
+        "videos": bool(data.get("videos") or data.get("video")),
         "covers": bool(data.get("covers")),
         "detailImages": bool(data.get("detailImages")),
         "contactSheets": bool(data.get("contactSheets")),
@@ -327,7 +360,7 @@ def evaluate_media_quality(evidence: Mapping[str, Any] | None, target: str = "pr
         "blockers": blockers,
         "warnings": warnings,
         "missingFamilies": missing_families,
-        "probe": dict(data.get("probe")) if isinstance(data.get("probe"), Mapping) else {},
+        "probe": _safe_report_value(dict(data.get("probe"))) if isinstance(data.get("probe"), Mapping) else {},
     }
 
 
@@ -363,6 +396,25 @@ def _png_dimensions(path: Path) -> tuple[int, int]:
     return width, height
 
 
+def _wav_diagnostics(path: Path) -> dict[str, Any]:
+    with wave.open(str(path), "rb") as handle:
+        channels = handle.getnchannels()
+        sample_width = handle.getsampwidth()
+        rate = handle.getframerate()
+        frame_count = handle.getnframes()
+        payload = handle.readframes(frame_count)
+    if channels < 1 or sample_width < 1 or rate < 1 or frame_count < 1:
+        raise ValueError("wav_parameters_invalid")
+    return {
+        "channels": channels,
+        "sampleWidth": sample_width,
+        "sampleRate": rate,
+        "frames": frame_count,
+        "duration": frame_count / rate,
+        "nonSilent": any(payload),
+    }
+
+
 def _expected_dimensions(metadata: Mapping[str, Any], artifact_type: str) -> tuple[int, int] | None:
     value = metadata.get("dimensions")
     if value is None and artifact_type == "product_capture_image":
@@ -386,7 +438,9 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
     failures: list[str] = []
     if not artifact_type or not isinstance(path_text, str) or not path_text.strip():
         failures.append("artifact_descriptor_invalid")
-        return {"type": artifact_type, "path": str(path_text or ""), "passed": False, "failures": failures, "checks": checks}
+        raw_path = str(path_text or "")
+        safe_path = "redacted_sensitive_value" if _sensitive_path(raw_path) or _contains_sensitive(path_text) else raw_path
+        return {"type": artifact_type, "path": safe_path, "passed": False, "failures": failures, "checks": checks}
     path = Path(path_text).expanduser()
     try:
         resolved_path_text = str(path.resolve(strict=False))
@@ -400,6 +454,10 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
     checks.append(_check("metadata_secrets", secret_key is None, details=secret_key, blocker="secret_metadata_rejected"))
     if secret_key:
         failures.append("secret_metadata_rejected")
+    type_ok = artifact_type in _KNOWN_ARTIFACT_TYPES
+    checks.append(_check("artifact_type_supported", type_ok, details=artifact_type, blocker="artifact_type_unsupported"))
+    if not type_ok:
+        failures.append("artifact_type_unsupported")
     cloud_upload = metadata.get("cloudUpload", False)
     checks.append(_check("cloud_upload_disabled", cloud_upload is False, details=cloud_upload, blocker="cloud_upload_not_allowed"))
     if cloud_upload is not False:
@@ -425,7 +483,8 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
             if probe_media is None:
                 raise RuntimeError("video_probe_unavailable")
             probe = probe_media(path)
-            diagnostics["probe"] = probe
+            safe_probe = _safe_report_value(probe)
+            diagnostics["probe"] = safe_probe
             codec_ok = str(probe.get("videoCodec", "")).casefold() == "h264" and str(probe.get("audioCodec", "")).casefold() == "aac"
             duration = float(probe.get("duration", 0) or 0)
             duration_ok = math.isfinite(duration) and duration > 0
@@ -446,9 +505,24 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
             if not non_silent_ok:
                 failures.append("video_silent")
         except Exception as exc:
-            diagnostics["probeError"] = str(exc)
+            safe_error = _safe_report_value(str(exc))
+            diagnostics["probeError"] = safe_error
             failures.append("video_probe_failed")
-            checks.append(_check("video_probe", False, details=str(exc), blocker="video_probe_failed"))
+            checks.append(_check("video_probe", False, details=safe_error, blocker="video_probe_failed"))
+    elif artifact_type in {"voiceover_audio", "audio"} or path.suffix.casefold() == ".wav":
+        try:
+            wav = _wav_diagnostics(path)
+            diagnostics["wav"] = wav
+            checks.append(_check("wav_valid", True, details=wav))
+            non_silent = wav["nonSilent"] is True
+            checks.append(_check("wav_non_silent", non_silent, details=wav["nonSilent"], blocker="audio_silent"))
+            if not non_silent:
+                failures.append("audio_silent")
+        except Exception as exc:
+            safe_error = _safe_report_value(str(exc))
+            diagnostics["wavError"] = safe_error
+            failures.append("wav_invalid")
+            checks.append(_check("wav_valid", False, details=safe_error, blocker="wav_invalid"))
     elif artifact_type in _IMAGE_TYPES or path.suffix.casefold() == ".png":
         try:
             dimensions = _png_dimensions(path)
@@ -459,10 +533,11 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
             if not dimensions_ok:
                 failures.append("png_dimensions_mismatch")
         except Exception as exc:
-            diagnostics["pngError"] = str(exc)
+            safe_error = _safe_report_value(str(exc))
+            diagnostics["pngError"] = safe_error
             failures.append("png_invalid")
-            failures.append(str(exc))
-            checks.append(_check("png_header_and_dimensions", False, details=str(exc), blocker="png_invalid"))
+            failures.append(str(safe_error))
+            checks.append(_check("png_header_and_dimensions", False, details=safe_error, blocker="png_invalid"))
 
     # Commercial images must carry the exact product/brand/provenance claims;
     # do not infer them from the filename or provider status.
@@ -478,16 +553,20 @@ def _inspect_artifact(artifact: Artifact | Mapping[str, Any]) -> dict[str, Any]:
         if not provenance_ok:
             failures.append("metadata_provenance_missing")
 
-    provider_ok = bool(str(value.get("provider", "")).strip())
-    source_ok = bool(str(value.get("source", "")).strip())
+    provider_value = str(value.get("provider", ""))
+    source_value = str(value.get("source", ""))
+    provider_secret = _contains_sensitive(provider_value)
+    source_secret = _contains_sensitive(source_value)
+    provider_ok = bool(provider_value.strip()) and provider_secret is None
+    source_ok = bool(source_value.strip()) and source_secret is None
     checks.extend([
-        _check("artifact_provider", provider_ok, blocker="artifact_provider_missing"),
-        _check("artifact_source", source_ok, blocker="artifact_source_missing"),
+        _check("artifact_provider", provider_ok, details=provider_secret, blocker="artifact_provider_missing" if provider_secret is None else "artifact_provider_secret"),
+        _check("artifact_source", source_ok, details=source_secret, blocker="artifact_source_missing" if source_secret is None else "artifact_source_secret"),
     ])
     if not provider_ok:
-        failures.append("artifact_provider_missing")
+        failures.append("artifact_provider_secret" if provider_secret else "artifact_provider_missing")
     if not source_ok:
-        failures.append("artifact_source_missing")
+        failures.append("artifact_source_secret" if source_secret else "artifact_source_missing")
     return {
         "type": artifact_type,
         "path": "<redacted>" if sensitive else str(path.resolve()),
@@ -508,6 +587,8 @@ def _family_for_type(artifact_type: str) -> str | None:
     if artifact_type == "voiceover_audio":
         return "voiceovers"
     if artifact_type == "ai_scene_image":
+        return "aiScenes"
+    if artifact_type == "ai_scene":
         return "aiScenes"
     if artifact_type in {"b_roll_image", "pexels_b_roll_image", "supporting_scene_image"}:
         return "supportingScenes"
@@ -532,16 +613,16 @@ def _artifact_summary(value: Mapping[str, Any], inspection: Mapping[str, Any]) -
         "type": str(value.get("type", "")),
         "path": inspected_path,
         "sha256": str(inspection.get("sha256", value.get("sha256", ""))),
-            "provider": "redacted_sensitive_value" if _contains_sensitive(value.get("provider", "")) else str(value.get("provider", "")),
-            "source": "redacted_sensitive_value" if _contains_sensitive(value.get("source", "")) else str(value.get("source", "")),
+        "provider": "redacted_sensitive_value" if _contains_sensitive(value.get("provider", "")) else str(value.get("provider", "")),
+        "source": "redacted_sensitive_value" if _contains_sensitive(value.get("source", "")) else str(value.get("source", "")),
         "passed": bool(inspection.get("passed")),
         "failures": failures,
     }
     for key in ("aiGenerated", "shotId", "shotIds", "motionTypes", "captionCount", "containsProductCapture", "hasBrand", "usesAiScene", "dimensions", "safeMargins", "cloudUpload"):
         if key in metadata:
-            summary[key] = metadata[key]
+            summary[key] = _safe_report_value(metadata[key])
     if "probe" in inspection.get("diagnostics", {}):
-        summary["probe"] = inspection["diagnostics"]["probe"]
+        summary["probe"] = _safe_report_value(inspection["diagnostics"]["probe"])
     if "dimensions" in inspection.get("diagnostics", {}):
         summary["dimensions"] = inspection["diagnostics"]["dimensions"]
     return summary
@@ -579,9 +660,9 @@ def build_quality_report(stage_results: Mapping[str, StageResult] | Iterable[Sta
             "warnings": safe_warnings,
         }
         if result.status == "degraded":
-            degraded_stages.append(name)
+            degraded_stages.append(safe_name)
         if result.status in {"failed", "skipped"}:
-            failed_stages.append(name)
+            failed_stages.append(safe_name)
         for artifact in result.artifacts:
             descriptor = artifact.to_dict()
             inspection = _inspect_artifact(artifact)
@@ -610,17 +691,23 @@ def build_quality_report(stage_results: Mapping[str, StageResult] | Iterable[Sta
     ]
     if artifact_blockers:
         report["blockers"] = list(dict.fromkeys(list(report.get("blockers", [])) + artifact_blockers))
+        if report["status"] == "professional_ready":
+            report["status"] = "standard_ready"
+            report["achievedLevel"] = "standard_ready"
+            report["warnings"] = list(report.get("warnings", [])) + ["artifact_quality_failed"]
+    # Failed/skipped stages take precedence over degraded fallbacks: a partial
+    # pipeline must never be presented as merely standard-ready.
+    if failed_stages:
+        report["status"] = "partial_ready"
+        report["achievedLevel"] = "partial_ready"
+        report["blockers"] = list(dict.fromkeys(list(report.get("blockers", [])) + ["stage_failed"]))
     # Stage degradation is honest: a SAPI/FFmpeg fallback may produce usable
     # media but can never claim professional quality.
-    if report["status"] == "professional_ready" and degraded_stages:
+    elif report["status"] == "professional_ready" and degraded_stages:
         report["status"] = "standard_ready"
         report["achievedLevel"] = "standard_ready"
         report["warnings"] = list(report.get("warnings", [])) + ["degraded_stage_fallback"]
         report["blockers"] = list(dict.fromkeys(list(report.get("blockers", [])) + ["degraded_stage_fallback"]))
-    if failed_stages and report["status"] == "professional_ready":
-        report["status"] = "partial_ready"
-        report["achievedLevel"] = "partial_ready"
-        report["blockers"] = list(dict.fromkeys(list(report.get("blockers", [])) + ["stage_failed"]))
     report.update({
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "stages": stage_records,

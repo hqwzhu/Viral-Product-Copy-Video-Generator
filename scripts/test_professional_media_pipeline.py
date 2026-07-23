@@ -2620,6 +2620,10 @@ class ProfessionalVideoTest(unittest.TestCase):
             clean["duration"] = 1
             errors = video._quality_errors(clean, {**probe, "duration": 1.0})
             self.assertIn("target_duration_out_of_range", errors)
+            clean["duration"] = 20
+            self.assertIn("rendered_duration_out_of_range", video._quality_errors(clean, {**probe, "duration": 18.0}))
+            clean["duration"] = 60
+            self.assertIn("rendered_duration_out_of_range", video._quality_errors(clean, {**probe, "duration": 60.4}))
 
 
 class MediaQualityTest(unittest.TestCase):
@@ -2652,6 +2656,14 @@ class MediaQualityTest(unittest.TestCase):
         self.assertEqual(report["status"], "professional_ready")
         self.assertEqual(report["blockers"], [])
 
+        evidence = self.complete_evidence()
+        evidence["probe"]["authorization"] = "Bearer LEAK_TOKEN"
+        evidence["probe"]["sourceUrl"] = "https://example.test/?token=LEAK_QUERY"
+        safe_report = quality.evaluate_media_quality(evidence, target="professional")
+        rendered = json.dumps(safe_report, ensure_ascii=False)
+        self.assertNotIn("LEAK_TOKEN", rendered)
+        self.assertNotIn("LEAK_QUERY", rendered)
+
     def test_missing_ai_scene_downgrades_to_standard(self):
         quality = importlib.import_module("scripts.media_pipeline.quality")
         evidence = self.complete_evidence()
@@ -2666,6 +2678,12 @@ class MediaQualityTest(unittest.TestCase):
         evidence["productCaptures"] = []
         report = quality.evaluate_media_quality(evidence, target="professional")
         self.assertEqual(report["status"], "partial_ready")
+
+        video_only_probe = self.complete_evidence()
+        video_only_probe["videos"] = []
+        video_only_probe["video"] = []
+        report = quality.evaluate_media_quality(video_only_probe, target="professional")
+        self.assertIn("videos", report["missingFamilies"])
 
     def test_artifact_gate_rejects_corruption_dimensions_silence_and_secrets(self):
         quality = importlib.import_module("scripts.media_pipeline.quality")
@@ -2698,11 +2716,25 @@ class MediaQualityTest(unittest.TestCase):
             with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": False}):
                 video_report = quality.build_quality_report({"video": StageResult.ready("local", [video_artifact])})
             self.assertIn("video_silent", video_report["artifacts"][0]["failures"])
+            with mock.patch.object(quality, "probe_media", return_value={"videoCodec": "h264", "audioCodec": "aac", "shortEdge": 1080, "duration": 4.0, "nonSilent": True, "sourceUrl": "https://example.test/?token=LEAK_PROBE"}):
+                probe_report = quality.build_quality_report({"video": StageResult.ready("local", [video_artifact])})
+            self.assertNotIn("LEAK_PROBE", json.dumps(probe_report, ensure_ascii=False))
+
+            leaky_provenance = replace(capture, provider="Bearer LEAK_PROVIDER", source="https://example.test/?token=LEAK_SOURCE")
+            provenance_report = quality.build_quality_report({"capture": StageResult.ready("local", [leaky_provenance])})
+            self.assertIn("artifact_provider_secret", provenance_report["artifacts"][0]["failures"])
+            self.assertIn("artifact_source_secret", provenance_report["artifacts"][0]["failures"])
 
             secret = Artifact.from_file("product_capture_image", image_path, "playwright", "product_page")
-            secret = replace(secret, metadata={"viewport": [20, 20], "cloudUpload": False, "api_key": "do-not-log"})
+            secret = replace(secret, metadata={"viewport": [20, 20], "cloudUpload": False, "api_key": "do-not-log", "safeMargins": "Bearer LEAK_META", "dimensions": ["token=LEAK_DIM", 1]})
             secret_report = quality.build_quality_report({"capture": StageResult.ready("playwright", [secret])})
             self.assertIn("secret_metadata_rejected", secret_report["artifacts"][0]["failures"])
+            secret_rendered = json.dumps(secret_report, ensure_ascii=False)
+            self.assertNotIn("LEAK_META", secret_rendered)
+            self.assertNotIn("LEAK_DIM", secret_rendered)
+
+            invalid_descriptor = quality._inspect_artifact({"type": "", "path": "C:/Cookies/secret.bin"})
+            self.assertEqual(invalid_descriptor["path"], "redacted_sensitive_value")
 
             sensitive_dir = root / "Cookies"
             sensitive_dir.mkdir()
@@ -2786,6 +2818,32 @@ class MediaQualityTest(unittest.TestCase):
             ), mock.patch.object(quality, "_inspect_artifact", return_value={"passed": True}):
                 failed_gate = quality.run_quality_gate({"failed": leaky_stage}, target="standard")
             self.assertEqual(failed_gate.artifacts, ())
+            failed_gate_draft = quality.run_quality_gate({"failed": leaky_stage}, target="draft")
+            self.assertEqual(failed_gate_draft.artifacts, ())
+
+            mixed_gate = quality.run_quality_gate(
+                {
+                    "degraded": StageResult(status="degraded", provider="local"),
+                    "failed": StageResult(status="failed", provider="local"),
+                }
+            )
+            self.assertEqual(mixed_gate.status, "failed")
+
+            unknown_path = root / "unknown.bin"
+            unknown_path.write_bytes(b"unknown")
+            unknown = Artifact.from_file("unknown_artifact", unknown_path, "local", "fixture")
+            unknown_gate = quality.run_quality_gate(
+                {"capture": StageResult(status="degraded", provider="local", artifacts=(unknown,))},
+                target="standard",
+            )
+            self.assertEqual(unknown_gate.artifacts, ())
+
+            ai_scene = replace(
+                Artifact.from_file("ai_scene", valid_path, "comfyui_flux_local", "flux-workflow"),
+                metadata={"aiGenerated": True, "cloudUpload": False},
+            )
+            ai_report = quality.build_quality_report({"scene": StageResult.ready("comfyui_flux_local", [ai_scene])})
+            self.assertEqual(ai_report["evidence"]["aiScenes"][0]["type"], "ai_scene")
 
 
 if __name__ == "__main__":

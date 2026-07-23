@@ -233,5 +233,5 @@ class MediaJob:
             brand_assets=tuple(value["brandAssets"]),
             generated_content_path=value["generatedContentPath"],
             capture_plan_path=value["capturePlanPath"],
-            presenter=value["presenter"],
+            presenter=value.get("presenter", "none"),
         )

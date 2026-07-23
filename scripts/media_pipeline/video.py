@@ -370,6 +370,8 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
             raise ValueError
         if target_duration < lower or target_duration > upper:
             errors.append("target_duration_out_of_range")
+        if math.isfinite(duration) and (duration < lower or duration > upper):
+            errors.append("rendered_duration_out_of_range")
     except (TypeError, ValueError, IndexError):
         errors.append("duration_range_invalid")
 

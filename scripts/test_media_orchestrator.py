@@ -75,6 +75,16 @@ class _Video:
         return StageResult.ready("fake_video", [_artifact("professional_product_demo_video", output)])
 
 
+class _InspectingVideo(_Video):
+    def __init__(self):
+        super().__init__()
+        self.data = None
+
+    def __call__(self, data, output, project_dir):
+        self.data = data
+        return super().__call__(data, output, project_dir)
+
+
 class _Quality:
     def __init__(self):
         self.calls = 0
@@ -83,8 +93,8 @@ class _Quality:
         self.calls += 1
         report = Path(report_path)
         report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(json.dumps({"target": target, "cloudUpload": False}), encoding="utf-8")
-        return StageResult.ready("fake_quality", [_artifact("quality_report", report)])
+        report.write_text(json.dumps({"target": target, "status": "professional_ready", "cloudUpload": False}), encoding="utf-8")
+        return StageResult.ready("fake_quality", [_artifact("quality_report", report)], {"target": target, "status": "professional_ready"})
 
 
 class MediaOrchestratorTest(unittest.TestCase):
@@ -132,6 +142,81 @@ class MediaOrchestratorTest(unittest.TestCase):
             capture_path.write_bytes(capture_path.read_bytes() + b"changed")
             orchestrator.run(job, run_dir=run_dir, resume=True)
             self.assertEqual(capture.calls, 2)
+
+    def test_manifest_publish_pack_and_local_guards(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text(json.dumps({"title": "Fixture", "narration": "Fixture narration"}), encoding="utf-8")
+            logo = _png(root / "logo.png", "#ffffff")
+            pack = root / "publish-pack.json"
+            pack.write_text(json.dumps([{"platform": "youtube", "published": True, "metrics": {"views": 1}}]), encoding="utf-8")
+            job = MediaJob(
+                run_id="fixture-pack",
+                product_name="Fixture",
+                source_url="https://example.com/product",
+                language="en",
+                target_platforms=("youtube",),
+                quality_target="draft",
+                aspect_ratios=("9:16",),
+                duration_range=(10, 15),
+                providers={},
+                allow_cloud_media=False,
+                product_data_path=str(content),
+                brand_assets=(str(logo),),
+                generated_content_path=str(content),
+                capture_plan_path="",
+            )
+            video = _InspectingVideo()
+            result = MediaOrchestrator(_Capture(), _Voice(), _Scenes(), _Visuals(), video, _Quality()).run(job, run_dir=root / "run", resume=False, publish_pack_path=pack)
+            self.assertEqual(result.status, "ready")
+            self.assertEqual(video.data["width"], 1080)
+            self.assertEqual(video.data["height"], 1920)
+            self.assertEqual(video.data["duration"], 10)
+            self.assertTrue((result.run_paths.reports / "media-manifest.json").is_file())
+            self.assertTrue((result.run_paths.reports / "media-quality-report.json").is_file())
+            updated = json.loads(pack.read_text(encoding="utf-8"))[0]
+            self.assertIn("video", updated)
+            self.assertIn("mediaQuality", updated)
+            self.assertEqual(updated["mediaQuality"]["status"], "professional_ready")
+            self.assertTrue(updated["mediaQuality"]["report"].endswith("media-quality-report.json"))
+            self.assertTrue(updated["published"])
+            self.assertEqual(updated["metrics"], {"views": 1})
+
+    def test_cloud_and_sensitive_provider_results_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text(json.dumps({"title": "Fixture"}), encoding="utf-8")
+            logo = _png(root / "logo.png")
+            base = {
+                "runId": "guard",
+                "productName": "Fixture",
+                "sourceUrl": "https://example.com/product",
+                "language": "en",
+                "targetPlatforms": ["youtube"],
+                "qualityTarget": "draft",
+                "aspectRatios": ["16:9"],
+                "durationRange": [20, 60],
+                "providers": {},
+                "productDataPath": str(content),
+                "brandAssets": [str(logo)],
+                "generatedContentPath": str(content),
+                "capturePlanPath": "",
+            }
+            cloud = dict(base, allowCloudMedia=1)
+            blocked = MediaOrchestrator(_Capture(), _Voice(), _Scenes(), _Visuals(), _Video(), _Quality()).run(cloud, run_dir=root / "cloud", resume=False)
+            self.assertEqual(blocked.status, "failed")
+            self.assertEqual(blocked.stages["capture"].error_code, "job_validation_failed")
+
+            class _LeakyCapture(_Capture):
+                def capture(self, plan, out_dir):
+                    result = super().capture(plan, out_dir)
+                    return StageResult(status="ready", provider="Bearer TOKEN", artifacts=result.artifacts)
+
+            leaky = MediaOrchestrator(_LeakyCapture(), _Voice(), _Scenes(), _Visuals(), _Video(), _Quality()).run(dict(base, allowCloudMedia=False), run_dir=root / "leak", resume=False)
+            self.assertEqual(leaky.status, "failed")
+            self.assertEqual(leaky.stages["capture"].error_code, "stage_exception")
 
 
 if __name__ == "__main__":
