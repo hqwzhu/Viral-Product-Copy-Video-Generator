@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Validate and package the ENHE Promotion Manager browser extension."""
+"""Validate and package the ENHE Product Promo Maker browser extension."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+import distribution_contract as contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,8 +44,18 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the Chrome/Edge store submission zip for browser-extension/.")
-    parser.add_argument("--out-dir", default="./dist", help="Output directory for the zip and package report.")
+    parser.add_argument(
+        "--out-dir",
+        default=default_out_dir(),
+        help="Output directory for the zip and package report.",
+    )
     return parser.parse_args()
+
+
+def default_out_dir() -> str:
+    manifest = json.loads((EXTENSION_DIR / "manifest.json").read_text(encoding="utf-8"))
+    version = str(manifest.get("version") or "dev").strip() or "dev"
+    return str(Path(".") / "dist" / f"v{version}")
 
 
 def build_report(out_dir: Path) -> dict[str, Any]:
@@ -53,6 +66,7 @@ def build_report(out_dir: Path) -> dict[str, Any]:
     files = package_files()
     checks = {
         "requiredFiles": not missing,
+        "versionMatchesDistributionContract": str(manifest.get("version", "")) == contract.VERSION,
         "manifestV3": manifest.get("manifest_version") == 3,
         "icons": icons_ready(manifest),
         "allowedPermissions": permissions_ready(manifest),
@@ -60,9 +74,10 @@ def build_report(out_dir: Path) -> dict[str, Any]:
         "noRemoteExecutableCode": no_remote_executable_code(files),
         "noUnsafeEval": no_unsafe_eval(manifest, files),
         "packageCreated": False,
+        "deterministicArchiveMetadata": False,
     }
     for key, ready in checks.items():
-        if key != "packageCreated" and not ready:
+        if key not in {"packageCreated", "deterministicArchiveMetadata"} and not ready:
             missing.append(key)
     status = "ready" if not missing else "blocked"
     if status == "ready":
@@ -71,11 +86,22 @@ def build_report(out_dir: Path) -> dict[str, Any]:
         if not checks["packageCreated"]:
             status = "blocked"
             missing.append("packageCreated")
+        else:
+            with zipfile.ZipFile(package_path) as archive:
+                checks["deterministicArchiveMetadata"] = not contract.nondeterministic_zip_members(
+                    archive
+                )
+            if not checks["deterministicArchiveMetadata"]:
+                status = "blocked"
+                missing.append("deterministicArchiveMetadata")
+    archive_sha256 = sha256_file(package_path) if checks["packageCreated"] else ""
     return {
         "generatedAt": TODAY,
         "status": status,
         "extensionDir": str(EXTENSION_DIR),
         "package": str(package_path),
+        "archiveName": package_path.name,
+        "archiveSha256": archive_sha256,
         "version": str(manifest.get("version", "")),
         "name": str(manifest.get("name", "")),
         "checks": checks,
@@ -85,7 +111,7 @@ def build_report(out_dir: Path) -> dict[str, Any]:
             "chrome": "https://developer.chrome.com/docs/webstore/publish",
             "edge": "https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/publish-extension",
             "privacyPolicyUrl": "https://www.enhe-tech.com.cn/promotion-manager/privacy",
-            "supportUrl": "https://www.enhe-tech.com.cn/",
+            "supportUrl": "https://www.enhe-tech.com.cn/promotion-manager/support",
         },
         "guardrails": [
             "Package local extension code only; remote services may return data, not executable code.",
@@ -112,9 +138,24 @@ def package_files() -> list[Path]:
 
 
 def write_zip(package_path: Path, files: list[Path]) -> None:
-    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for rel in files:
-            archive.write(EXTENSION_DIR / rel, rel.as_posix())
+    with zipfile.ZipFile(
+        package_path,
+        "w",
+        compression=contract.FIXED_ZIP_COMPRESSION,
+        compresslevel=contract.FIXED_ZIP_COMPRESSLEVEL,
+    ) as archive:
+        archive.comment = b""
+        for rel in sorted(files, key=lambda item: item.as_posix()):
+            archive.writestr(
+                contract.deterministic_zip_info(rel.as_posix()),
+                (EXTENSION_DIR / rel).read_bytes(),
+                compress_type=contract.FIXED_ZIP_COMPRESSION,
+                compresslevel=contract.FIXED_ZIP_COMPRESSLEVEL,
+            )
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def icons_ready(manifest: dict[str, Any]) -> bool:
@@ -190,7 +231,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Generated: {report['generatedAt']}",
         f"- Status: `{report['status']}`",
         f"- Package: {report['package']}",
-        f"- Version: {report['version']}",
+        f"- Archive: `{report['archiveName']}`",
+        f"- SHA-256: `{report['archiveSha256']}`",
+        f"- Version: `{report['version']}`",
         "",
         "## Checks",
     ]

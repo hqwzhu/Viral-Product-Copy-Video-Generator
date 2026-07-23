@@ -1,4 +1,4 @@
-# ENHE Promotion Manager Deployment
+# ENHE Product Promo Maker Deployment
 
 This deploys the browser-extension backend on the same HTTPS host as the ENHE website while isolating it from the main site process.
 
@@ -56,8 +56,8 @@ Edit `/etc/enhe-promotion-manager/api.env` and fill PostgreSQL and `LICENSE_PEPP
 The domestic flow is isolated from the website order database:
 
 ```text
-Promotion Manager checkout -> shared ZPAY merchant -> signed ZPAY callback
--> Promotion Manager payment record -> hashed license activation
+ENHE Product Promo Maker checkout -> shared ZPAY merchant -> signed ZPAY callback
+-> ENHE Product Promo Maker payment record -> hashed license activation
 ```
 
 `ZPAY_KEY` stays on the server. The extension never receives merchant credentials. Domestic payments are one-time 30-day licenses by default; change `ZPAY_LICENSE_DAYS` if the commercial term changes.
@@ -110,11 +110,14 @@ For API-only launch, start only `enhe-promotion-manager-api` and leave worker di
 ## Smoke Test
 
 ```bash
-curl https://www.enhe-tech.com.cn/health
-curl https://www.enhe-tech.com.cn/api/promotion-manager/run/not-real
+curl -fsS http://127.0.0.1:3030/health
+curl -fsS http://127.0.0.1:3030/api/promotion-manager/health
+curl -fsS https://www.enhe-tech.com.cn/api/promotion-manager/health
+curl -fsS https://www.enhe-tech.com.cn/promotion-manager/checkout
+curl -fsS https://www.enhe-tech.com.cn/promotion-manager/privacy
 ```
 
-The second command should return `{"error":"run_not_found"}` with HTTP 404, proving the API route is isolated and reachable.
+The two local health responses and the public API health response must report the same service and healthy status. The checkout page must expose Chinese and English, Starter ¥19, Growth ¥59, Scale ¥199, desktop QR markup, and the mobile direct-payment branch. The privacy page must include the approved English and Chinese 30-day artifact, 180-day audit, applicable-law accounting, and contact-email statements.
 
 ## Rollback
 

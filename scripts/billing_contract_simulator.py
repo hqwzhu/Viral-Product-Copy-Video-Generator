@@ -35,7 +35,7 @@ def main() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Simulate ENHE Promotion Manager billing contract behavior locally.")
+    parser = argparse.ArgumentParser(description="Simulate ENHE Product Promo Maker billing contract behavior locally.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     parent = argparse.ArgumentParser(add_help=False)

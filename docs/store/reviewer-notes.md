@@ -3,12 +3,17 @@
 Use this text in Chrome Web Store and Microsoft Edge Add-ons reviewer notes.
 
 ```text
-ENHE Promotion Manager is a Manifest V3 operator extension. It captures the active product URL only after user action and generates guarded Codex commands or hosted ENHE run payloads for product promotion workflows.
+ENHE Product Promo Maker is a Manifest V3 extension that turns a product page selected by the user into promotional copy, video scripts, publishing assets, and guarded local commands or hosted ENHE run payloads.
 
-The extension does not auto-publish to third-party platforms, does not bypass login, captcha, account verification, or risk-control systems, and does not package remote executable code. ENHE backend endpoints are used only for license validation, subscription checkout, customer billing portal, usage credit reservation, hosted-run queue submission, and hosted-run status retrieval.
+The extension reads the active product URL only after user action. It uses activeTab for that user-selected page, storage for local license and endpoint settings, clipboardWrite for user-requested copies, and https://www.enhe-tech.com.cn/* for license validation, checkout and billing, credit reservation, hosted-run queue submission, and hosted-run status retrieval.
 
-The hosted worker runs server-side from a queue after license and quota checks. The extension cannot execute arbitrary remote code and does not send platform passwords, cookies, payment secrets, OAuth tokens, or webhook secrets.
+All extension logic is packaged locally. The extension does not load or execute remote code, publish to third-party platforms without user approval, bypass login, captcha, account verification, or risk-control systems, or send platform passwords, cookies, payment secrets, OAuth tokens, or webhook secrets.
+
+The hosted worker runs server-side from a queue only after license and quota checks. It processes the user-reviewed payload and cannot send arbitrary remote code to the extension.
 ```
+
+Privacy policy: https://www.enhe-tech.com.cn/promotion-manager/privacy
+Support: https://www.enhe-tech.com.cn/promotion-manager/support
 
 ## Test Account Notes
 

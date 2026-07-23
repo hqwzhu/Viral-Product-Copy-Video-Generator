@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Machine-readable platform capability registry for ENHE Promotion Manager."""
+"""Machine-readable platform capability registry for ENHE Product Promo Maker."""
 
 from __future__ import annotations
 

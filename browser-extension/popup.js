@@ -4,10 +4,102 @@ const DEFAULT_USAGE_AUTHORIZE_ENDPOINT = "https://www.enhe-tech.com.cn/api/promo
 const DEFAULT_HOSTED_RUN_ENDPOINT = "https://www.enhe-tech.com.cn/api/promotion-manager/run";
 const CHECKOUT_URL = "https://www.enhe-tech.com.cn/promotion-manager/checkout";
 const CUSTOMER_PORTAL_URL = "https://www.enhe-tech.com.cn/promotion-manager/billing";
+const HOSTED_WORKER_ENABLED = false;
 
 const EN_TRANSLATIONS = Object.freeze({
-  appTitle: "Promotion Manager",
+  appTitle: "ENHE Product Promo Maker",
+  productPromise: "Turn product pages into promotional copy, video scripts, and publishing assets.",
   languageSwitchLabel: "Interface language",
+  openGuide: "?",
+  openGuideLabel: "Open bilingual usage guide",
+  openWorkspace: "Open full workspace",
+  openWorkspaceLabel: "Open the full workspace in a new tab",
+  guideEyebrow: "IN-EXTENSION GUIDE",
+  guideTitle: "Product Promo Maker guide",
+  guideIntro: "A bilingual reference for planning, evidence, and safe publishing.",
+  guideBack: "Back to generator",
+  guideTabsLabel: "Guide sections",
+  guideFeaturesTab: "Features",
+  guideUsageTab: "How to use",
+  guideSubscriptionTab: "Subscription",
+  guideFeaturesIntro: "Map each promotion step to a clear outcome and a safe handoff.",
+  guideUsageIntro: "Use the popup as a controlled starting point, then review every external action.",
+  guideSubscriptionIntro: "Choose a plan by monthly evidence-backed runs. Hosted Worker stays off in this extension.",
+  guideWhat: "What",
+  guideProblem: "Problem solved",
+  guideBenefit: "Benefit",
+  guideUseCase: "Use case",
+  guideFeatureWeb: "Product web entry",
+  guideFeatureCopy: "Copy and script",
+  guideFeatureEvidence: "Platform evidence",
+  guideFeatureMedia: "Image and video prep",
+  guideFeaturePublish: "Publishing prep",
+  guideFeatureReview: "Real-data review",
+  guideFeatureOptimize: "Next-round optimization",
+  guideFeatureAutomation: "Automation",
+  guideFeatureAdvanced: "Advanced safeguards",
+  guideFeatureWebWhat: "Start from one product or website URL.",
+  guideFeatureWebProblem: "Scattered product context causes inconsistent promotion briefs.",
+  guideFeatureWebBenefit: "Keeps the source page attached to every downstream asset.",
+  guideFeatureWebUseCase: "Paste a product page before generating a first campaign command.",
+  guideFeatureCopyWhat: "Create promotion copy and video script directions.",
+  guideFeatureCopyProblem: "Ideas drift when hooks, proof, and calls to action are written separately.",
+  guideFeatureCopyBenefit: "Turns one brief into a reviewable, repeatable message system.",
+  guideFeatureCopyUseCase: "Use the research-and-copy depth for an early positioning pass.",
+  guideFeatureEvidenceWhat: "Collect platform examples and audience signals.",
+  guideFeatureEvidenceProblem: "Unverified trends make claims brittle and hard to audit.",
+  guideFeatureEvidenceBenefit: "Separates observed evidence from assumptions before publishing.",
+  guideFeatureEvidenceUseCase: "Capture search, detail, or creator evidence for a target platform.",
+  guideFeatureMediaWhat: "Prepare image, video, and asset checklists.",
+  guideFeatureMediaProblem: "Missing dimensions or source files delay final production.",
+  guideFeatureMediaBenefit: "Makes every handoff explicit before a render or upload.",
+  guideFeatureMediaUseCase: "Run the full promotion loop when media needs to be staged together.",
+  guideFeaturePublishWhat: "Build a publish queue and browser handoff.",
+  guideFeaturePublishProblem: "Publishing fails when credentials, fields, and approvals are implicit.",
+  guideFeaturePublishBenefit: "Leaves a visible queue while keeping final clicks human-controlled.",
+  guideFeaturePublishUseCase: "Prepare a browser publish session after the queue is reviewed.",
+  guideFeatureReviewWhat: "Record real post-publish metrics and comments.",
+  guideFeatureReviewProblem: "Without actual outcomes, the next brief repeats guesses.",
+  guideFeatureReviewBenefit: "Creates a feedback loop grounded in audience response.",
+  guideFeatureReviewUseCase: "Return with views, saves, comments, or conversions after a post runs.",
+  guideFeatureOptimizeWhat: "Turn review findings into the next experiment.",
+  guideFeatureOptimizeProblem: "Lessons disappear when they are not attached to a concrete change.",
+  guideFeatureOptimizeBenefit: "Keeps iteration focused on one measurable improvement at a time.",
+  guideFeatureOptimizeUseCase: "Compare hooks or platform choices in the next promotion cycle.",
+  guideFeatureAutomationWhat: "Schedule repeatable local workflows.",
+  guideFeatureAutomationProblem: "Manual repetition hides stale evidence and missed follow-ups.",
+  guideFeatureAutomationBenefit: "Runs checklists on a cadence without silently publishing.",
+  guideFeatureAutomationUseCase: "Create a weekly local job after the first cycle is stable.",
+  guideFeatureAdvancedBody: "Advanced options can collect richer evidence or prepare browser fields, but credentials, CAPTCHA, risk controls, and final publishing always require a person.",
+  guideUsageStep1: "1. Quick start: paste a product URL, choose platforms, and select workflow depth.",
+  guideUsageStep2: "2. Local Skill execution: generate the command and run it from the repository root.",
+  guideUsageStep3: "3. Evidence boundary: label observed sources, assumptions, and missing data before using a claim.",
+  guideUsageStep4: "4. Review and publish: inspect assets, handle CAPTCHA or risk checks manually, then confirm the final publish action.",
+  guideUsageSkill: "The extension prepares a command; it does not replace your local Skill runtime.",
+  guideUsageEvidence: "Treat platform evidence as time-bound observations, not universal truth.",
+  guideUsageCaptcha: "CAPTCHA, account challenges, policy warnings, and other risk controls must be handled manually.",
+  guideUsageConfirm: "No final platform publish should happen without your explicit confirmation.",
+  guidePlanCredits: "{credits} credits",
+  guidePlanPrice: "¥{price}/30 days",
+  guidePlanFree: "Free",
+  guidePlanStarter: "Starter",
+  guidePlanGrowth: "Growth",
+  guidePlanScale: "Scale",
+  guidePlanAudienceLabel: "Audience fit",
+  guidePlanIncludedLabel: "Included usage",
+  guidePlanFreeAudience: "Individuals evaluating the workflow before adopting a paid plan.",
+  guidePlanFreeIncluded: "Includes {credits} ENHE hosted credits for evaluating future hosted capabilities; Hosted Worker is disabled here and local Skill runs are separate.",
+  guidePlanStarterAudience: "Solo creators running occasional product campaigns.",
+  guidePlanStarterIncluded: "Includes {credits} ENHE hosted credits for light future hosted usage; Hosted Worker is disabled here and local Skill runs do not consume them.",
+  guidePlanGrowthAudience: "Active creators or small teams running recurring campaigns.",
+  guidePlanGrowthIncluded: "Includes {credits} ENHE hosted credits for recurring future hosted workflows; Hosted Worker is disabled here and local Skill runs do not consume them.",
+  guidePlanScaleAudience: "Teams managing frequent campaigns across products or platforms.",
+  guidePlanScaleIncluded: "Includes {credits} ENHE hosted credits for future high-volume hosted operations; Hosted Worker is disabled here and local Skill runs do not consume them.",
+  guideBillingLinks: "Manage billing on the ENHE website:",
+  guideCheckout: "Checkout",
+  guideBillingPortal: "Billing portal",
+  guideHostedWorker: "Hosted Worker is off; local runs and human confirmation remain the default.",
+  workspacePlaceholder: "Full workspace opens in a new tab in the next release.",
   productUrlLabel: "Product or website URL",
   useCurrentTab: "Use current tab",
   generateCommand: "Generate command",
@@ -80,17 +172,18 @@ const EN_TRANSLATIONS = Object.freeze({
   licenseKeyPlaceholder: "Paste ENHE license key",
   licenseEndpointLabel: "License endpoint",
   usageEndpointLabel: "Usage authorization endpoint",
-  hostedRunEndpointLabel: "Hosted run endpoint",
+  hostedRunEndpointLabel: "Hosted run endpoint (off)",
   saveButton: "Save",
   validateButton: "Validate",
-  reserveCreditsButton: "Reserve credits",
-  copyHostedPayloadButton: "Copy hosted payload",
-  startHostedRunButton: "Start hosted run",
+  reserveCreditsButton: "Reserve credits (off)",
+  copyHostedPayloadButton: "Copy hosted payload (off)",
+  startHostedRunButton: "Hosted Worker off",
   openCheckoutButton: "Open checkout",
   billingPortalButton: "Billing portal",
   licenseMessagePrompt: "Use ENHE website billing for production licenses.",
   usageMessagePrompt: "Reserve hosted credits only before a hosted ENHE run.",
   hostedRunMessagePrompt: "Hosted runs require a backend quota check and never click final platform publish.",
+  hostedWorkerOffMessage: "Hosted Worker is currently off. Local Skill runs remain available.",
   codexCommandTitle: "Codex command",
   copyButton: "Copy",
   commandHint: "Run this from the repository root. Publishing still requires credentials and approval.",
@@ -131,6 +224,7 @@ const EN_TRANSLATIONS = Object.freeze({
   acceptedStatus: "accepted",
   unknownValue: "unknown",
   creditsCount: "{credits} credits",
+  hostedEstimateReference: "Reference only — Hosted Worker off. {plan} includes {included} hosted credits; this setup plans {planned} credits for {workflow}. Local Skill runs do not consume hosted credits.",
   costSummary: "{plan} includes {included} credits at CNY {price}/30 days. {workflow}: {perRun} credits/run, {planned} credits planned, estimated gross cost up to USD {cost}.",
   costOverage: " Add prepaid credits or reduce automation depth.",
   labelWorkflow: "Workflow",
@@ -153,8 +247,99 @@ const EN_TRANSLATIONS = Object.freeze({
 });
 
 const ZH_TRANSLATIONS = Object.freeze({
-  appTitle: "推广管理器",
+  appTitle: "ENHE 产品推广素材生成器",
+  productPromise: "把产品网页变成推广文案、视频脚本和发布素材",
   languageSwitchLabel: "界面语言",
+  openGuide: "?",
+  openGuideLabel: "打开双语使用说明",
+  openWorkspace: "打开完整工作台",
+  openWorkspaceLabel: "在新标签页打开完整工作台",
+  guideEyebrow: "插件内使用说明",
+  guideTitle: "产品推广素材生成器说明",
+  guideIntro: "用于规划、证据和安全发布的双语参考。",
+  guideBack: "返回生成器",
+  guideTabsLabel: "说明章节",
+  guideFeaturesTab: "功能",
+  guideUsageTab: "如何使用",
+  guideSubscriptionTab: "订阅",
+  guideFeaturesIntro: "把每个推广步骤对应到清晰结果和安全交接。",
+  guideUsageIntro: "把弹窗作为受控起点，然后复核每个外部操作。",
+  guideSubscriptionIntro: "按每月有证据支持的运行次数选择套餐。本插件保持 Hosted Worker 关闭。",
+  guideWhat: "功能",
+  guideProblem: "解决的问题",
+  guideBenefit: "收益",
+  guideUseCase: "使用场景",
+  guideFeatureWeb: "产品网页入口",
+  guideFeatureCopy: "文案与脚本",
+  guideFeatureEvidence: "平台证据",
+  guideFeatureMedia: "图片与视频准备",
+  guideFeaturePublish: "发布准备",
+  guideFeatureReview: "真实数据复盘",
+  guideFeatureOptimize: "下一轮优化",
+  guideFeatureAutomation: "自动化",
+  guideFeatureAdvanced: "高级安全边界",
+  guideFeatureWebWhat: "从一个产品或网站链接开始。",
+  guideFeatureWebProblem: "产品上下文分散会导致推广简报前后不一致。",
+  guideFeatureWebBenefit: "让源页面跟随每个后续素材。",
+  guideFeatureWebUseCase: "生成第一条活动命令前先粘贴产品页面。",
+  guideFeatureCopyWhat: "创建推广文案和视频脚本方向。",
+  guideFeatureCopyProblem: "钩子、证据和行动号召分开书写时容易跑题。",
+  guideFeatureCopyBenefit: "把一份简报变成可复核、可重复的消息体系。",
+  guideFeatureCopyUseCase: "早期定位时选择“调研与文案”深度。",
+  guideFeatureEvidenceWhat: "收集平台案例和受众信号。",
+  guideFeatureEvidenceProblem: "未经核验的趋势让观点脆弱且难以审计。",
+  guideFeatureEvidenceBenefit: "发布前区分观察到的证据和推测。",
+  guideFeatureEvidenceUseCase: "为目标平台采集搜索、详情或创作者证据。",
+  guideFeatureMediaWhat: "准备图片、视频和素材清单。",
+  guideFeatureMediaProblem: "缺少尺寸或源文件会拖延最终制作。",
+  guideFeatureMediaBenefit: "渲染或上传前明确每次交接。",
+  guideFeatureMediaUseCase: "需要一起准备素材时运行完整推广闭环。",
+  guideFeaturePublishWhat: "建立发布队列和浏览器交接。",
+  guideFeaturePublishProblem: "凭据、字段和批准不明确会造成发布失败。",
+  guideFeaturePublishBenefit: "保留可见队列，同时让最终点击由人控制。",
+  guideFeaturePublishUseCase: "复核队列后准备浏览器发布会话。",
+  guideFeatureReviewWhat: "记录发布后的真实指标和评论。",
+  guideFeatureReviewProblem: "没有实际结果，下一份简报仍会重复猜测。",
+  guideFeatureReviewBenefit: "用受众反馈建立反馈闭环。",
+  guideFeatureReviewUseCase: "发布后带回播放、收藏、评论或转化数据。",
+  guideFeatureOptimizeWhat: "把复盘发现转成下一次实验。",
+  guideFeatureOptimizeProblem: "经验不落到具体改变就会消失。",
+  guideFeatureOptimizeBenefit: "每次迭代聚焦一个可衡量的改进。",
+  guideFeatureOptimizeUseCase: "在下一轮推广中比较钩子或平台选择。",
+  guideFeatureAutomationWhat: "安排可重复的本地工作流。",
+  guideFeatureAutomationProblem: "手工重复会掩盖过期证据和遗漏的跟进。",
+  guideFeatureAutomationBenefit: "按节奏运行清单，但不会悄悄发布。",
+  guideFeatureAutomationUseCase: "首轮稳定后创建每周本地任务。",
+  guideFeatureAdvancedBody: "高级选项可以采集更丰富的证据或准备浏览器字段，但凭据、验证码、风险控制和最终发布始终需要人工处理。",
+  guideUsageStep1: "1. 快速开始：粘贴产品链接，选择平台和工作流深度。",
+  guideUsageStep2: "2. 本地 Skill 执行：生成命令，并在仓库根目录运行。",
+  guideUsageStep3: "3. 证据边界：使用观点前标注已观察来源、假设和缺失数据。",
+  guideUsageStep4: "4. 复核并发布：检查素材，人工处理验证码或风险检查，然后确认最终发布。",
+  guideUsageSkill: "插件负责准备命令，不替代本地 Skill 运行环境。",
+  guideUsageEvidence: "平台证据是有时效的观察，不是普遍真理。",
+  guideUsageCaptcha: "验证码、账号挑战、政策警告及其他风险控制必须人工处理。",
+  guideUsageConfirm: "没有你的明确确认，不应执行平台最终发布。",
+  guidePlanCredits: "{credits} 点",
+  guidePlanPrice: "¥{price}/30 天",
+  guidePlanFree: "免费版",
+  guidePlanStarter: "入门版",
+  guidePlanGrowth: "成长版",
+  guidePlanScale: "规模版",
+  guidePlanAudienceLabel: "适合人群",
+  guidePlanIncludedLabel: "包含用量",
+  guidePlanFreeAudience: "准备先体验工作流、再决定是否付费的个人用户。",
+  guidePlanFreeIncluded: "包含 {credits} 点 ENHE 托管额度，用于评估未来托管能力；本版 Hosted Worker 已关闭，本地 Skill 运行与额度分开。",
+  guidePlanStarterAudience: "偶尔开展产品推广的独立创作者。",
+  guidePlanStarterIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来轻量托管需求；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
+  guidePlanGrowthAudience: "持续开展推广的活跃创作者或小型团队。",
+  guidePlanGrowthIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来持续托管工作流；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
+  guidePlanScaleAudience: "需要跨产品或跨平台高频推广的团队。",
+  guidePlanScaleIncluded: "包含 {credits} 点 ENHE 托管额度，用于未来高频托管操作；本版 Hosted Worker 已关闭，本地 Skill 不消耗这些额度。",
+  guideBillingLinks: "请在 ENHE 网站管理账单：",
+  guideCheckout: "结算页",
+  guideBillingPortal: "账单中心",
+  guideHostedWorker: "Hosted Worker 保持关闭；默认使用本地运行并由人工确认。",
+  workspacePlaceholder: "完整工作台将在下一版本于新标签页打开。",
   productUrlLabel: "产品或网站链接",
   useCurrentTab: "使用当前标签页",
   generateCommand: "生成命令",
@@ -227,17 +412,18 @@ const ZH_TRANSLATIONS = Object.freeze({
   licenseKeyPlaceholder: "粘贴 ENHE 许可证密钥",
   licenseEndpointLabel: "许可证接口",
   usageEndpointLabel: "用量授权接口",
-  hostedRunEndpointLabel: "托管运行接口",
+  hostedRunEndpointLabel: "托管运行接口（已关闭）",
   saveButton: "保存",
   validateButton: "验证",
-  reserveCreditsButton: "预留点数",
-  copyHostedPayloadButton: "复制托管请求",
-  startHostedRunButton: "启动托管运行",
+  reserveCreditsButton: "预留点数（已关闭）",
+  copyHostedPayloadButton: "复制托管请求（已关闭）",
+  startHostedRunButton: "Hosted Worker 已关闭",
   openCheckoutButton: "打开结算页",
   billingPortalButton: "账单中心",
   licenseMessagePrompt: "正式许可证请通过 ENHE 网站购买和管理。",
   usageMessagePrompt: "仅在启动 ENHE 托管任务前预留点数。",
   hostedRunMessagePrompt: "托管任务需经后端额度校验，且不会点击平台的最终发布按钮。",
+  hostedWorkerOffMessage: "Hosted Worker 当前关闭，本地 Skill 可继续使用。",
   codexCommandTitle: "Codex 命令",
   copyButton: "复制",
   commandHint: "请在仓库根目录运行。正式发布仍需要凭据和人工批准。",
@@ -278,6 +464,7 @@ const ZH_TRANSLATIONS = Object.freeze({
   acceptedStatus: "已受理",
   unknownValue: "未知",
   creditsCount: "{credits} 点",
+  hostedEstimateReference: "仅供未来参考——Hosted Worker 当前关闭。{plan} 套餐包含 {included} 点托管额度，当前设置为 {workflow}、计划使用 {planned} 点。本地 Skill 不消耗托管点数。",
   costSummary: "{plan} 包含 {included} 点，价格为 ¥{price}/30 天。{workflow}：每次 {perRun} 点，计划使用 {planned} 点，预计最高成本约 USD {cost}。",
   costOverage: " 请购买预付点数或降低自动化深度。",
   labelWorkflow: "工作流",
@@ -312,6 +499,24 @@ const PLANS = {
   scale: { label: "Scale", credits: 800, priceCny: 199 }
 };
 
+const GUIDE_FEATURES = [
+  ["guideFeatureWeb", "guideFeatureWebWhat", "guideFeatureWebProblem", "guideFeatureWebBenefit", "guideFeatureWebUseCase"],
+  ["guideFeatureCopy", "guideFeatureCopyWhat", "guideFeatureCopyProblem", "guideFeatureCopyBenefit", "guideFeatureCopyUseCase"],
+  ["guideFeatureEvidence", "guideFeatureEvidenceWhat", "guideFeatureEvidenceProblem", "guideFeatureEvidenceBenefit", "guideFeatureEvidenceUseCase"],
+  ["guideFeatureMedia", "guideFeatureMediaWhat", "guideFeatureMediaProblem", "guideFeatureMediaBenefit", "guideFeatureMediaUseCase"],
+  ["guideFeaturePublish", "guideFeaturePublishWhat", "guideFeaturePublishProblem", "guideFeaturePublishBenefit", "guideFeaturePublishUseCase"],
+  ["guideFeatureReview", "guideFeatureReviewWhat", "guideFeatureReviewProblem", "guideFeatureReviewBenefit", "guideFeatureReviewUseCase"],
+  ["guideFeatureOptimize", "guideFeatureOptimizeWhat", "guideFeatureOptimizeProblem", "guideFeatureOptimizeBenefit", "guideFeatureOptimizeUseCase"],
+  ["guideFeatureAutomation", "guideFeatureAutomationWhat", "guideFeatureAutomationProblem", "guideFeatureAutomationBenefit", "guideFeatureAutomationUseCase"]
+];
+
+const GUIDE_PLAN_DETAILS = Object.freeze({
+  free: { label: "guidePlanFree", audience: "guidePlanFreeAudience", included: "guidePlanFreeIncluded" },
+  starter: { label: "guidePlanStarter", audience: "guidePlanStarterAudience", included: "guidePlanStarterIncluded" },
+  growth: { label: "guidePlanGrowth", audience: "guidePlanGrowthAudience", included: "guidePlanGrowthIncluded" },
+  scale: { label: "guidePlanScale", audience: "guidePlanScaleAudience", included: "guidePlanScaleIncluded" }
+});
+
 const COST_PER_CREDIT = 0.35;
 
 const COMMAND_LABELS = {
@@ -330,9 +535,60 @@ const COMMAND_LABELS = {
   automation_windows_task: "labelWindowsTask"
 };
 
+const WORKSPACE_DRAFT_KEY = "enhePromotionManagerWorkspaceDraft";
+const WORKSPACE_DRAFT_VALUE_IDS = Object.freeze([
+  "productUrl",
+  "workflowDepth",
+  "commandType",
+  "outDir",
+  "platformDataPlatform",
+  "platformDataMode",
+  "platformDataTarget",
+  "publishQueue",
+  "platformPublishUrls",
+  "evidenceInbox",
+  "automationConfig",
+  "automationOutputRoot",
+  "automationJobId",
+  "automationIntervalDays",
+  "windowsTaskScript",
+  "windowsTaskTime",
+  "plan",
+  "monthlyRuns"
+]);
+const WORKSPACE_DRAFT_CHECKBOX_IDS = Object.freeze([
+  "platformDataSubComments",
+  "runFormFill",
+  "captureBrowserEvidence",
+  "allowLocalhost",
+  "autoSearchCompetitors",
+  "enableMultiQueryDiscovery",
+  "browserFollowUps",
+  "enablePublishQueue",
+  "enableBrowserPublishAssistant",
+  "enableBrowserFormFill",
+  "enableMetricsRecovery",
+  "enableNextRoundOptimization",
+  "alsoWindowsTask",
+  "deepReview",
+  "hostedVideo"
+]);
+
 const els = {
   languageZh: document.getElementById("languageZh"),
   languageEn: document.getElementById("languageEn"),
+  openGuide: document.getElementById("openGuide"),
+  openWorkspace: document.getElementById("openWorkspace"),
+  mainView: document.getElementById("mainView"),
+  guideView: document.getElementById("guideView"),
+  guideBack: document.getElementById("guideBack"),
+  guideTabs: document.getElementById("guideTabs"),
+  guideFeatures: document.getElementById("guideFeatures"),
+  guideUsage: document.getElementById("guideUsage"),
+  guideSubscription: document.getElementById("guideSubscription"),
+  guideFeatureList: document.getElementById("guideFeatureList"),
+  guideUsageList: document.getElementById("guideUsageList"),
+  guidePlans: document.getElementById("guidePlans"),
   licenseStatus: document.getElementById("licenseStatus"),
   productUrl: document.getElementById("productUrl"),
   tabTitle: document.getElementById("tabTitle"),
@@ -404,6 +660,24 @@ els.copyHostedPayload.addEventListener("click", copyHostedPayload);
 els.startHostedRun.addEventListener("click", startHostedRun);
 els.openCheckout.addEventListener("click", openCheckout);
 els.openPortal.addEventListener("click", openPortal);
+els.openGuide.addEventListener("click", () => {
+  setView("guide");
+  focusSelectedGuideTab();
+});
+els.openWorkspace.addEventListener("click", () => {
+  openWorkspace().catch(() => {});
+});
+els.guideBack.addEventListener("click", () => {
+  setView("main");
+  els.openGuide.focus();
+});
+els.guideTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-guide-tab]");
+  if (tab) {
+    setGuideTab(tab.dataset.guideTab);
+  }
+});
+els.guideTabs.addEventListener("keydown", handleGuideTabKeydown);
 els.languageZh.addEventListener("click", () => setLanguage("zh-CN"));
 els.languageEn.addEventListener("click", () => setLanguage("en"));
 els.plan.addEventListener("change", updateEstimate);
@@ -429,30 +703,205 @@ Array.from(document.querySelectorAll("#platforms input")).forEach((input) => {
 });
 
 async function init() {
-  const stored = await chrome.storage.local.get([
-    "licenseKey",
-    "licenseEndpoint",
-    "usageAuthorizeEndpoint",
-    "hostedRunEndpoint",
-    "licensePlan",
-    "licenseActive",
-    "uiLanguage"
-  ]);
-  await setLanguage(normalizeLanguage(stored.uiLanguage || chrome.i18n.getUILanguage()), !stored.uiLanguage);
-  els.licenseKey.value = stored.licenseKey || "";
-  els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
-  els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
-  els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
-  if (stored.licensePlan) {
-    const planKey = String(stored.licensePlan).toLowerCase();
-    if (PLANS[planKey]) {
-      els.plan.value = planKey;
+  initializeViewState(window.location.search);
+  try {
+    setLanguage(browserUiLanguage(), false);
+    const stored = await readLocalStorage([
+      "licenseKey",
+      "licenseEndpoint",
+      "usageAuthorizeEndpoint",
+      "hostedRunEndpoint",
+      "licensePlan",
+      "licenseActive",
+      "uiLanguage"
+    ]);
+    await setLanguage(stored.uiLanguage || currentLanguage, !stored.uiLanguage);
+    els.licenseKey.value = stored.licenseKey || "";
+    els.licenseEndpoint.value = stored.licenseEndpoint || DEFAULT_ENDPOINT;
+    els.usageAuthorizeEndpoint.value = stored.usageAuthorizeEndpoint || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
+    els.hostedRunEndpoint.value = stored.hostedRunEndpoint || DEFAULT_HOSTED_RUN_ENDPOINT;
+    applyHostedWorkerState();
+    if (stored.licensePlan) {
+      const planKey = String(stored.licensePlan).toLowerCase();
+      if (PLANS[planKey]) {
+        els.plan.value = planKey;
+      }
+    }
+    setLicenseStatus(stored.licenseActive ? "statusActive" : "statusLocal", stored.licenseActive ? "active" : "");
+    await useCurrentTab();
+    if (document.body.dataset.layout === "workspace") {
+      applyWorkspaceDraft(await readWorkspaceDraft());
+    }
+    handleCommandTypeChange();
+    updateEstimate();
+  } finally {
+    document.body.dataset.initialized = "true";
+  }
+}
+
+function browserUiLanguage() {
+  if (typeof chrome !== "undefined" && chrome.i18n && typeof chrome.i18n.getUILanguage === "function") {
+    try {
+      return chrome.i18n.getUILanguage();
+    } catch (error) {
+      // Fall back to the browser language when extension i18n is unavailable.
     }
   }
-  setLicenseStatus(stored.licenseActive ? "statusActive" : "statusLocal", stored.licenseActive ? "active" : "");
-  await useCurrentTab();
-  handleCommandTypeChange();
-  updateEstimate();
+  return typeof navigator !== "undefined" ? navigator.language : "en";
+}
+
+function localStorageApi() {
+  if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+    return null;
+  }
+  return chrome.storage.local;
+}
+
+async function readLocalStorage(keys) {
+  const storage = localStorageApi();
+  if (!storage || typeof storage.get !== "function") {
+    return {};
+  }
+  try {
+    const stored = await storage.get(keys);
+    return stored && typeof stored === "object" ? stored : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+async function writeLocalStorage(values) {
+  const storage = localStorageApi();
+  if (!storage || typeof storage.set !== "function") {
+    return false;
+  }
+  try {
+    await storage.set(values);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function queryActiveTabs() {
+  if (typeof chrome === "undefined" || !chrome.tabs || typeof chrome.tabs.query !== "function") {
+    return [];
+  }
+  try {
+    return await chrome.tabs.query({ active: true, currentWindow: true });
+  } catch (error) {
+    return [];
+  }
+}
+
+async function writeClipboard(value) {
+  if (typeof navigator === "undefined" || !navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function openExternalTab(url) {
+  if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
+    try {
+      await chrome.tabs.create({ url });
+      return true;
+    } catch (error) {
+      // Fall through to a normal browser window when extension tabs are unavailable.
+    }
+  }
+  if (typeof window.open !== "function") {
+    return false;
+  }
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function captureWorkspaceDraft() {
+  const values = Object.fromEntries(
+    WORKSPACE_DRAFT_VALUE_IDS.map((id) => [id, document.getElementById(id)?.value || ""])
+  );
+  const checks = Object.fromEntries(
+    WORKSPACE_DRAFT_CHECKBOX_IDS.map((id) => [id, Boolean(document.getElementById(id)?.checked)])
+  );
+  return {
+    version: 1,
+    values,
+    checks,
+    platforms: selectedPlatforms(),
+    commandOutput: els.commandOutput.value
+  };
+}
+
+function applyWorkspaceDraft(draft) {
+  if (!draft || typeof draft !== "object") {
+    return;
+  }
+  const values = draft.values && typeof draft.values === "object" ? draft.values : {};
+  WORKSPACE_DRAFT_VALUE_IDS.forEach((id) => {
+    const element = document.getElementById(id);
+    if (!element || !Object.hasOwn(values, id)) {
+      return;
+    }
+    const value = String(values[id] ?? "");
+    if (element.tagName === "SELECT" && !Array.from(element.options).some((option) => option.value === value)) {
+      return;
+    }
+    element.value = value;
+  });
+
+  const checks = draft.checks && typeof draft.checks === "object" ? draft.checks : {};
+  WORKSPACE_DRAFT_CHECKBOX_IDS.forEach((id) => {
+    const element = document.getElementById(id);
+    if (element && Object.hasOwn(checks, id)) {
+      element.checked = Boolean(checks[id]);
+    }
+  });
+
+  if (Array.isArray(draft.platforms)) {
+    const selected = new Set(draft.platforms.map(String));
+    document.querySelectorAll("#platforms input").forEach((input) => {
+      input.checked = selected.has(input.value);
+    });
+  }
+  if (typeof draft.commandOutput === "string") {
+    setCommandValue(draft.commandOutput);
+  }
+}
+
+async function persistWorkspaceDraft() {
+  const draft = captureWorkspaceDraft();
+  if (await writeLocalStorage({ [WORKSPACE_DRAFT_KEY]: draft })) {
+    return true;
+  }
+  try {
+    localStorage.setItem(WORKSPACE_DRAFT_KEY, JSON.stringify(draft));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function readWorkspaceDraft() {
+  const stored = await readLocalStorage([WORKSPACE_DRAFT_KEY]);
+  if (stored[WORKSPACE_DRAFT_KEY] && typeof stored[WORKSPACE_DRAFT_KEY] === "object") {
+    return stored[WORKSPACE_DRAFT_KEY];
+  }
+  try {
+    const raw = localStorage.getItem(WORKSPACE_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function normalizeLanguage(value) {
@@ -473,12 +922,12 @@ async function setLanguage(language, persist = true) {
   document.documentElement.lang = currentLanguage;
   applyTranslations();
   if (persist) {
-    await chrome.storage.local.set({ uiLanguage: currentLanguage });
+    await writeLocalStorage({ uiLanguage: currentLanguage });
   }
 }
 
 function applyTranslations() {
-  document.title = `ENHE ${t("appTitle")}`;
+  document.title = t("appTitle");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
@@ -498,11 +947,194 @@ function applyTranslations() {
   }
   renderLicenseStatus();
   handleCommandTypeChange();
+  renderGuideContent();
+}
+
+function setLayout(layoutName) {
+  document.body.dataset.layout = layoutName === "workspace" ? "workspace" : "popup";
+}
+
+function initializeViewState(search) {
+  const requestedView = new URLSearchParams(search).get("view");
+  setLayout(requestedView === "workspace" ? "workspace" : "popup");
+  setView(requestedView === "guide" ? "guide" : "main");
+}
+
+function setView(viewName) {
+  const view = viewName === "guide" ? "guide" : "main";
+  const guideVisible = view === "guide";
+  els.mainView.hidden = guideVisible;
+  els.guideView.hidden = !guideVisible;
+  document.body.dataset.view = view;
+  if (guideVisible) {
+    setGuideTab(document.querySelector("[data-guide-tab][aria-selected='true']")?.dataset.guideTab || "features");
+  }
+}
+
+function setGuideTab(tabName) {
+  const tab = ["features", "usage", "subscription"].includes(tabName) ? tabName : "features";
+  document.querySelectorAll("[data-guide-tab]").forEach((button) => {
+    const selected = button.dataset.guideTab === tab;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  ["features", "usage", "subscription"].forEach((sectionName) => {
+    const section = els[`guide${sectionName[0].toUpperCase()}${sectionName.slice(1)}`];
+    section.hidden = sectionName !== tab;
+  });
+}
+
+function focusSelectedGuideTab() {
+  document.querySelector("[data-guide-tab][aria-selected='true']")?.focus();
+}
+
+function handleGuideTabKeydown(event) {
+  const tabs = Array.from(document.querySelectorAll("[data-guide-tab]"));
+  const current = event.target.closest("[data-guide-tab]");
+  const currentIndex = tabs.indexOf(current);
+  if (currentIndex < 0) {
+    return;
+  }
+
+  let nextIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % tabs.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = tabs.length - 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  const next = tabs[nextIndex];
+  setGuideTab(next.dataset.guideTab);
+  next.focus();
+}
+
+async function openWorkspace() {
+  await persistWorkspaceDraft();
+  const target = new URL(window.location.href);
+  target.search = "";
+  target.searchParams.set("view", "workspace");
+  const targetUrl = target.toString();
+  if (typeof chrome !== "undefined" && chrome.tabs && typeof chrome.tabs.create === "function") {
+    try {
+      await chrome.tabs.create({ url: targetUrl });
+      return;
+    } catch (error) {
+      openWorkspaceFallback(targetUrl);
+      return;
+    }
+  }
+  openWorkspaceFallback(targetUrl);
+}
+
+function openWorkspaceFallback(targetUrl) {
+  if (typeof window.open !== "function") {
+    return;
+  }
+  try {
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    // Keep the popup usable when both tab-opening paths are unavailable.
+  }
+}
+
+function renderGuideContent() {
+  if (!els.guideFeatureList || !els.guideUsageList || !els.guidePlans) {
+    return;
+  }
+  els.guideFeatureList.replaceChildren(
+    ...GUIDE_FEATURES.map(([title, what, problem, benefit, useCase]) => {
+      const article = document.createElement("article");
+      article.className = "guide-card";
+      const heading = document.createElement("h3");
+      heading.textContent = t(title);
+      article.append(heading);
+      [["guideWhat", what], ["guideProblem", problem], ["guideBenefit", benefit], ["guideUseCase", useCase]].forEach(([label, key]) => {
+        const paragraph = document.createElement("p");
+        const strong = document.createElement("strong");
+        strong.textContent = `${t(label)}: `;
+        paragraph.append(strong, document.createTextNode(t(key)));
+        article.append(paragraph);
+      });
+      return article;
+    })
+  );
+  const advanced = document.createElement("details");
+  advanced.className = "guide-disclosure";
+  const summary = document.createElement("summary");
+  summary.textContent = t("guideFeatureAdvanced");
+  advanced.append(summary, document.createTextNode(t("guideFeatureAdvancedBody")));
+  els.guideFeatureList.append(advanced);
+
+  const usageItems = ["guideUsageStep1", "guideUsageStep2", "guideUsageStep3", "guideUsageStep4", "guideUsageSkill", "guideUsageEvidence", "guideUsageCaptcha", "guideUsageConfirm"];
+  els.guideUsageList.replaceChildren(
+    ...usageItems.map((key) => {
+      const item = document.createElement("p");
+      item.className = "guide-usage-item";
+      item.textContent = t(key);
+      return item;
+    })
+  );
+
+  els.guidePlans.replaceChildren(
+    ...Object.entries(PLANS).map(([key, plan]) => {
+      const details = GUIDE_PLAN_DETAILS[key];
+      const row = document.createElement("div");
+      row.className = "plan-row";
+      const summary = document.createElement("div");
+      summary.className = "plan-row-summary";
+      const name = document.createElement("strong");
+      name.textContent = t(details.label);
+      const credits = document.createElement("span");
+      credits.textContent = t("guidePlanCredits", { credits: plan.credits });
+      const price = document.createElement("span");
+      price.textContent = t("guidePlanPrice", { price: plan.priceCny });
+      summary.append(name, credits, price);
+      const audience = document.createElement("p");
+      audience.className = "plan-audience";
+      const audienceLabel = document.createElement("strong");
+      audienceLabel.textContent = `${t("guidePlanAudienceLabel")}: `;
+      audience.append(audienceLabel, document.createTextNode(t(details.audience)));
+      const included = document.createElement("p");
+      included.className = "plan-included";
+      const includedLabel = document.createElement("strong");
+      includedLabel.textContent = `${t("guidePlanIncludedLabel")}: `;
+      included.append(includedLabel, document.createTextNode(t(details.included, { credits: plan.credits })));
+      row.append(summary, audience, included);
+      return row;
+    })
+  );
 }
 
 function setMessage(element, key, params = {}) {
   messageState.set(element, { key, params });
   element.textContent = t(key, params);
+}
+
+function applyHostedWorkerState() {
+  const disabled = !HOSTED_WORKER_ENABLED;
+  [els.authorizeUsage, els.copyHostedPayload, els.startHostedRun, els.hostedRunEndpoint].forEach((element) => {
+    element.disabled = disabled;
+    element.setAttribute("aria-disabled", String(disabled));
+  });
+  if (disabled) {
+    setMessage(els.usageMessage, "hostedWorkerOffMessage");
+    setMessage(els.hostedRunMessage, "hostedWorkerOffMessage");
+  }
+}
+
+function requireHostedWorker(messageElement) {
+  if (HOSTED_WORKER_ENABLED) {
+    return true;
+  }
+  setMessage(messageElement, "hostedWorkerOffMessage");
+  return false;
 }
 
 function setCommandMessage(key, params = {}) {
@@ -516,7 +1148,7 @@ function setCommandValue(value) {
 }
 
 async function useCurrentTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabs = await queryActiveTabs();
   const tab = tabs && tabs[0];
   if (!tab) {
     setMessage(els.tabTitle, "noActiveTab");
@@ -906,7 +1538,9 @@ async function copyCommand() {
   if (!value) {
     return;
   }
-  await navigator.clipboard.writeText(value);
+  if (!(await writeClipboard(value))) {
+    return;
+  }
   els.copyCommand.textContent = t("copied");
   setTimeout(() => {
     els.copyCommand.textContent = t("copyButton");
@@ -914,17 +1548,22 @@ async function copyCommand() {
 }
 
 async function saveLicense() {
-  await chrome.storage.local.set({
+  const saved = await writeLocalStorage({
     licenseKey: els.licenseKey.value.trim(),
     licenseEndpoint: els.licenseEndpoint.value.trim() || DEFAULT_ENDPOINT,
     usageAuthorizeEndpoint: els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT,
     hostedRunEndpoint: els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
     licensePlan: els.plan.value
   });
-  setMessage(els.licenseMessage, "licenseSaved");
+  if (saved) {
+    setMessage(els.licenseMessage, "licenseSaved");
+  }
 }
 
 async function authorizeUsage() {
+  if (!requireHostedWorker(els.usageMessage)) {
+    return;
+  }
   const licenseKey = els.licenseKey.value.trim();
   const endpoint = els.usageAuthorizeEndpoint.value.trim() || DEFAULT_USAGE_AUTHORIZE_ENDPOINT;
   const estimate = estimateCredits();
@@ -960,7 +1599,7 @@ async function authorizeUsage() {
       setMessage(els.usageMessage, "usageBlocked", { reason: payload.reason || "not_allowed" });
       return;
     }
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       usageAuthorizeEndpoint: endpoint,
       lastUsageId: payload.usageId || "",
       lastUsageWorkflowType: estimate.workflowType,
@@ -1004,7 +1643,7 @@ async function validateLicense() {
     }
     const payload = await response.json();
     const active = Boolean(payload.active);
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       licenseKey,
       licenseEndpoint: endpoint,
       hostedRunEndpoint: payload.hostedRunEndpoint || els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT,
@@ -1021,16 +1660,21 @@ async function validateLicense() {
       active ? { plan: payload.plan || els.plan.value, credits: payload.creditsRemaining ?? t("unknownValue") } : {}
     );
   } catch (error) {
-    await chrome.storage.local.set({ licenseActive: false });
+    await writeLocalStorage({ licenseActive: false });
     setLicenseStatus("statusOffline", "error");
     setMessage(els.licenseMessage, "licenseUnavailable", { error: error.message });
   }
 }
 
 async function copyHostedPayload() {
+  if (!requireHostedWorker(els.hostedRunMessage)) {
+    return;
+  }
   try {
     const payload = await buildHostedRunPayload();
-    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    if (!(await writeClipboard(JSON.stringify(payload, null, 2)))) {
+      throw new Error("Clipboard unavailable");
+    }
     setMessage(els.hostedRunMessage, "hostedPayloadCopied");
   } catch (error) {
     setMessage(els.hostedRunMessage, error.translationKey || "hostedUnavailable", error.translationKey ? {} : { error: error.message });
@@ -1038,6 +1682,9 @@ async function copyHostedPayload() {
 }
 
 async function startHostedRun() {
+  if (!requireHostedWorker(els.hostedRunMessage)) {
+    return;
+  }
   const endpoint = els.hostedRunEndpoint.value.trim() || DEFAULT_HOSTED_RUN_ENDPOINT;
   let payload;
   try {
@@ -1061,7 +1708,7 @@ async function startHostedRun() {
       throw new Error(`HTTP ${response.status}`);
     }
     const result = await response.json();
-    await chrome.storage.local.set({
+    await writeLocalStorage({
       hostedRunEndpoint: endpoint,
       lastHostedRunId: result.runId || "",
       lastHostedRunStatus: result.status || "",
@@ -1114,7 +1761,7 @@ async function buildHostedRunPayload() {
   if (!localCommand) {
     throw localizedError("generateFirst");
   }
-  const stored = await chrome.storage.local.get([
+  const stored = await readLocalStorage([
     "lastUsageId",
     "lastUsageWorkflowType",
     "lastUsageCreditsReserved",
@@ -1203,21 +1850,30 @@ async function openCheckout() {
   url.searchParams.set("credits", String(estimate.credits));
   url.searchParams.set("runs", String(estimate.runs));
   url.searchParams.set("workflow", estimate.workflowType);
-  await chrome.tabs.create({ url: url.toString() });
+  await openExternalTab(url.toString());
 }
 
 async function openPortal() {
-  const stored = await chrome.storage.local.get(["customerPortalUrl"]);
+  const stored = await readLocalStorage(["customerPortalUrl"]);
   const url = new URL(stored.customerPortalUrl || CUSTOMER_PORTAL_URL);
   url.searchParams.set("source", "extension");
-  await chrome.tabs.create({ url: url.toString() });
+  await openExternalTab(url.toString());
 }
 
 function updateEstimate() {
   const estimate = estimateCredits();
   const plan = PLANS[els.plan.value] || PLANS.free;
-  const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.creditMeter.textContent = t("creditsCount", { credits: estimate.credits });
+  if (!HOSTED_WORKER_ENABLED) {
+    els.costSummary.textContent = t("hostedEstimateReference", {
+      plan: plan.label,
+      included: plan.credits,
+      workflow: t(estimate.label),
+      planned: estimate.credits
+    });
+    return;
+  }
+  const estimatedCost = estimate.credits * COST_PER_CREDIT;
   els.costSummary.textContent = currentLanguage === "en"
     ? `${plan.label} includes ${plan.credits} credits at CNY ${plan.priceCny}/30 days. ${t(estimate.label)}: ${estimate.creditsPerRun} credits/run, ${estimate.credits} credits planned, estimated gross cost up to USD ${estimatedCost.toFixed(2)}.`
     : t("costSummary", {

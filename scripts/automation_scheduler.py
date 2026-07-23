@@ -1100,7 +1100,7 @@ def write_windows_task_script(args: argparse.Namespace) -> None:
     script = f"""$Action = New-ScheduledTaskAction -Execute "python" -Argument {ps_quote(argument)} -WorkingDirectory {ps_quote(str(ROOT))}
 $Trigger = New-ScheduledTaskTrigger -Daily -At {ps_quote(args.time)}
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-Register-ScheduledTask -TaskName {ps_quote(args.task_name)} -Action $Action -Trigger $Trigger -Settings $Settings -Description "Runs the Codex Viral Product Promotion Manager scheduler." -Force
+Register-ScheduledTask -TaskName {ps_quote(args.task_name)} -Action $Action -Trigger $Trigger -Settings $Settings -Description "Runs the ENHE Product Promo Maker scheduler." -Force
 """
     out_path.write_text(script, encoding="utf-8")
     print(f"Windows scheduled task script written to: {out_path.resolve()}")

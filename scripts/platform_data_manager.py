@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promotion Manager CLI for guarded local platform evidence collection."""
+"""ENHE Product Promo Maker CLI for guarded local platform evidence collection."""
 
 from __future__ import annotations
 
@@ -73,6 +73,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInstall) -> dict[str, Any]:
+    out_dir = Path(args.out_dir)
+    detail_context_query = ""
+    if args.platform == "xiaohongshu" and args.mode == "detail":
+        detail_context_query = resolve_xiaohongshu_detail_query(out_dir, args.target)
     request = mediacrawler_sidecar.CollectRequest(
         platform=args.platform,
         mode=args.mode,
@@ -82,11 +86,11 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
         max_comments=args.max_comments,
         include_sub_comments=args.include_sub_comments,
         timeout_seconds=args.timeout_seconds,
+        detail_context_query=detail_context_query,
     )
     started_monotonic = time.monotonic()
     started_at = utc_now()
     run_id = new_run_id(request)
-    out_dir = Path(args.out_dir)
     run_dir = out_dir / "reports" / "promotion-manager" / "platform-data" / "mediacrawler" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
 
@@ -99,6 +103,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
     retry_count = 0
     raw_kept = False
     warning = ""
+    telemetry: dict[str, Any] = {}
     if args.fixture_dir:
         payload = normalize_fixture_dir(Path(args.fixture_dir), request.platform, run_dir)
         status = payload["status"]
@@ -139,6 +144,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             retry_count = result.retry_count
             raw_kept = result.keep_raw and (run_dir / "raw").exists()
             warning = result.warning
+            telemetry = result.telemetry
 
     contents = payload.pop("contents", [])
     comments = payload.pop("comments", [])
@@ -162,6 +168,7 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
             "durationSeconds": round(time.monotonic() - started_monotonic, 3),
             "counts": payload.get("counts", empty_counts()),
             "retryCount": retry_count,
+            "telemetry": telemetry or manifest["telemetry"],
             "raw": {
                 "keepRequested": bool(args.keep_raw),
                 "kept": raw_kept,
@@ -172,6 +179,8 @@ def collect(args: argparse.Namespace, install: mediacrawler_sidecar.SidecarInsta
                 "schemaVersion": 1,
                 "removedFieldNames": REMOVED_FIELD_NAMES,
                 "rawUserIdsPersisted": False,
+                **({"creatorTargetPersisted": False} if request.mode == "creator" else {}),
+                **({"creatorQueryPersisted": False} if request.mode == "creator" else {}),
             },
             "artifacts": artifacts,
             "nextActions": next_actions(status),
@@ -265,15 +274,25 @@ def normalize_rows(
         limited_comments += len(normalized_comments) - len(kept_comments)
         normalized_comments = kept_comments
     if comments_per_content_limit is not None:
-        comment_counts: dict[str, int] = {}
-        kept_comments = []
+        root_comment_counts: dict[str, int] = {}
+        kept_root_ids: set[tuple[str, str]] = set()
         for record in normalized_comments:
-            content_id = record["contentId"]
-            if comment_counts.get(content_id, 0) >= comments_per_content_limit:
-                limited_comments += 1
+            if record.get("parentCommentId") is not None:
                 continue
-            comment_counts[content_id] = comment_counts.get(content_id, 0) + 1
-            kept_comments.append(record)
+            content_id = record["contentId"]
+            if root_comment_counts.get(content_id, 0) >= comments_per_content_limit:
+                continue
+            root_comment_counts[content_id] = root_comment_counts.get(content_id, 0) + 1
+            kept_root_ids.add((content_id, record["commentId"]))
+        kept_comments = [
+            record
+            for record in normalized_comments
+            if (
+                (record["contentId"], record["commentId"]) in kept_root_ids
+                or (record["contentId"], record.get("parentCommentId")) in kept_root_ids
+            )
+        ]
+        limited_comments += len(normalized_comments) - len(kept_comments)
         normalized_comments = kept_comments
     for index, record in enumerate(normalized_comments, start=1):
         record["evidencePath"] = f"comments.jsonl#L{index}"
@@ -320,6 +339,23 @@ def read_jsonl_files(paths: list[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def resolve_xiaohongshu_detail_query(out_dir: Path, target: str) -> str:
+    target_id = mediacrawler_sidecar.xiaohongshu_content_id(target)
+    if not target_id:
+        return ""
+    root = Path(out_dir) / "reports" / "promotion-manager" / "platform-data" / "mediacrawler"
+    paths = sorted(root.glob("*/contents.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in paths:
+        for row in read_jsonl_files([path]):
+            if (
+                row.get("platform") == "xiaohongshu"
+                and str(row.get("contentId") or "").strip() == target_id
+                and str(row.get("sourceKeyword") or "").strip()
+            ):
+                return str(row["sourceKeyword"]).strip()
+    return ""
+
+
 def load_published_items(override: str, out_dir: Path) -> list[dict[str, Any]]:
     path = Path(override) if override else out_dir / "reports" / "promotion-manager" / "published-items" / "published-items.json"
     if not path.is_file():
@@ -343,10 +379,12 @@ def base_manifest(
     started_at: str,
     capture_mode: str,
 ) -> dict[str, Any]:
-    target = request.target.strip()
-    if target.lower().startswith(("http://", "https://")):
+    creator_target = request.mode == "creator"
+    target = "" if creator_target else request.target.strip()
+    query = "" if creator_target else request.query.strip()
+    if not creator_target and target.lower().startswith(("http://", "https://")):
         target = mediacrawler_contract.sanitize_url(target)
-    return {
+    manifest = {
         "schemaVersion": 1,
         "runId": run_id,
         "provider": "mediacrawler",
@@ -355,7 +393,7 @@ def base_manifest(
         "platform": request.platform,
         "mode": request.mode,
         "captureMode": capture_mode,
-        "query": request.query.strip(),
+        "query": query,
         "target": target,
         "limits": {
             "maxContents": request.max_contents,
@@ -373,11 +411,21 @@ def base_manifest(
         "runDirectory": str(run_dir),
         "counts": empty_counts(),
         "retryCount": 0,
+        "telemetry": {"schemaVersion": mediacrawler_sidecar.TELEMETRY_SCHEMA_VERSION, "phases": [], "lastPhase": ""},
         "raw": {"keepRequested": False, "kept": False, "cleaned": False, "warning": ""},
-        "redaction": {"schemaVersion": 1, "removedFieldNames": REMOVED_FIELD_NAMES, "rawUserIdsPersisted": False},
+        "redaction": {
+            "schemaVersion": 1,
+            "removedFieldNames": REMOVED_FIELD_NAMES,
+            "rawUserIdsPersisted": False,
+            **({"creatorTargetPersisted": False} if creator_target else {}),
+            **({"creatorQueryPersisted": False} if creator_target else {}),
+        },
         "artifacts": {},
         "nextActions": [],
     }
+    if creator_target:
+        manifest.update({"targetRedacted": True, "queryRedacted": True, "targetType": "creator"})
+    return manifest
 
 
 def write_manifest(run_dir: Path, manifest: dict[str, Any]) -> None:

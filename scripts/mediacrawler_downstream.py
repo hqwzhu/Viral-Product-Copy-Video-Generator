@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapt normalized MediaCrawler records to existing Promotion Manager reports."""
+"""Adapt normalized MediaCrawler records to existing ENHE Product Promo Maker reports."""
 
 from __future__ import annotations
 

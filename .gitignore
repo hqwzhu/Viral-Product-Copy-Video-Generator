@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.venv/
 .DS_Store
 promotion-output/
 promotion-output_推广输出/
@@ -8,4 +9,7 @@ tools/hyperframes-runtime/node_modules/
 .env.*
 !.env.example
 *.log
-
+.worktrees/
+dist/public-repository-*/
+.playwright-cli/
+output/playwright/

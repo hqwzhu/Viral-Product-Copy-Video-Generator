@@ -1,4 +1,4 @@
-# ENHE Promotion Manager
+# ENHE Product Promo Maker
 
 [![ZH](https://img.shields.io/badge/README-ZH-blue)](README.zh-CN.md)
 [![English](https://img.shields.io/badge/README-English-gray)](README.en.md)
@@ -11,7 +11,7 @@ English quick links: [Install](README.en.md#install) / [Installation](docs/insta
 
 中文 100% 完成指南：[docs/zh-CN/100-percent-completion-guide.md](docs/zh-CN/100-percent-completion-guide.md)
 
-ENHE Promotion Manager 是一个本地 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库，转换成可重复执行的产品推广系统。
+ENHE 产品推广素材生成器是一个本地 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库，转换成可重复执行的产品推广系统。把产品网页变成推广文案、视频脚本和发布素材。
 
 它适合独立开发者、AI 工具站运营者、SaaS 团队和内容营销团队，让 Codex 像一个“网站及产品推广经理”一样工作：
 
@@ -303,7 +303,7 @@ python scripts\real_evidence_inbox.py `
 打包：
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 商业化上线还需要部署后端 License 服务、配置 Stripe、准备隐私政策/截图/商店说明，并通过 Chrome Web Store 或 Microsoft Edge Add-ons 审核。

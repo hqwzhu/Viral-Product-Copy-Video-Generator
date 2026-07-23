@@ -1,6 +1,6 @@
-# ENHE Promotion Manager
+# ENHE 产品推广素材生成器
 
-ENHE Promotion Manager 是一个 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库转成可重复执行的产品推广闭环。
+ENHE 产品推广素材生成器是一个 Codex Skill，用来把任意产品 URL、网站 URL、App 页面或 GitHub 仓库转成可重复执行的产品推广闭环。把产品网页变成推广文案、视频脚本和发布素材。
 
 [English README](README.en.md)
 
@@ -167,14 +167,14 @@ python scripts\real_evidence_inbox.py `
 打包 Chrome Web Store / Microsoft Edge Add-ons 提交包：
 
 ```powershell
-python scripts\package_browser_extension.py --out-dir ".\dist"
+python scripts\package_browser_extension.py --out-dir ".\dist\v0.5.4"
 ```
 
 输出：
 
-- `dist\enhe-promotion-manager-<version>.zip`
-- `dist\browser-extension-package-report.json`
-- `dist\browser-extension-package-report.md`
+- `dist\v0.5.4\enhe-promotion-manager-0.5.4.zip`
+- `dist\v0.5.4\browser-extension-package-report.json`
+- `dist\v0.5.4\browser-extension-package-report.md`
 
 提交前确认 package report 的 `status` 为 `ready`。上架步骤、privacy policy、remote code 审核说明和收费订阅话术见：
 

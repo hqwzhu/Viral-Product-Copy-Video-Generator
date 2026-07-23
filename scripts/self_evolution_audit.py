@@ -302,7 +302,7 @@ def installed_skill_dir() -> Path:
 
 def managed_skill_files(root: Path) -> list[Path]:
     files = [Path("SKILL.md")]
-    for standalone in ["README.md", "README.en.md", "README.zh-CN.md", "LICENSE", ".gitignore"]:
+    for standalone in ["README.md", "README.en.md", "README.zh-CN.md", "LICENSE", ".gitignore", "requirements-youtube.txt"]:
         if (root / standalone).exists():
             files.append(Path(standalone))
     directory_patterns = {
@@ -323,6 +323,10 @@ def managed_skill_files(root: Path) -> list[Path]:
                 if generated_or_dependency_path(relative):
                     continue
                 files.append(Path(folder) / relative)
+    fixture_dir = root / "scripts" / "fixtures" / "mediacrawler"
+    if fixture_dir.exists():
+        for item in sorted(fixture_dir.glob("*.jsonl")):
+            files.append(Path("scripts/fixtures/mediacrawler") / item.name)
     return sorted(dict.fromkeys(files), key=lambda item: item.as_posix())
 
 

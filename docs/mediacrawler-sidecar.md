@@ -1,6 +1,6 @@
 # MediaCrawler 本机 Sidecar 使用指南
 
-本功能在用户电脑上运行固定版本的 MediaCrawler，为 Promotion Manager 补充小红书、抖音、知乎的公开内容、评论和页面可见指标。Chrome 登录态保留在本机；Cookie、授权头、签名参数和原始用户 ID 不进入命令行、不进入标准化输出，也不上传到 ENHE 或 GitHub。
+本功能在用户电脑上运行固定版本的 MediaCrawler，为 ENHE 产品推广素材生成器补充小红书、抖音、知乎的公开内容、评论和页面可见指标。Chrome 登录态保留在本机；Cookie、授权头、签名参数和原始用户 ID 不进入命令行、不进入标准化输出，也不上传到 ENHE 或 GitHub。
 
 ## 适用范围
 
@@ -18,7 +18,7 @@
 - 环境：仓库外的独立 `uv`/Python 3.11 环境。
 - 正常运行不会执行 `git pull`、依赖升级或自动切换提交。
 
-ENHE 通过独立子进程调用固定 checkout，不把上游源码复制进主仓库，也不在主 Promotion Manager 进程中导入 MediaCrawler。一个轻量 bootstrap 只在 Sidecar 子进程中运行，用于补齐该固定提交的知乎 creator 参数映射，并在连接已有 Chrome 时避免主动关闭浏览器 context 或 Chrome 进程；固定 checkout 本身保持不变。
+ENHE 通过独立子进程调用固定 checkout，不把上游源码复制进主仓库，也不在 ENHE 产品推广素材生成器主进程中导入 MediaCrawler。一个轻量 bootstrap 只在 Sidecar 子进程中运行，用于补齐该固定提交的知乎 creator 参数映射，并在连接已有 Chrome 时避免主动关闭浏览器 context 或 Chrome 进程；固定 checkout 本身保持不变。
 
 ## 安装前只读检查
 
@@ -87,6 +87,8 @@ python scripts\promotion_manager.py platform-data collect --platform xiaohongshu
 python scripts\promotion_manager.py platform-data collect --platform xiaohongshu --mode creator --target "https://www.xiaohongshu.com/user/profile/创作者ID" --out-dir .\promotion-output
 ```
 
+使用同一 `--out-dir` 时，小红书详情命令可以从之前的规范化搜索结果恢复安全的搜索关键词，在新的 Sidecar 子进程中重新获取临时详情上下文，并在进入详情和评论阶段前只保留目标内容。`xsec_token` 不进入命令行、运行清单或规范化输出；临时 raw 仍按默认规则在运行结束后删除。如果目标没有对应的历史搜索结果，请先执行一次限量搜索。
+
 ### 抖音
 
 ```powershell
@@ -126,6 +128,7 @@ python scripts\promotion_manager.py platform-data collect --platform xiaohongshu
 | 代理、媒体下载、多账号 | 关闭 |
 
 可以把内容数、评论数和超时调低，不能通过普通 CLI 参数突破硬上限。
+对于上游搜索接口固定返回一整页的情况，ENHE Bootstrap 会在评论采集前按 `--max-contents` 裁剪结果，避免对最终不会保留的内容采集评论。Windows 子进程输出固定按 UTF-8 解码，中文日志不会再因系统 GBK 默认编码导致运行失败。
 
 ## 状态说明
 
@@ -196,7 +199,7 @@ python scripts\promotion_manager.py platform-data collect --platform douyin --mo
 
 ### `uv` 不可用
 
-先安装官方 `uv`，重新打开终端，再运行 `setup --check`。Promotion Manager 不会在只读检查中自动安装它。
+先安装官方 `uv`，重新打开终端，再运行 `setup --check`。ENHE 产品推广素材生成器不会在只读检查中自动安装它。
 
 ### Chrome/CDP 不可用
 
@@ -230,7 +233,7 @@ python scripts\promotion_manager.py platform-data collect --platform douyin --mo
 2. 复核授权范围和安全默认值。
 3. 更新固定提交常量和脱敏离线夹具。
 4. 运行全部 `scripts/test_mediacrawler_sidecar.py` 测试。
-5. 运行 Promotion Manager 聚焦回归测试。
+5. 运行 ENHE 产品推广素材生成器聚焦回归测试。
 6. 在隔离安装目录执行三平台最小人工冒烟测试。
 7. 扫描标准化输出和日志，确认无 Cookie、Token、签名值和原始用户 ID。
 8. 所有检查通过后才替换正式 checkout；失败时保留旧版本。

@@ -1,6 +1,8 @@
-# ENHE Promotion Manager Refund Policy
+# ENHE Product Promo Maker Refund Policy
 
 Effective date: 2026-07-10
+
+This policy applies to purchases of ENHE Product Promo Maker (formerly ENHE Promotion Manager).
 
 This is a launch draft. Review with counsel and align it with Stripe settings before public launch.
 
