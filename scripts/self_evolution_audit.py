@@ -302,9 +302,29 @@ def installed_skill_dir() -> Path:
 
 def managed_skill_files(root: Path) -> list[Path]:
     files = [Path("SKILL.md")]
-    for standalone in ["README.md", "README.en.md", "README.zh-CN.md", "LICENSE", ".gitignore", "requirements-youtube.txt"]:
+    for standalone in [
+        "README.md",
+        "README.en.md",
+        "README.zh-CN.md",
+        "LICENSE",
+        ".gitignore",
+        "requirements-professional-media.txt",
+        "requirements-test.txt",
+        "requirements-youtube.txt",
+    ]:
         if (root / standalone).exists():
             files.append(Path(standalone))
+    for controlled_file in [
+        Path("agents/openai.yaml"),
+        Path("references/professional-media-runtime.json"),
+        Path("references/comfyui/flux1-schnell-api.json"),
+        Path("scripts/fixtures/professional_live_capture_plan.json"),
+        Path("scripts/fixtures/professional_live_content.json"),
+        Path("tools/hyperframes-runtime/package.json"),
+        Path("tools/hyperframes-runtime/package-lock.json"),
+    ]:
+        if (root / controlled_file).exists():
+            files.append(controlled_file)
     directory_patterns = {
         "references": ["*.md"],
         "scripts": ["*.py"],
