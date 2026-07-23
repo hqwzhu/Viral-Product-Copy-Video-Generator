@@ -65,13 +65,14 @@ def main() -> None:
     report["summary"]["finalReadinessStatus"] = readiness_matrix.get("status", "")
     write_report(out_dir, report)
     print(f"Final capability run written to: {(report_dir(out_dir) / 'final-capability-run.json').resolve()}")
+    raise SystemExit(report_exit_code(report))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the full safe promotion manager flow from product URL to next-round optimization.")
     parser.add_argument("--url", action="append", default=[], help="Product URL. Can be repeated.")
     parser.add_argument("--urls-file", default="", help="Text file with one product URL per line.")
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
 
     product_discovery = parser.add_argument_group("Product URL discovery")
     product_discovery.add_argument("--discover-from-url", default="", help="Public website or landing page URL to discover product URLs from before reading products.")
@@ -114,6 +115,13 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--skip-video", action="store_true")
     workflow.add_argument("--video-platforms", default="auto")
     workflow.add_argument("--generate-voiceover", action="store_true")
+    workflow.add_argument("--media-quality", choices=["draft", "standard", "professional"], default="professional")
+    workflow.add_argument("--brand-logo", default="")
+    workflow.add_argument("--comfyui-url", default="http://127.0.0.1:8188")
+    workflow.add_argument("--presenter", choices=["none", "musetalk", "heygen"], default="none")
+    workflow.add_argument("--presenter-asset", default="")
+    workflow.add_argument("--portrait-authorized", action="store_true")
+    workflow.add_argument("--allow-cloud-media", action="store_true")
 
     discovery = parser.add_argument_group("Viral discovery")
     discovery.add_argument("--skip-multi-query-viral-discovery", action="store_true")
@@ -234,7 +242,7 @@ def run_product_batch(args: argparse.Namespace, out_dir: Path, steps: list[dict[
     if args.discovery_allow_localhost:
         command.append("--discovery-allow-localhost")
     append_common_batch_args(command, args)
-    step = run_command("product_batch_runner", command)
+    step = run_command("product_batch_runner", command, check=False)
     steps.append(step)
     report_path = out_dir / "reports/promotion-manager/batch/product-batch-runner.json"
     report = read_json(report_path)
@@ -275,6 +283,15 @@ def append_common_batch_args(command: list[str], args: argparse.Namespace) -> No
     if args.sample_video_frames:
         command.extend(["--video-sample-count", str(args.video_sample_count)])
     append_if_present(command, "--video-platforms", args.video_platforms)
+    append_if_present(command, "--media-quality", args.media_quality)
+    append_if_present(command, "--brand-logo", args.brand_logo)
+    append_if_present(command, "--comfyui-url", args.comfyui_url)
+    append_if_present(command, "--presenter", args.presenter)
+    append_if_present(command, "--presenter-asset", args.presenter_asset)
+    if args.portrait_authorized:
+        command.append("--portrait-authorized")
+    if args.allow_cloud_media:
+        command.append("--allow-cloud-media")
     append_if_present(command, "--publish-platforms", args.publish_platforms)
     append_if_present(command, "--github-repo", args.github_repo)
     append_if_present(command, "--github-path", args.github_path)
@@ -1047,6 +1064,10 @@ def final_status(
     return "partial_ready"
 
 
+def report_exit_code(report: dict[str, Any]) -> int:
+    return 0 if report.get("status") == "partial_ready" else 1
+
+
 def external_gates() -> list[dict[str, str]]:
     return [
         {"area": "official_publish", "gate": "I_APPROVE_PUBLISH plus platform credentials are required for writes."},
@@ -1067,27 +1088,27 @@ def recommended_next_commands(out_dir: Path) -> list[dict[str, str]]:
         },
         {
             "purpose": "build_publish_setup_kit",
-            "command": f"python scripts/publish_setup_assistant.py --publish-readiness \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/publish_setup_assistant.py --publish-readiness \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "prepare_browser_assisted_publish",
-            "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/browser_publish_assistant.py --publish-queue \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "run_browser_publish_session",
-            "command": f"python scripts/browser_publish_session.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --run-form-fill --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/browser_publish_session.py --publish-queue \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-queue/publish-queue.json\" --run-form-fill --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "build_launch_unlock_pack",
-            "command": f"python scripts/launch_unlock_pack.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --publish-readiness \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/launch_unlock_pack.py --publish-queue \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-queue/publish-queue.json\" --publish-readiness \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-readiness/publish-readiness.json\" --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "prepare_real_evidence_templates",
-            "command": f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/real_evidence_setup.py --publish-queue \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/publish-queue/publish-queue.json\" --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "fill_browser_publish_fields_without_submit",
-            "command": f"python scripts/browser_publish_form_fill.py --payload-json \"{out_dir}/product-batch-runs/<id>/reports/promotion-manager/browser-publish/payloads/<platform>.payload.json\" --out-dir \"{out_dir}/product-batch-runs/<id>\"",
+            "command": f"python scripts/browser_publish_form_fill.py --payload-json \"{out_dir}/runs_运行记录/<run-id>/reports/promotion-manager/browser-publish/payloads/<platform>.payload.json\" --out-dir \"{out_dir}/runs_运行记录/<run-id>\"",
         },
         {
             "purpose": "sync_installed_skill_when_approved",

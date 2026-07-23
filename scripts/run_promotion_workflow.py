@@ -12,6 +12,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:  # direct ``python scripts/run_promotion_workflow.py``
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.media_pipeline.paths import RUNS_DIR, new_run_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -22,7 +27,7 @@ VIDEO_PLATFORMS = {"youtube", "xiaohongshu", "douyin", "tiktok"}
 
 def main() -> None:
     args = parse_args()
-    out_dir = Path(args.out_dir)
+    out_dir = resolve_workflow_out_dir(args)
     out_dir.mkdir(parents=True, exist_ok=True)
     steps: list[dict[str, Any]] = []
 
@@ -38,12 +43,17 @@ def main() -> None:
     creator_follow_up = run_creator_follow_up(args, out_dir, steps, creator_leaderboard)
     follow_up_captures = run_follow_up_captures(args, out_dir, steps, viral_library)
     competitor_informed = run_competitor_content_enhancer(args, product, out_dir, steps, viral_library, follow_up_captures, creator_follow_up)
-    videos = render_video_artifacts(args, product, out_dir, steps)
-    media_assets = run_media_asset_pack(args, product, out_dir, steps, videos)
+    if args.media_quality == "professional" and not args.skip_video:
+        media_assets = run_professional_media(args, product, out_dir, steps)
+        videos = media_assets.get("videos", [])
+    else:
+        videos = render_video_artifacts(args, product, out_dir, steps)
+        media_assets = run_media_asset_pack(args, product, out_dir, steps, videos)
     metrics = run_metrics_import(args, out_dir, steps)
 
     manifest = build_manifest(args, product, profile, discovery, collections, browser_search, search_captures, viral_library, creator_leaderboard, creator_follow_up, follow_up_captures, competitor_informed, videos, media_assets, metrics, steps, out_dir)
     write_manifest(out_dir, manifest)
+    enforce_professional_media_result(args, media_assets)
     print(f"Promotion workflow manifest written to: {(agent_dir(out_dir) / 'workflow-manifest.json').resolve()}")
 
 
@@ -96,6 +106,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-video", action="store_true", help="Skip MP4 rendering.")
     parser.add_argument("--video-platforms", default="auto", help="Comma-separated platforms to render, or auto.")
     parser.add_argument("--generate-voiceover", action="store_true", help="Use Windows SAPI review voiceover when rendering videos.")
+    parser.add_argument("--media-quality", choices=["draft", "standard", "professional"], default="professional")
+    parser.add_argument("--brand-logo", default="")
+    parser.add_argument("--comfyui-url", default="http://127.0.0.1:8188")
+    parser.add_argument("--presenter", choices=["none", "musetalk", "heygen"], default="none")
+    parser.add_argument("--presenter-asset", default="")
+    parser.add_argument("--portrait-authorized", action="store_true")
+    parser.add_argument("--allow-cloud-media", action="store_true")
 
     metrics = parser.add_mutually_exclusive_group()
     metrics.add_argument("--metrics-csv", help="CSV export for real post-publish metrics.")
@@ -107,8 +124,43 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--youtube-video-id", help="YouTube video ID for metrics collection.")
     parser.add_argument("--metrics-platform", default="auto")
 
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
     return parser.parse_args()
+
+
+def resolve_workflow_out_dir(args: argparse.Namespace) -> Path:
+    requested = Path(args.out_dir).expanduser()
+    if (
+        getattr(args, "media_quality", "draft") != "professional"
+        or getattr(args, "skip_video", False)
+        or requested.parent.name == RUNS_DIR
+    ):
+        return requested
+    seed = (
+        str(getattr(args, "product_name", "") or "").strip()
+        or Path(str(getattr(args, "product_url", "") or "")).name
+        or Path(str(getattr(args, "browser_url", "") or "")).name
+        or "product"
+    )
+    return new_run_paths(requested, seed).root
+
+
+def generated_content_dir(args: argparse.Namespace, out_dir: Path) -> Path:
+    if (
+        getattr(args, "media_quality", "draft") == "professional"
+        and not getattr(args, "skip_video", False)
+    ):
+        return out_dir / "generated-content_生成内容"
+    return out_dir / "reports/promotion-manager/generated-content"
+
+
+def publish_pack_dir(args: argparse.Namespace, out_dir: Path) -> Path:
+    if (
+        getattr(args, "media_quality", "draft") == "professional"
+        and not getattr(args, "skip_video", False)
+    ):
+        return out_dir / "publish-packs_发布包"
+    return out_dir / "reports/promotion-manager/publish-packs"
 
 
 def run_product_intake(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any]:
@@ -199,6 +251,15 @@ def run_promotion_manager(args: argparse.Namespace, product: dict[str, Any], out
         "--out-dir",
         str(out_dir),
     ]
+    if args.media_quality == "professional" and not args.skip_video:
+        command.extend(
+            [
+                "--generated-content-dir",
+                str(generated_content_dir(args, out_dir)),
+                "--publish-pack-dir",
+                str(publish_pack_dir(args, out_dir)),
+            ]
+        )
     steps.append(run_command("promotion_manager_all", command))
 
 
@@ -523,7 +584,7 @@ def run_competitor_content_enhancer(
     if args.skip_competitor_informed_content:
         return {"status": "skipped", "reason": "--skip-competitor-informed-content was supplied."}
 
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
     if not content_json.exists():
         return {"status": "blocked", "reason": f"Generated content JSON not found: {content_json}"}
 
@@ -534,7 +595,7 @@ def run_competitor_content_enhancer(
     if not viral_path and not deep_path:
         return {"status": "skipped", "reason": "No viral or deep competitor library was available."}
 
-    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     command = [
         sys.executable,
         str(SCRIPTS / "competitor_content_enhancer.py"),
@@ -554,9 +615,9 @@ def run_competitor_content_enhancer(
     step = run_command("competitor_content_enhancer", command, check=False)
     steps.append(step)
     slug = content_json.stem.replace("-platform-content", "") or "product"
-    content_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.json"
-    markdown_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-content.md"
-    strategy_report = out_dir / "reports/promotion-manager/generated-content" / f"{slug}-competitor-informed-strategy.json"
+    content_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-content.json"
+    markdown_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-content.md"
+    strategy_report = generated_content_dir(args, out_dir) / f"{slug}-competitor-informed-strategy.json"
     backup_path = content_json.with_suffix(".base.json")
     status = "ready" if step["exitCode"] == 0 and content_report.exists() and strategy_report.exists() else "error"
     summary: dict[str, Any] = {
@@ -595,7 +656,7 @@ def search_snapshot_source(snapshot_dir: Path, platform: str) -> dict[str, Path 
 def render_video_artifacts(args: argparse.Namespace, product: dict[str, Any], out_dir: Path, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if args.skip_video:
         return [{"status": "skipped", "reason": "--skip-video was supplied."}]
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
     if not content_json.exists():
         return [{"status": "blocked", "reason": f"Generated content JSON not found: {content_json}"}]
     if not shutil.which("ffmpeg"):
@@ -642,8 +703,8 @@ def run_media_asset_pack(
     steps: list[dict[str, Any]],
     videos: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    content_json = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"
-    publish_pack = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    content_json = generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     if not content_json.exists() or not publish_pack.exists():
         return {
             "status": "blocked",
@@ -679,6 +740,151 @@ def run_media_asset_pack(
     }
 
 
+def run_professional_media(
+    args: argparse.Namespace,
+    product: dict[str, Any],
+    out_dir: Path,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    logo = Path(str(getattr(args, "brand_logo", ""))).expanduser()
+    if not logo.is_file():
+        return {
+            "status": "blocked",
+            "reasonCode": "brand_logo_required",
+            "reason": "Professional media requires an explicit local --brand-logo file.",
+            "videos": [],
+        }
+    slug = slugify(product["name"])
+    content_json = generated_content_dir(args, out_dir) / f"{slug}-platform-content.json"
+    publish_pack = publish_pack_dir(args, out_dir) / f"{slug}-publish-pack.json"
+    if not content_json.is_file() or not publish_pack.is_file():
+        return {
+            "status": "blocked",
+            "reasonCode": "professional_media_inputs_missing",
+            "reason": "Generated content JSON or publish pack was missing before professional media generation.",
+            "videos": [],
+        }
+    media_input = write_professional_media_input(content_json, product, out_dir, args)
+    command = [
+        sys.executable,
+        str(SCRIPTS / "professional_media_pipeline.py"),
+        "--product-url",
+        product["url"],
+        "--product-name",
+        product["name"],
+        "--content-json",
+        str(media_input),
+        "--publish-pack",
+        str(publish_pack),
+        "--run-dir",
+        str(out_dir),
+        "--language",
+        args.language,
+        "--platforms",
+        ",".join(product["platforms"]),
+        "--quality-target",
+        args.media_quality,
+        "--brand-logo",
+        str(logo.resolve()),
+    ]
+    comfyui_url = str(getattr(args, "comfyui_url", "")).strip()
+    if comfyui_url:
+        command.extend(["--comfyui-url", comfyui_url])
+    presenter = str(getattr(args, "presenter", "none")).strip()
+    if presenter:
+        command.extend(["--presenter", presenter])
+    presenter_asset = str(getattr(args, "presenter_asset", "")).strip()
+    if presenter_asset:
+        command.extend(["--presenter-asset", presenter_asset])
+    if getattr(args, "portrait_authorized", False):
+        command.append("--portrait-authorized")
+    if getattr(args, "allow_cloud_media", False):
+        command.append("--allow-cloud-media")
+    step = run_command("professional_media_pipeline", command, check=False)
+    steps.append(step)
+    if step["exitCode"] != 0:
+        return {
+            "status": "error",
+            "reasonCode": "professional_media_pipeline_failed",
+            "reason": "The professional media subprocess failed.",
+            "videos": [],
+            "assetPack": "",
+            "qualityReport": "",
+            "summary": {
+                "blockers": ["professional_media_pipeline_failed"],
+                "missingFamilies": [],
+            },
+            "exitCode": step["exitCode"],
+        }
+    reports = out_dir / "reports_报告"
+    quality_path = reports / "media-quality-report.json"
+    manifest_path = reports / "media-manifest.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8")) if quality_path.exists() else {}
+    video_files = sorted((out_dir / "videos_视频").glob("*.mp4"))
+    videos = [
+        {
+            "platform": "professional",
+            "status": "ready",
+            "video": str(path),
+            "metadata": str(manifest_path) if manifest_path.exists() else "",
+            "exitCode": step["exitCode"],
+        }
+        for path in video_files
+        if path.stat().st_size > 0
+    ]
+    return {
+        "status": quality.get("status") or ("ready" if step["exitCode"] == 0 else "error"),
+        "videos": videos,
+        "assetPack": str(manifest_path) if manifest_path.exists() else "",
+        "qualityReport": str(quality_path) if quality_path.exists() else "",
+        "summary": {
+            "blockers": quality.get("blockers", []),
+            "missingFamilies": quality.get("missingFamilies", []),
+        },
+        "exitCode": step["exitCode"],
+    }
+
+
+def enforce_professional_media_result(args: argparse.Namespace, media_assets: dict[str, Any]) -> None:
+    if getattr(args, "media_quality", "draft") != "professional" or getattr(args, "skip_video", False):
+        return
+    status = str(media_assets.get("status") or "error")
+    if status != "professional_ready":
+        reason = media_assets.get("reason") or media_assets.get("summary") or "professional media quality gate did not pass"
+        raise SystemExit(f"Professional media failed closed with status {status}: {reason}")
+
+
+def write_professional_media_input(
+    content_json: Path,
+    product: dict[str, Any],
+    out_dir: Path,
+    args: argparse.Namespace,
+) -> Path:
+    content = json.loads(content_json.read_text(encoding="utf-8"))
+    if not isinstance(content, dict):
+        raise ValueError("Generated platform content must be a JSON object.")
+    preferred = video_platforms(args, product)
+    platforms = [*preferred, *product.get("platforms", [])]
+    source_platform = next((name for name in platforms if isinstance(content.get(name), dict)), "")
+    source = content.get(source_platform, {}) if source_platform else {}
+    narration = first_non_empty(source.get("voiceover"), source.get("shortVideoScript"), source.get("article"))
+    if not narration:
+        raise ValueError("Generated platform content does not contain a usable narration.")
+    media_input = {
+        "title": first_non_empty(source.get("title"), source.get("viralTitle"), product["name"]),
+        "subtitle": first_non_empty(source.get("description"), product.get("valueProposition")),
+        "narration": narration,
+        "scenePrompt": f"Premium commercial product photography for {product['name']}, real product workflow, clean studio lighting, brand-consistent colors, no readable text, no watermark",
+        "sourcePlatform": source_platform,
+        "sourceContent": str(content_json.resolve()),
+    }
+    directory = out_dir / "generated-content_生成内容"
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / "professional-media-input.json"
+    destination.write_text(json.dumps(media_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return destination
+
+
 def run_metrics_import(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     source_args = metrics_source_args(args)
     if not source_args:
@@ -708,7 +914,7 @@ def build_manifest(
     steps: list[dict[str, Any]],
     out_dir: Path,
 ) -> dict[str, Any]:
-    publish_packs = out_dir / "reports/promotion-manager/publish-packs" / f"{slugify(product['name'])}-publish-pack.json"
+    publish_packs = publish_pack_dir(args, out_dir) / f"{slugify(product['name'])}-publish-pack.json"
     publish_queue = []
     if publish_packs.exists():
         for item in json.loads(publish_packs.read_text(encoding="utf-8")):
@@ -733,7 +939,7 @@ def build_manifest(
         "artifacts": {
             "intakeProfile": str(out_dir / "intake/product-profile.json"),
             "browserSnapshot": str(out_dir / "browser-snapshot/product-page-snapshot.json") if args.browser_url else "",
-            "contentJson": str(out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product['name'])}-platform-content.json"),
+            "contentJson": str(generated_content_dir(args, out_dir) / f"{slugify(product['name'])}-platform-content.json"),
             "publishPack": str(publish_packs),
             "competitorDiscovery": str(out_dir / "reports/promotion-manager/competitors/competitor-discovery.json"),
             "viralContentLibrary": viral_library.get("library", ""),
@@ -867,8 +1073,9 @@ def competitor_query(args: argparse.Namespace, product: dict[str, Any]) -> str:
 
 
 def video_platforms(args: argparse.Namespace, product: dict[str, Any]) -> list[str]:
-    if args.video_platforms != "auto":
-        return [platform for platform in split_csv(args.video_platforms) if platform in product["platforms"]]
+    requested = getattr(args, "video_platforms", "auto")
+    if requested != "auto":
+        return [platform for platform in split_csv(requested) if platform in product["platforms"]]
     return [platform for platform in product["platforms"] if platform in VIDEO_PLATFORMS]
 
 

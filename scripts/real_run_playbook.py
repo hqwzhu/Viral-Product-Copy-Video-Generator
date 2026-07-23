@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platforms", default=DEFAULT_PLATFORMS)
     parser.add_argument("--goal", default="leads")
     parser.add_argument("--language", default="zh-CN")
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
     parser.add_argument("--github-repo", default="owner/repo")
     parser.add_argument("--github-action", default="file", choices=["file", "issue", "release"])
     parser.add_argument("--github-path", default="PROMOTION.md")
@@ -76,11 +76,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--automation-job-id", default="product-weekly")
     parser.add_argument("--interval-days", type=int, default=7)
     parser.add_argument("--generate-voiceover", action="store_true")
+    parser.add_argument("--media-quality", choices=["draft", "standard", "professional"], default="professional")
+    parser.add_argument("--brand-logo", default="")
+    parser.add_argument("--comfyui-url", default="http://127.0.0.1:8188")
+    parser.add_argument("--presenter", choices=["none", "musetalk", "heygen"], default="none")
+    parser.add_argument("--presenter-asset", default="")
+    parser.add_argument("--portrait-authorized", action="store_true")
+    parser.add_argument("--allow-cloud-media", action="store_true")
     return parser.parse_args()
 
 
 def build_playbook(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
-    run_root = out_dir / "product-batch-runs/<product-id>"
+    run_root = out_dir / "runs_运行记录/<timestamp>-<product-id>"
     phases = build_phases(args, out_dir, run_root)
     artifacts = artifact_paths(out_dir)
     return {
@@ -459,6 +466,15 @@ def final_capability_command(args: argparse.Namespace, out_dir: Path) -> list[st
     )
     if args.generate_voiceover:
         command.append("--generate-voiceover")
+    append_if(command, "--media-quality", args.media_quality)
+    append_if(command, "--brand-logo", args.brand_logo)
+    append_if(command, "--comfyui-url", args.comfyui_url)
+    append_if(command, "--presenter", args.presenter)
+    append_if(command, "--presenter-asset", args.presenter_asset)
+    if args.portrait_authorized:
+        command.append("--portrait-authorized")
+    if args.allow_cloud_media:
+        command.append("--allow-cloud-media")
     append_if(command, "--github-repo", args.github_repo)
     append_if(command, "--github-action", args.github_action)
     append_if(command, "--github-path", args.github_path)

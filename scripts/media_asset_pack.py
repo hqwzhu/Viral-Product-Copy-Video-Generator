@@ -20,6 +20,12 @@ except ImportError:  # pragma: no cover - exercised by users without Pillow
 
 TODAY = date.today().isoformat()
 VIDEO_REQUIRED_PLATFORMS = {"youtube", "douyin", "tiktok", "xiaohongshu"}
+QUALITY_STATUSES = {
+    "draft_ready",
+    "standard_ready",
+    "professional_ready",
+    "partial_ready",
+}
 PLATFORM_SPECS: dict[str, dict[str, Any]] = {
     "youtube": {"size": (1280, 720), "cover": "youtube-thumbnail.png", "detail_count": 2, "accent": "#ef4444"},
     "zhihu": {"size": (1200, 628), "cover": "zhihu-header.png", "detail_count": 2, "accent": "#2563eb"},
@@ -32,10 +38,21 @@ PLATFORM_SPECS: dict[str, dict[str, Any]] = {
 
 def main() -> None:
     args = parse_args()
+    if args.professional_manifest:
+        report = attach_professional_manifest(
+            Path(args.professional_manifest),
+            Path(args.publish_pack),
+        )
+        out_dir = Path(args.out_dir)
+        write_report(out_dir, report)
+        print(f"Professional media manifest attached: {(report_dir(out_dir) / 'media-asset-pack.json').resolve()}")
+        return
     if Image is None or ImageDraw is None or ImageFont is None:
         raise SystemExit("Pillow is required for PNG media asset generation. Install it with: python -m pip install pillow")
 
     out_dir = Path(args.out_dir)
+    if not args.content_json:
+        raise SystemExit("--content-json is required unless --professional-manifest is supplied.")
     content_path = Path(args.content_json)
     publish_pack_path = Path(args.publish_pack)
     if not content_path.exists():
@@ -68,8 +85,13 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate PNG covers/detail images and attach media paths to publish packs.")
-    parser.add_argument("--content-json", required=True, help="Path to <product>-platform-content.json.")
+    parser.add_argument("--content-json", help="Path to <product>-platform-content.json.")
     parser.add_argument("--publish-pack", required=True, help="Path to <product>-publish-pack.json.")
+    parser.add_argument(
+        "--professional-manifest",
+        default="",
+        help="Attach existing professional artifacts from reports_报告/media-manifest.json without redrawing them.",
+    )
     parser.add_argument("--platforms", default="", help="Comma-separated platform filter. Defaults to platforms in content JSON.")
     parser.add_argument("--video-root", default="", help="Directory containing rendered MP4 files. Defaults to <out-dir>/videos.")
     parser.add_argument("--video-file", action="append", default=[], help="Explicit video as platform=path. Can repeat.")
@@ -77,6 +99,106 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-update-publish-pack", dest="update_publish_pack", action="store_false")
     parser.set_defaults(update_publish_pack=True)
     return parser.parse_args()
+
+
+def attach_professional_manifest(
+    manifest_path: Path,
+    publish_pack_path: Path,
+) -> dict[str, Any]:
+    if not manifest_path.is_file():
+        raise SystemExit(f"Professional media manifest not found: {manifest_path}")
+    if not publish_pack_path.is_file():
+        raise SystemExit(f"Publish pack JSON not found: {publish_pack_path}")
+    manifest = read_json(manifest_path)
+    publish_pack = read_json(publish_pack_path)
+    if not isinstance(manifest, dict):
+        raise SystemExit("Professional media manifest must be a JSON object.")
+    if not isinstance(publish_pack, list):
+        raise SystemExit("Publish pack JSON must be a list.")
+    quality_report_path = None
+    quality_report: dict[str, Any] = {}
+    quality_report_value = manifest.get("qualityReport")
+    if isinstance(quality_report_value, str) and quality_report_value.strip():
+        quality_report_path = Path(quality_report_value).expanduser()
+        if not quality_report_path.is_absolute():
+            quality_report_path = manifest_path.parent / quality_report_path
+        try:
+            loaded_quality_report = read_json(quality_report_path)
+            if isinstance(loaded_quality_report, dict):
+                quality_report = loaded_quality_report
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            pass
+    quality_status = str(quality_report.get("status") or "")
+    if quality_status not in QUALITY_STATUSES:
+        quality_status = "partial_ready"
+    quality_target = str(quality_report.get("target") or "professional")
+    if quality_target not in {"draft", "standard", "professional"}:
+        quality_target = "professional"
+    artifacts = [
+        item
+        for item in manifest.get("artifacts", [])
+        if isinstance(item, dict)
+        and Path(str(item.get("path") or "")).is_file()
+    ]
+    attached = 0
+    for pack in publish_pack:
+        if not isinstance(pack, dict):
+            continue
+        platform = str(pack.get("platform") or "")
+        matches = [
+            item
+            for item in artifacts
+            if platform in (item.get("metadata") or {}).get("platforms", [])
+        ]
+        video = next(
+            (
+                item
+                for item in matches
+                if item.get("type") == "professional_product_demo_video"
+            ),
+            None,
+        )
+        cover = next(
+            (item for item in matches if item.get("type") == "cover_image"),
+            None,
+        )
+        details = [
+            item for item in matches if item.get("type") == "detail_image"
+        ]
+        if video:
+            pack["video"] = video
+        if cover:
+            pack["cover"] = cover
+        if details:
+            pack["detailImages"] = details
+        selected = [item for item in (video, cover, *details) if item]
+        if selected:
+            pack["assets"] = selected
+            attached += len(selected)
+        pack["mediaQuality"] = {
+            "status": quality_status,
+            "report": (
+                str(quality_report_path.resolve()) if quality_report_path else ""
+            ),
+            "target": quality_target,
+        }
+    publish_pack_path.write_text(
+        json.dumps(publish_pack, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "generatedAt": TODAY,
+        "status": "ready" if attached else "no_professional_assets",
+        "publishPack": str(publish_pack_path.resolve()),
+        "professionalManifest": str(manifest_path.resolve()),
+        "publishPackUpdated": True,
+        "summary": {"attachedAssets": attached},
+        "platforms": [],
+        "guardrails": [
+            "Existing professional artifacts were attached without redrawing cover or detail images.",
+            "Only artifact paths that still exist locally were accepted.",
+        ],
+    }
 
 
 def build_media_asset_pack(

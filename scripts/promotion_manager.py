@@ -266,7 +266,13 @@ def main() -> None:
         platforms=split_csv(args.platforms) if args.platforms else DEFAULT_PLATFORMS,
     )
     out_dir = Path(args.out_dir)
-    ensure_output_tree(out_dir)
+    generated_content_dir = Path(args.generated_content_dir) if args.generated_content_dir else out_dir / "reports/promotion-manager/generated-content"
+    publish_pack_dir = Path(args.publish_pack_dir) if args.publish_pack_dir else out_dir / "reports/promotion-manager/publish-packs"
+    ensure_output_tree(
+        out_dir,
+        generated_content_dir=generated_content_dir,
+        publish_pack_dir=publish_pack_dir,
+    )
 
     if args.command in ("research", "capability", "all"):
         write_research_reports(out_dir)
@@ -281,7 +287,7 @@ def main() -> None:
         )
 
     plan = build_content_plan(product)
-    content_path = out_dir / "reports/promotion-manager/generated-content" / f"{slugify(product.name)}-platform-content.json"
+    content_path = generated_content_dir / f"{slugify(product.name)}-platform-content.json"
     if args.command in ("plan", "all"):
         write_named_report(
             out_dir / "reports/promotion-manager/content-plans",
@@ -293,7 +299,7 @@ def main() -> None:
     content = generate_platform_content(product, plan)
     if args.command in ("content", "all"):
         write_named_report(
-            out_dir / "reports/promotion-manager/generated-content",
+            generated_content_dir,
             f"{slugify(product.name)}-platform-content",
             content,
             render_platform_content(content),
@@ -310,7 +316,7 @@ def main() -> None:
             render_cheat_review_pack(cheat_review_pack),
         )
         write_named_report(
-            out_dir / "reports/promotion-manager/generated-content",
+            generated_content_dir,
             f"{slugify(product.name)}-content-review",
             review,
             render_review(review),
@@ -319,13 +325,13 @@ def main() -> None:
     publish_pack = build_publish_pack(content)
     if args.command in ("publish-pack", "all"):
         write_named_report(
-            out_dir / "reports/promotion-manager/publish-packs",
+            publish_pack_dir,
             f"{slugify(product.name)}-publish-pack",
             publish_pack,
             render_publish_pack(publish_pack),
         )
         write_named_report(
-            out_dir / "reports/promotion-manager/publish-packs",
+            publish_pack_dir,
             "platform-publish-capability-map",
             CAPABILITIES,
             render_capabilities(CAPABILITIES),
@@ -385,6 +391,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language", default="zh-CN")
     parser.add_argument("--platforms", default=",".join(DEFAULT_PLATFORMS), help="Comma-separated platform list.")
     parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument(
+        "--generated-content-dir",
+        default="",
+        help="Override the generated-content directory, used by the bilingual professional run layout.",
+    )
+    parser.add_argument(
+        "--publish-pack-dir",
+        default="",
+        help="Override the publish-pack directory, used by the bilingual professional run layout.",
+    )
     return parser.parse_args()
 
 
@@ -397,19 +413,28 @@ def slugify(value: str) -> str:
     return slug or "product"
 
 
-def ensure_output_tree(out_dir: Path) -> None:
+def ensure_output_tree(
+    out_dir: Path,
+    *,
+    generated_content_dir: Path | None = None,
+    publish_pack_dir: Path | None = None,
+) -> None:
     for subdir in [
         "docs/promotion-manager",
         "reports/promotion-manager/research",
         "reports/promotion-manager/competitors",
         "reports/promotion-manager/content-plans",
-        "reports/promotion-manager/generated-content",
         "reports/promotion-manager/cheat-review",
-        "reports/promotion-manager/publish-packs",
         "reports/promotion-manager/publish-results",
         "reports/promotion-manager/retrospectives",
     ]:
         (out_dir / subdir).mkdir(parents=True, exist_ok=True)
+    (generated_content_dir or out_dir / "reports/promotion-manager/generated-content").mkdir(
+        parents=True, exist_ok=True
+    )
+    (publish_pack_dir or out_dir / "reports/promotion-manager/publish-packs").mkdir(
+        parents=True, exist_ok=True
+    )
 
 
 def write_research_reports(out_dir: Path) -> None:

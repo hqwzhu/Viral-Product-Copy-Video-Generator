@@ -4,6 +4,28 @@ ENHE 产品推广素材生成器是一个 Codex Skill，用来把任意产品 UR
 
 [English README](README.en.md)
 
+## 专业媒体工作流
+
+默认入口使用 `--media-quality professional`，生成带声音的真实产品演示 MP4、摄影级 AI 场景、复杂动画、商业封面和详情图。先安装本地运行时：
+
+```powershell
+python scripts/setup_professional_media.py --install-core
+python scripts/setup_professional_media.py --install-comfyui
+```
+
+然后启动本机 ComfyUI，并明确提供品牌 Logo：
+
+```powershell
+python scripts/skill_entry.py `
+  --link "https://example.com/product" `
+  --link-mode product `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
+  --out-dir ".\promotion-output_推广输出"
+```
+
+质量门通过时报告 `professional_ready`。运行记录在 `promotion-output_推广输出\runs_运行记录\`，产品录屏、配音、AI 场景、视频、封面、详情图和报告均使用中英文目录。默认全程本地处理；`--allow-cloud-media` 不会隐式启用上传。数字人需要 `--presenter-asset` 与 `--portrait-authorized`，当前未启用的 presenter 适配器会安全失败。缺少 `--brand-logo` 时专业分支明确阻断，避免错误使用其他品牌资产。
+
 ## 能做什么
 
 - 读取一个或多个产品 URL，并把 Codex/浏览器读取到的结构化网页证据传给产品信息解析流程。
@@ -30,8 +52,10 @@ ENHE 产品推广素材生成器是一个 Codex Skill，用来把任意产品 UR
 ```powershell
 python scripts\skill_entry.py `
   --link "https://example.com/product" `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 当公开产品页无法被本机 Chromium 或静态 HTML 抓取读取时，`product_url_reader.py` 会保存公开网页文本 fallback，并让后续流程通过 `--text-file` 继续运行。若不希望使用第三方公开网页文本读取，可加 `--disable-web-text-fallback`；若 Codex 已经读取并保存网页文本，可传 `--web-text-fallback-file`。
@@ -42,8 +66,10 @@ python scripts\skill_entry.py `
 python scripts\skill_entry.py `
   --link "https://example.com" `
   --link-mode site `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 每个主要阶段完成后，使用 `reports\promotion-manager\final-readiness\final-capability-readiness.md` 做阶段进度报告，汇报当前阶段、已实现目标、未实现目标、下一步计划和预计剩余时间。

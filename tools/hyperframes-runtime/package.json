@@ -1,0 +1,9 @@
+{
+  "name": "enhe-professional-media-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "gsap": "3.13.0",
+    "hyperframes": "0.7.68"
+  }
+}

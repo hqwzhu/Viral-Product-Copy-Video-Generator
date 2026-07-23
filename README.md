@@ -28,6 +28,28 @@ ENHE 产品推广素材生成器是一个本地 Codex Skill，用来把任意产
 
 仓库地址：[hqwzhu/Viral-Product-Copy-Video-Generator](https://github.com/hqwzhu/Viral-Product-Copy-Video-Generator.git)
 
+## 专业媒体工作流
+
+默认 Skill 现在使用 `--media-quality professional`，在本机生成真实产品页录屏、Kokoro 配音、ComfyUI + FLUX 摄影级场景、HyperFrames 动画、H.264/AAC MP4、商业封面和详情图。首次使用先安装本地运行时：
+
+```powershell
+python scripts/setup_professional_media.py --install-core
+python scripts/setup_professional_media.py --install-comfyui
+```
+
+启动本机 ComfyUI 后运行：
+
+```powershell
+python scripts/skill_entry.py `
+  --link "https://example.com/product" `
+  --link-mode product `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
+  --out-dir ".\promotion-output_推广输出"
+```
+
+`--brand-logo` 是专业合成的必需本地文件；系统不会为其他品牌偷偷套用 ENHE Logo。通过质量门后状态为 `professional_ready`，运行记录位于 `promotion-output_推广输出\runs_运行记录\`，媒体目录均采用中英文名称。默认只使用本机 Chrome、Kokoro、ComfyUI、HyperFrames 和 FFmpeg，不上传 Cookie、浏览器资料或媒体。`--allow-cloud-media` 只是显式云媒体授权边界，当前本地核心不会因此自动上传；数字人还必须同时提供 `--presenter-asset` 和 `--portrait-authorized`，且当前适配器未启用时会安全失败。`--skip-video` 保留旧的低资源基础素材路径，不会宣称生成了专业成片。
+
 ## 这个项目是做什么的
 
 你给它一个产品链接或网站链接，它可以帮助你完成从推广研究到发布包准备的整套流程：
@@ -155,8 +177,10 @@ python -m compileall -q scripts
 ```powershell
 python scripts\skill_entry.py `
   --link "https://example.com/product" `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 如果输入的是网站首页，让系统先发现产品页：
@@ -165,8 +189,10 @@ python scripts\skill_entry.py `
 python scripts\skill_entry.py `
   --link "https://example.com" `
   --link-mode site `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
   --platforms youtube,zhihu,xiaohongshu,douyin,github `
-  --out-dir ".\promotion-output"
+  --out-dir ".\promotion-output_推广输出"
 ```
 
 在 Codex 里也可以直接这样说：

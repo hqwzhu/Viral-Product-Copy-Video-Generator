@@ -58,6 +58,7 @@ def main() -> None:
     )
     write_cycle_report(out_dir, report)
     print(f"Promotion cycle report written to: {(cycle_dir(out_dir) / 'promotion-cycle.json').resolve()}")
+    raise SystemExit(report_exit_code(report))
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +97,13 @@ def parse_args() -> argparse.Namespace:
     workflow.add_argument("--skip-video", action="store_true")
     workflow.add_argument("--video-platforms", default="auto")
     workflow.add_argument("--generate-voiceover", action="store_true")
+    workflow.add_argument("--media-quality", choices=["draft", "standard", "professional"], default="professional")
+    workflow.add_argument("--brand-logo", default="")
+    workflow.add_argument("--comfyui-url", default="http://127.0.0.1:8188")
+    workflow.add_argument("--presenter", choices=["none", "musetalk", "heygen"], default="none")
+    workflow.add_argument("--presenter-asset", default="")
+    workflow.add_argument("--portrait-authorized", action="store_true")
+    workflow.add_argument("--allow-cloud-media", action="store_true")
     workflow.add_argument("--install-browser-if-missing", action="store_true")
 
     publish = parser.add_argument_group("Publish")
@@ -144,7 +152,7 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--run-business-attribution", action="store_true")
     metrics.add_argument("--run-next-round-optimization", action="store_true")
 
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
     return parser.parse_args()
 
 
@@ -207,6 +215,15 @@ def build_workflow_command(args: argparse.Namespace, out_dir: Path) -> list[str]
     append_if_present(command, "--video-platforms", args.video_platforms)
     if args.generate_voiceover:
         command.append("--generate-voiceover")
+    append_if_present(command, "--media-quality", args.media_quality)
+    append_if_present(command, "--brand-logo", args.brand_logo)
+    append_if_present(command, "--comfyui-url", args.comfyui_url)
+    append_if_present(command, "--presenter", args.presenter)
+    append_if_present(command, "--presenter-asset", args.presenter_asset)
+    if args.portrait_authorized:
+        command.append("--portrait-authorized")
+    if args.allow_cloud_media:
+        command.append("--allow-cloud-media")
     if args.install_browser_if_missing:
         command.append("--install-browser-if-missing")
     command.extend(["--out-dir", str(out_dir)])
@@ -557,6 +574,18 @@ def write_cycle_report(out_dir: Path, report: dict[str, Any]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "promotion-cycle.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (directory / "promotion-cycle.md").write_text(render_cycle_markdown(report) + "\n", encoding="utf-8")
+
+
+def report_exit_code(report: dict[str, Any]) -> int:
+    status = str(
+        report.get("status") or report.get("automationStatus") or ""
+    )
+    return (
+        0
+        if status == "waiting_real_data"
+        or status.startswith(("ready", "partial_ready"))
+        else 1
+    )
 
 
 def render_cycle_markdown(report: dict[str, Any]) -> str:

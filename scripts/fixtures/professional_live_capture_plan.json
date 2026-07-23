@@ -1,0 +1,8 @@
+{
+  "sourceUrl": "https://www.enhe-tech.com.cn/software",
+  "shots": [
+    {"id":"catalog-top","url":"https://www.enhe-tech.com.cn/software","selector":".listing-grid > a:nth-child(1)","action":"none","viewport":[1440,900],"screenshotMode":"viewport","duration":4},
+    {"id":"catalog-middle","url":"https://www.enhe-tech.com.cn/software","selector":".listing-grid > a:nth-child(4)","action":"none","viewport":[1440,900],"screenshotMode":"viewport","duration":4},
+    {"id":"catalog-lower","url":"https://www.enhe-tech.com.cn/software","selector":".listing-grid > a:nth-child(7)","action":"none","viewport":[1440,900],"screenshotMode":"viewport","duration":4}
+  ]
+}

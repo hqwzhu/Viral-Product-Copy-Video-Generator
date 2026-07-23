@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ENHE Product Capture Fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: #f8fbff;
+      background: #07112f;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+    }
+    main { width: 100%; overflow: hidden; }
+    section {
+      position: relative;
+      height: 760px;
+      padding: 72px 9vw;
+      isolation: isolate;
+    }
+    section::after {
+      content: "";
+      position: absolute;
+      inset: 28px;
+      z-index: -1;
+      border: 1px solid rgba(255,255,255,.19);
+      border-radius: 32px;
+      box-shadow: 0 28px 90px rgba(0,0,0,.28);
+    }
+    h1, h2, p { margin-top: 0; }
+    h1 { max-width: 900px; font-size: 72px; line-height: 1.05; }
+    h2 { font-size: 48px; }
+    p { max-width: 720px; font-size: 20px; line-height: 1.7; color: #dbe7ff; }
+    .tag {
+      display: inline-block;
+      margin-bottom: 28px;
+      padding: 9px 16px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.13);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .dashboard, .steps, .feature-grid, .metrics {
+      display: grid;
+      gap: 18px;
+      margin-top: 42px;
+    }
+    .dashboard { grid-template-columns: 1.7fr 1fr 1fr; }
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .feature-grid { grid-template-columns: repeat(3, 1fr); }
+    .metrics { grid-template-columns: repeat(3, 1fr); }
+    .card {
+      min-height: 160px;
+      padding: 25px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 22px;
+      background: rgba(7,17,47,.58);
+      backdrop-filter: blur(8px);
+    }
+    .card strong { display: block; margin-bottom: 12px; font-size: 25px; }
+    .bar {
+      height: 12px;
+      margin-top: 22px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #63e6ff 0 64%, rgba(255,255,255,.13) 64%);
+    }
+    #hero { background: radial-gradient(circle at 78% 18%, #7147ff, transparent 33%), linear-gradient(135deg, #081946, #2549bb 56%, #5c30c9); }
+    #workflow { background: linear-gradient(145deg, #10173e, #39206f 50%, #006f92); }
+    #features { background: radial-gradient(circle at 18% 70%, #006eb5, transparent 30%), linear-gradient(120deg, #071330, #342374 58%, #7e2c99); }
+    #proof { background: linear-gradient(150deg, #082b48, #103c82 48%, #34206d); }
+    #cta { display: grid; place-content: center; text-align: center; background: radial-gradient(circle, #6f3bda, #13265f 58%, #07112f); }
+    #cta p { margin-inline: auto; }
+    .button {
+      display: inline-block;
+      margin-top: 22px;
+      padding: 18px 32px;
+      color: #171345;
+      background: #f7fbff;
+      border-radius: 14px;
+      font-size: 20px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="hero">
+      <span class="tag">Offline capture fixture</span>
+      <h1>ENHE 专业媒体工作台</h1>
+      <p>用于自动化截图与交互录像测试的静态产品仪表盘。页面中的数据仅为测试样例，不代表生产能力。</p>
+      <div class="dashboard">
+        <div class="card"><strong>Campaign canvas</strong>测试素材编排区<div class="bar"></div></div>
+        <div class="card"><strong>5 sections</strong>固定页面结构</div>
+        <div class="card"><strong>Offline</strong>无外部资源</div>
+      </div>
+    </section>
+    <section id="workflow">
+      <span class="tag">Workflow</span>
+      <h2>从测试输入到媒体资产</h2>
+      <p>清晰区分每一个测试步骤，方便验证滚动、定位与画面变化。</p>
+      <div class="steps">
+        <div class="card"><strong>01</strong>读取 fixture</div>
+        <div class="card"><strong>02</strong>定位 section</div>
+        <div class="card"><strong>03</strong>保存截图</div>
+        <div class="card"><strong>04</strong>记录元数据</div>
+      </div>
+    </section>
+    <section id="features">
+      <span class="tag">Fixture features</span>
+      <h2>确定性视觉测试组件</h2>
+      <div class="feature-grid">
+        <div class="card"><strong>固定高度</strong>每个区域保持 760px。</div>
+        <div class="card"><strong>CSS only</strong>不依赖脚本与网络。</div>
+        <div class="card"><strong>清晰差异</strong>蓝紫渐变与卡片布局。</div>
+        <div class="card"><strong>中英混排</strong>Bilingual labels。</div>
+        <div class="card"><strong>可见锚点</strong>五个唯一 section ID。</div>
+        <div class="card"><strong>测试声明</strong>不主张生产结果。</div>
+      </div>
+    </section>
+    <section id="proof">
+      <span class="tag">Test evidence</span>
+      <h2>可核验，而非能力宣称</h2>
+      <p>以下数字只描述此离线 fixture 的结构，用于产生稳定且不同的测试画面。</p>
+      <div class="metrics">
+        <div class="card"><strong>5</strong>可见测试区域</div>
+        <div class="card"><strong>1</strong>单文件 HTML</div>
+        <div class="card"><strong>0</strong>外部依赖</div>
+      </div>
+    </section>
+    <section id="cta">
+      <div>
+        <span class="tag">Capture complete</span>
+        <h2>Ready for deterministic testing</h2>
+        <p>此按钮为纯视觉元素，不会触发真实操作。</p>
+        <span class="button">生成测试证据</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
