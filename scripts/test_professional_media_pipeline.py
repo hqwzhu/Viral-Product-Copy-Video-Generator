@@ -2951,5 +2951,339 @@ class MediaQualityTest(unittest.TestCase):
             self.assertEqual(ai_report["evidence"]["aiScenes"][0]["type"], "ai_scene")
 
 
+class WorkflowIntegrationTest(unittest.TestCase):
+    def test_skill_entry_defaults_to_bilingual_root_and_professional_media(self):
+        skill_entry = importlib.import_module("scripts.skill_entry")
+        argv = [
+            "skill_entry.py",
+            "--link",
+            "https://example.com/product",
+            "--link-mode",
+            "product",
+        ]
+        with mock.patch.object(sys, "argv", argv):
+            args = skill_entry.parse_args()
+
+        self.assertEqual(args.out_dir, "./promotion-output_推广输出")
+        self.assertEqual(args.media_quality, "professional")
+        self.assertEqual(args.presenter, "none")
+        self.assertFalse(args.allow_cloud_media)
+
+    def test_product_batch_run_uses_bilingual_runs_directory(self):
+        product_batch = importlib.import_module("scripts.product_batch_runner")
+
+        run_dir = product_batch.product_run_dir(
+            Path("C:/output"), 1, "ENHE API", now="20260723-120000"
+        )
+
+        self.assertEqual(
+            run_dir,
+            Path("C:/output/runs_运行记录/20260723-120000-001-enhe-api"),
+        )
+
+    def test_final_readiness_discovers_bilingual_run_reports(self):
+        readiness = importlib.import_module("scripts.final_capability_readiness")
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp)
+            report = out_dir / "runs_运行记录" / "20260723-120000-enhe" / "reports" / "promotion-manager" / "publish-readiness" / "publish-readiness.json"
+            report.parent.mkdir(parents=True)
+            report.write_text("{}", encoding="utf-8")
+            with mock.patch.object(sys, "argv", ["final_capability_readiness.py", "--out-dir", str(out_dir)]):
+                args = readiness.parse_args()
+
+            sources = readiness.load_sources(args, out_dir)
+
+        self.assertEqual(sources["publishReadinessPaths"], [report])
+
+    def test_workflow_defaults_to_professional_media_and_bilingual_root(self):
+        workflow = importlib.import_module("scripts.run_promotion_workflow")
+        argv = ["run_promotion_workflow.py", "--product-url", "https://example.com/product"]
+        with mock.patch.object(sys, "argv", argv):
+            args = workflow.parse_args()
+
+        self.assertEqual(args.out_dir, "./promotion-output_推广输出")
+        self.assertEqual(args.media_quality, "professional")
+        self.assertEqual(args.comfyui_url, "http://127.0.0.1:8188")
+
+    def test_media_flags_propagate_through_default_workflow_commands(self):
+        common = [
+            "--media-quality",
+            "professional",
+            "--brand-logo",
+            "C:/brand/logo.png",
+            "--comfyui-url",
+            "http://127.0.0.1:8188",
+            "--presenter",
+            "none",
+            "--presenter-asset",
+            "C:/brand/presenter.png",
+            "--portrait-authorized",
+            "--allow-cloud-media",
+        ]
+
+        final_runner = importlib.import_module("scripts.final_capability_runner")
+        with mock.patch.object(sys, "argv", ["final_capability_runner.py", *common]):
+            final_args = final_runner.parse_args()
+        batch_command = [sys.executable, "product_batch_runner.py"]
+        final_runner.append_common_batch_args(batch_command, final_args)
+        self.assert_media_flags(batch_command)
+
+        product_batch = importlib.import_module("scripts.product_batch_runner")
+        with mock.patch.object(sys, "argv", ["product_batch_runner.py", *common]):
+            batch_args = product_batch.parse_args()
+        cycle_command = product_batch.build_cycle_command(
+            batch_args,
+            {"product": {}, "id": "enhe"},
+            {"flag": "--product-url", "value": "https://example.com/product"},
+            Path("C:/output/run"),
+        )
+        self.assert_media_flags(cycle_command)
+
+        scripts_path = str(REPO_ROOT / "scripts")
+        with mock.patch.object(sys, "path", [scripts_path, *sys.path]):
+            promotion_cycle = importlib.import_module("scripts.promotion_cycle_runner")
+        with mock.patch.object(sys, "argv", ["promotion_cycle_runner.py", "--product-url", "https://example.com/product", *common]):
+            cycle_args = promotion_cycle.parse_args()
+        workflow_command = promotion_cycle.build_workflow_command(
+            cycle_args, Path("C:/output/run")
+        )
+        self.assert_media_flags(workflow_command)
+
+        real_playbook = importlib.import_module("scripts.real_run_playbook")
+        with mock.patch.object(sys, "argv", ["real_run_playbook.py", *common]):
+            playbook_args = real_playbook.parse_args()
+        final_command = real_playbook.final_capability_command(
+            playbook_args, Path("C:/output")
+        )
+        self.assert_media_flags(final_command)
+
+    def test_professional_media_branch_invokes_local_pipeline(self):
+        workflow = importlib.import_module("scripts.run_promotion_workflow")
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp)
+            content_dir = out_dir / "reports" / "promotion-manager" / "generated-content"
+            publish_dir = out_dir / "reports" / "promotion-manager" / "publish-packs"
+            content_dir.mkdir(parents=True)
+            publish_dir.mkdir(parents=True)
+            content_path = content_dir / "enhe-platform-content.json"
+            publish_path = publish_dir / "enhe-publish-pack.json"
+            content_path.write_text(
+                json.dumps(
+                    {
+                        "youtube": {
+                            "title": "ENHE product demo",
+                            "description": "Turn one product page into campaign assets.",
+                            "voiceover": "See how ENHE turns one product page into professional campaign assets.",
+                            "coverText": "One link to a full campaign",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            publish_path.write_text("[]", encoding="utf-8")
+            logo = out_dir / "logo.png"
+            logo.write_bytes(PNG_BYTES)
+            args = SimpleNamespace(
+                skip_video=False,
+                media_quality="professional",
+                language="zh-CN",
+                platforms="youtube,xiaohongshu",
+                brand_logo=str(logo),
+                comfyui_url="http://127.0.0.1:8188",
+                presenter="none",
+                presenter_asset="",
+                portrait_authorized=False,
+                allow_cloud_media=False,
+            )
+            product = {"name": "ENHE", "url": "https://example.com/product", "platforms": ["youtube", "xiaohongshu"]}
+            captured = []
+
+            def fake_run(name, command, check=False):
+                captured.append((name, command, check))
+                reports = out_dir / "reports_报告"
+                videos = out_dir / "videos_视频"
+                reports.mkdir()
+                videos.mkdir()
+                video = videos / "professional-demo.mp4"
+                video.write_bytes(b"video")
+                (reports / "media-quality-report.json").write_text(
+                    json.dumps({"status": "professional_ready", "blockers": [], "missingFamilies": []}),
+                    encoding="utf-8",
+                )
+                (reports / "media-manifest.json").write_text(
+                    json.dumps({"status": "complete"}), encoding="utf-8"
+                )
+                return {"command": command, "exitCode": 0, "stdoutTail": "", "stderrTail": ""}
+
+            with mock.patch.object(workflow, "run_command", side_effect=fake_run):
+                result = workflow.run_professional_media(args, product, out_dir, [])
+
+            media_input = json.loads(
+                (out_dir / "generated-content_生成内容" / "professional-media-input.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result["status"], "professional_ready")
+        self.assertEqual(len(result["videos"]), 1)
+        self.assertTrue(media_input["narration"])
+        self.assertEqual(media_input["sourcePlatform"], "youtube")
+        self.assertEqual(captured[0][0], "professional_media_pipeline")
+        command = captured[0][1]
+        self.assertIn("--quality-target", command)
+        self.assertIn("professional", command)
+        self.assertIn("--brand-logo", command)
+        self.assertIn("--comfyui-url", command)
+        self.assertNotIn("--allow-cloud-media", command)
+
+    def test_professional_media_requires_explicit_brand_logo(self):
+        workflow = importlib.import_module("scripts.run_promotion_workflow")
+        args = SimpleNamespace(skip_video=False, brand_logo="")
+
+        result = workflow.run_professional_media(
+            args,
+            {"name": "ENHE", "url": "https://example.com/product", "platforms": ["youtube"]},
+            Path("C:/output"),
+            [],
+        )
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["reasonCode"], "brand_logo_required")
+
+    def test_professional_default_fails_closed_below_professional_ready(self):
+        workflow = importlib.import_module("scripts.run_promotion_workflow")
+        args = SimpleNamespace(media_quality="professional", skip_video=False)
+
+        with self.assertRaises(SystemExit):
+            workflow.enforce_professional_media_result(args, {"status": "standard_ready"})
+
+        workflow.enforce_professional_media_result(args, {"status": "professional_ready"})
+        workflow.enforce_professional_media_result(
+            SimpleNamespace(media_quality="draft", skip_video=False),
+            {"status": "blocked"},
+        )
+
+    def test_professional_video_renders_and_binds_each_platform_aspect(self):
+        from scripts.media_pipeline.orchestrator import MediaOrchestrator
+
+        calls = []
+        with tempfile.TemporaryDirectory() as temp:
+            paths = new_run_paths(Path(temp), "ENHE", now="20260723-120000").create()
+
+            def artifact(name, artifact_type):
+                path = paths.source_assets / name
+                path.write_bytes(b"asset")
+                return Artifact.from_file(artifact_type, path, "fixture", "fixture")
+
+            def fake_video_provider(data, output_path, _workspace):
+                calls.append((data["width"], data["height"], tuple(data["platforms"])))
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"video")
+                return StageResult.ready(
+                    "fixture",
+                    [Artifact.from_file("professional_product_demo_video", output_path, "fixture", "fixture")],
+                    diagnostics={"captionTimingValid": True},
+                )
+
+            job = MediaJob(
+                run_id=paths.root.name,
+                product_name="ENHE",
+                source_url="https://example.com/product",
+                language="zh-CN",
+                target_platforms=("youtube", "douyin", "github"),
+                quality_target="professional",
+                aspect_ratios=("16:9", "9:16", "1:1"),
+                duration_range=(20, 60),
+                providers={},
+                allow_cloud_media=False,
+                product_data_path=str(paths.source_assets / "content.json"),
+                brand_assets=(),
+                generated_content_path=str(paths.source_assets / "content.json"),
+                capture_plan_path="",
+            )
+            stages = {
+                "capture": StageResult.ready("fixture", [artifact(f"capture-{index}.png", "product_capture_image") for index in range(3)]),
+                "scenes": StageResult.ready("fixture", [artifact(f"scene-{index}.png", "ai_scene") for index in range(2)]),
+                "voiceover": StageResult.ready("fixture", [artifact("voice.wav", "voiceover_audio")]),
+            }
+            orchestrator = MediaOrchestrator(video_provider=fake_video_provider)
+
+            result = orchestrator._render_video(job, paths, stages, {})
+
+            pack = paths.publish_packs / "pack.json"
+            pack.write_text(
+                json.dumps([{"platform": "youtube"}, {"platform": "douyin"}, {"platform": "github"}]),
+                encoding="utf-8",
+            )
+            orchestrator._update_publish_pack(
+                pack,
+                job,
+                paths,
+                {
+                    "video": result,
+                    "visuals": StageResult.ready("fixture", []),
+                    "quality": StageResult(status="ready", provider="fixture", diagnostics={"status": "professional_ready"}),
+                },
+            )
+            updated = json.loads(pack.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            calls,
+            [
+                (1920, 1080, ("youtube",)),
+                (1080, 1920, ("douyin",)),
+                (1080, 1080, ("github",)),
+            ],
+        )
+        self.assertEqual(len({item["video"]["path"] for item in updated}), 3)
+        self.assertTrue(result.diagnostics["captionTimingValid"])
+        self.assertTrue(
+            all(artifact.metadata["captionTimingValid"] for artifact in result.artifacts)
+        )
+
+    def test_skill_entry_returns_failure_only_for_internal_blocked_status(self):
+        skill_entry = importlib.import_module("scripts.skill_entry")
+
+        self.assertEqual(skill_entry.entry_exit_code({"status": "blocked"}), 1)
+        self.assertEqual(skill_entry.entry_exit_code({"status": "error"}), 1)
+        self.assertEqual(
+            skill_entry.entry_exit_code(
+                {"status": "partial_ready_blocked_by_platform_or_safety_limits"}
+            ),
+            0,
+        )
+        self.assertEqual(skill_entry.entry_exit_code({"status": "professional_ready"}), 0)
+
+    def assert_media_flags(self, command):
+        self.assertEqual(command[command.index("--media-quality") + 1], "professional")
+        self.assertEqual(command[command.index("--brand-logo") + 1], "C:/brand/logo.png")
+        self.assertEqual(command[command.index("--comfyui-url") + 1], "http://127.0.0.1:8188")
+        self.assertEqual(command[command.index("--presenter") + 1], "none")
+        self.assertEqual(command[command.index("--presenter-asset") + 1], "C:/brand/presenter.png")
+        self.assertIn("--portrait-authorized", command)
+        self.assertIn("--allow-cloud-media", command)
+
+
+class ProfessionalMediaDocsTest(unittest.TestCase):
+    def test_docs_explain_install_run_quality_and_cloud_boundary_in_both_languages(self):
+        documents = [
+            REPO_ROOT / "README.md",
+            REPO_ROOT / "README.zh-CN.md",
+            REPO_ROOT / "README.en.md",
+            REPO_ROOT / "SKILL.md",
+        ]
+        for path in documents:
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                for required in (
+                    "professional_ready",
+                    "--media-quality professional",
+                    "--brand-logo",
+                    "--allow-cloud-media",
+                    "promotion-output_推广输出",
+                    "setup_professional_media.py --install-core",
+                    "setup_professional_media.py --install-comfyui",
+                ):
+                    self.assertIn(required, text)
+
+
 if __name__ == "__main__":
     unittest.main()

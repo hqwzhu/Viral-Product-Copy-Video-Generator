@@ -69,7 +69,7 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Summarize final capability readiness from generated promotion manager reports.")
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
     parser.add_argument("--final-run", default="", help="Path to final-capability-run.json.")
     parser.add_argument("--final-audit", default="", help="Path to final-capability-audit.json.")
     parser.add_argument("--platform-access-audit", default="", help="Path to platform-access-audit.json.")
@@ -101,40 +101,47 @@ def load_sources(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         args.publish_readiness,
         out_dir,
         "reports/promotion-manager/publish-readiness/publish-readiness.json",
+        "runs_运行记录/*/reports/promotion-manager/publish-readiness/publish-readiness.json",
         "product-batch-runs/*/reports/promotion-manager/publish-readiness/publish-readiness.json",
     )
     publish_setup_paths = explicit_or_discovered(
         args.publish_setup,
         out_dir,
         "reports/promotion-manager/publish-setup/publish-setup.json",
+        "runs_运行记录/*/reports/promotion-manager/publish-setup/publish-setup.json",
         "product-batch-runs/*/reports/promotion-manager/publish-setup/publish-setup.json",
     )
     real_evidence_setup_paths = explicit_or_discovered(
         args.real_evidence_setup,
         out_dir,
         "reports/promotion-manager/real-evidence-setup/real-evidence-setup.json",
+        "runs_运行记录/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json",
         "product-batch-runs/*/reports/promotion-manager/real-evidence-setup/real-evidence-setup.json",
     )
     real_evidence_inbox_setup_paths = explicit_or_discovered(
         args.real_evidence_inbox_setup,
         out_dir,
         "reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json",
+        "runs_运行记录/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json",
         "product-batch-runs/*/reports/promotion-manager/real-evidence-inbox-setup/real-evidence-inbox-setup.json",
     )
     viral_evidence_inbox_setup_paths = explicit_or_discovered(
         args.viral_evidence_inbox_setup,
         out_dir,
         "reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json",
+        "runs_运行记录/*/reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json",
         "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox-setup/viral-evidence-inbox-setup.json",
     )
     viral_evidence_inbox_paths = explicit_or_discovered(
         args.viral_evidence_inbox,
         out_dir,
         "reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json",
+        "runs_运行记录/*/reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json",
         "product-batch-runs/*/reports/promotion-manager/competitors/viral-evidence-inbox/viral-evidence-inbox.json",
     )
     launch_unlock_paths = unique_paths(
         glob_existing(out_dir, "reports/promotion-manager/launch-unlock/launch-unlock.json")
+        + glob_existing(out_dir, "runs_运行记录/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
         + glob_existing(out_dir, "product-batch-runs/*/reports/promotion-manager/launch-unlock/launch-unlock.json")
     )
     synthetic_evidence_paths = explicit_or_discovered(

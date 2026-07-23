@@ -19,7 +19,7 @@ The script writes JSON and Markdown reports under the selected output directory.
 - `reports/promotion-manager/intake/product-url-reader.{json,md}` when `scripts/product_url_reader.py` reads one or more product URLs into structured page snapshots and product profiles
 - `product-url-reader/<id>/structured-product-page.json` and `product-url-reader/<id>/intake/product-profile.{json,md}` per product URL read by `scripts/product_url_reader.py`
 - `reports/promotion-manager/batch/product-batch-runner.{json,md}` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization after each cycle
-- `product-batch-runs/<id>/reports/promotion-manager/cycle/promotion-cycle.{json,md}` per product cycle run created by `scripts/product_batch_runner.py`
+- `runs_运行记录/<timestamp>-<id>/reports/promotion-manager/cycle/promotion-cycle.{json,md}` per product cycle run created by `scripts/product_batch_runner.py`
 - `reports/promotion-manager/agent-run/workflow-manifest.{json,md}` when `scripts/run_promotion_workflow.py` is run
 - `reports/promotion-manager/agent-run/competitor-collections/<platform>/...` when the workflow runner calls official/public competitor collectors
 - `promotion-output/automation/scheduler/automation-run.{json,md}` when `scripts/automation_scheduler.py run` executes due jobs

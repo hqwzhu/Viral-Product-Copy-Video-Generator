@@ -26,6 +26,28 @@ Open-source integration notes: [Firecrawl + AiToEarn Integration](docs/open-sour
 
 100% completion roadmap: [Module-by-module roadmap](docs/100-percent-completion-roadmap.md) / [Chinese beginner guide](docs/zh-CN/100-percent-completion-guide.md)
 
+## Professional Media Workflow
+
+The default Skill entry now uses `--media-quality professional` to create voiced product-demo MP4s from real page captures, Kokoro narration, local ComfyUI + FLUX photographic scenes, HyperFrames motion, commercial covers, and detail images. Install the local runtime first:
+
+```powershell
+python scripts/setup_professional_media.py --install-core
+python scripts/setup_professional_media.py --install-comfyui
+```
+
+Start local ComfyUI, then run with an explicit brand logo:
+
+```powershell
+python scripts/skill_entry.py `
+  --link "https://example.com/product" `
+  --link-mode product `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
+  --out-dir ".\promotion-output_推广输出"
+```
+
+A fully accepted run reports `professional_ready` under `promotion-output_推广输出\runs_运行记录\`; generated media directories use bilingual English/Chinese names. `--brand-logo` is required so the Skill never applies ENHE branding to an unrelated product. Processing is local by default and does not upload cookies, browser profiles, or media. `--allow-cloud-media` is an explicit permission boundary only and does not silently enable cloud upload. Presenter use also requires `--presenter-asset` and `--portrait-authorized`; unavailable presenter adapters fail closed. `--skip-video` keeps the legacy low-resource asset path and does not claim a professional video was created.
+
 ## What This Project Does
 
 Give the Skill a product link or website link. It can then:

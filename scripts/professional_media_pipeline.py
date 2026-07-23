@@ -48,11 +48,12 @@ def _platforms(value: str) -> tuple[str, ...]:
 
 def _aspect_ratios(platforms: tuple[str, ...]) -> tuple[str, ...]:
     portrait = {"douyin", "xiaohongshu", "tiktok"}
-    if platforms and platforms[0] in portrait:
-        return ("9:16",)
-    if platforms and platforms[0] == "github":
-        return ("1:1",)
-    return ("16:9",)
+    ratios = []
+    for platform in platforms:
+        ratio = "9:16" if platform in portrait else "1:1" if platform == "github" else "16:9"
+        if ratio not in ratios:
+            ratios.append(ratio)
+    return tuple(ratios) or ("16:9",)
 
 
 def build_job(args: argparse.Namespace) -> MediaJob:

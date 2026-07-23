@@ -17,6 +17,30 @@ Current publishing policy: manual publish packages are the primary path; auto-pu
 
 ## Quick Start
 
+### Professional media default
+
+Install the local professional runtime before the first production run:
+
+```powershell
+python scripts/setup_professional_media.py --install-core
+python scripts/setup_professional_media.py --install-comfyui
+```
+
+Start the local ComfyUI sidecar, then run the one-link entry with an explicit product brand asset:
+
+```powershell
+python scripts/skill_entry.py `
+  --link "https://example.com/product" `
+  --link-mode product `
+  --media-quality professional `
+  --brand-logo "C:\path\to\brand-logo.png" `
+  --out-dir ".\promotion-output_推广输出"
+```
+
+Treat `professional_ready` in `reports_报告/media-quality-report.json` as media-generation acceptance only; it is not proof of publishing or campaign performance. Runs live under `promotion-output_推广输出/runs_运行记录/` and use bilingual directories for captures, narration, AI scenes, videos, covers, detail images, generated media input, publish assets, and reports.
+
+The default boundary is local-only: reuse public product pages, local Chrome, Kokoro, ComfyUI/FLUX, HyperFrames, and FFmpeg without uploading cookies, profiles, or media. `--brand-logo` is required and must refer to the product's real authorized brand asset. `--allow-cloud-media` is explicit permission only; it must never cause implicit uploads. Presenter requests require both `--presenter-asset` and `--portrait-authorized`; unavailable presenter adapters fail closed. With `--skip-video`, use the legacy low-resource renderer/asset pack and do not report professional completion.
+
 When the user sends a product link, do this:
 
 1. Inspect the product page or ask for missing basics: product name, target audience, pain points, value proposition, price, target platforms, and primary goal.
@@ -1025,7 +1049,7 @@ The command writes:
 - `browser-snapshot/product-page-snapshot.json` when `scripts/browser_snapshot.py` or `--browser-url` captures a rendered product page.
 - `reports/promotion-manager/intake/product-url-discovery.{json,md}` and `product-url-discovery/product-urls.txt` when `scripts/product_url_discovery.py` discovers likely product URLs from public website links, `robots.txt` sitemap declarations, `/sitemap.xml`, or direct sitemap URL/file input.
 - `reports/promotion-manager/intake/product-url-reader.{json,md}`, `product-url-reader/<id>/structured-product-page.json`, and optionally `product-url-reader/<id>/web-reader-page.md` when `scripts/product_url_reader.py` reads product URLs into browser-visible structured snapshots, static profiles, or public web-text fallback profiles.
-- `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `product-batch-runs/<id>/...` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization per product.
+- `reports/promotion-manager/batch/product-batch-runner.{json,md}` and `runs_运行记录/<timestamp>-<id>/...` when `scripts/product_batch_runner.py` discovers or reads multiple product URLs first, runs one promotion cycle per ready product, and optionally runs multi-query viral discovery and next-round optimization per product.
 - `search-snapshots/browser-search/<platform>.json` and `reports/promotion-manager/competitors/browser-search-snapshots.{json,md}` when `scripts/platform_search_browser.py` or `--auto-search-competitors` captures public search pages.
 - `reports/promotion-manager/competitors/viral-discovery-run.{json,md}` when `scripts/viral_discovery_runner.py` runs keyword search, browser-visible capture, viral library creation, creator leaderboard generation, optional follow-up capture, and optional video frame sampling as one standalone discovery pass. Its `coverage` records search captures, queued follow-up modes, imported deep records, browser-visible capture successes, and video sample frame counts.
 - `reports/promotion-manager/competitors/multi-query-viral-discovery.{json,md}`, `multi-query-viral-content-library.{json,md}`, and `multi-query-creator-leaderboard.{json,md}` when `scripts/multi_query_viral_discovery.py` runs product-driven multi-query discovery and merges ranked materials and creators. Its summary carries the per-query deep evidence and video sampling coverage up to product batch and final readiness reports.

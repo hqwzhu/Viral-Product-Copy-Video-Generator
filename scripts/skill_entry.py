@@ -34,6 +34,9 @@ def main() -> None:
     report = build_report(args, out_dir, playbook, final_run, readiness, steps)
     write_report(out_dir, report)
     print(f"Skill entry report written to: {(report_dir(out_dir) / 'skill-entry.json').resolve()}")
+    exit_code = entry_exit_code(report)
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platforms", default=DEFAULT_PLATFORMS)
     parser.add_argument("--goal", default="leads", choices=["traffic", "leads", "sales", "seo", "brand", "github_stars"])
     parser.add_argument("--language", default="zh-CN")
-    parser.add_argument("--out-dir", default="./promotion-output")
+    parser.add_argument("--out-dir", default="./promotion-output_推广输出")
 
     product = parser.add_argument_group("Product reading")
     product.add_argument("--skip-browser", action="store_true")
@@ -82,6 +85,13 @@ def parse_args() -> argparse.Namespace:
     content.add_argument("--skip-video", action="store_true")
     content.add_argument("--video-platforms", default="auto")
     content.add_argument("--generate-voiceover", action="store_true")
+    content.add_argument("--media-quality", choices=["draft", "standard", "professional"], default="professional")
+    content.add_argument("--brand-logo", default="")
+    content.add_argument("--comfyui-url", default="http://127.0.0.1:8188")
+    content.add_argument("--presenter", choices=["none", "musetalk", "heygen"], default="none")
+    content.add_argument("--presenter-asset", default="")
+    content.add_argument("--portrait-authorized", action="store_true")
+    content.add_argument("--allow-cloud-media", action="store_true")
 
     publish = parser.add_argument_group("Publishing")
     publish.add_argument("--skip-publish-queue", action="store_true")
@@ -160,6 +170,15 @@ def run_playbook(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, 
     append_many(command, "--published-url", args.published_url)
     if args.generate_voiceover:
         command.append("--generate-voiceover")
+    append_if_present(command, "--media-quality", args.media_quality)
+    append_if_present(command, "--brand-logo", args.brand_logo)
+    append_if_present(command, "--comfyui-url", args.comfyui_url)
+    append_if_present(command, "--presenter", args.presenter)
+    append_if_present(command, "--presenter-asset", args.presenter_asset)
+    if args.portrait_authorized:
+        command.append("--portrait-authorized")
+    if args.allow_cloud_media:
+        command.append("--allow-cloud-media")
     command.extend(["--out-dir", str(out_dir)])
     step = run_command("real_run_playbook", command)
     steps.append(step)
@@ -216,6 +235,15 @@ def run_final_capability(args: argparse.Namespace, out_dir: Path, steps: list[di
     append_if_present(command, "--video-platforms", args.video_platforms)
     if args.generate_voiceover:
         command.append("--generate-voiceover")
+    append_if_present(command, "--media-quality", args.media_quality)
+    append_if_present(command, "--brand-logo", args.brand_logo)
+    append_if_present(command, "--comfyui-url", args.comfyui_url)
+    append_if_present(command, "--presenter", args.presenter)
+    append_if_present(command, "--presenter-asset", args.presenter_asset)
+    if args.portrait_authorized:
+        command.append("--portrait-authorized")
+    if args.allow_cloud_media:
+        command.append("--allow-cloud-media")
 
     command.extend(["--multi-query-query-count", str(args.multi_query_query_count)])
     if args.multi_query_dry_run:
@@ -431,6 +459,10 @@ def entry_status(playbook: dict[str, Any], final_run: dict[str, Any], readiness:
     if readiness.get("status") == "partial_ready_blocked_by_platform_or_safety_limits":
         return "partial_ready_blocked_by_platform_or_safety_limits"
     return str(readiness.get("status") or final_run.get("status") or "partial_ready")
+
+
+def entry_exit_code(report: dict[str, Any]) -> int:
+    return 1 if report.get("status") in {"blocked", "error"} else 0
 
 
 def write_report(out_dir: Path, report: dict[str, Any]) -> None:

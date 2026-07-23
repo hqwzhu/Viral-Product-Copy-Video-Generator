@@ -690,16 +690,55 @@ class MediaOrchestrator:
                         captions.append({"start": start, "duration": end - start, "text": str(segment["text"])})
                 except (KeyError, TypeError, ValueError):
                     pass
-        dimensions = self._video_dimensions(job)
-        if dimensions is None:
-            return StageResult(status="failed", provider="orchestrator", error_code="unsupported_aspect_ratio")
-        data = {"width": dimensions[0], "height": dimensions[1], "duration": duration, "durationRange": list(job.duration_range), "fps": 30, "motionTypes": ["zoomPan", "productHighlight", "sceneTransition"], "shots": shots, "captions": captions, "voiceover": voice.path, "provenance": {"provider": "local_orchestrator", "language": language, "cloudUpload": False}}
-        return self.video_provider(data, paths.videos / "professional-demo.mp4", paths.videos / ".professional-demo-hyperframes")
+        platform_groups: dict[tuple[int, int], list[str]] = {}
+        for platform in job.target_platforms:
+            dimensions = self._video_dimensions(job) if len(job.target_platforms) == 1 else self._platform_video_dimensions(platform)
+            if dimensions is None:
+                return StageResult(status="failed", provider="orchestrator", error_code="unsupported_aspect_ratio")
+            platform_groups.setdefault(dimensions, []).append(platform)
+        artifacts = []
+        warnings = []
+        degraded = False
+        caption_timing_results: list[bool] = []
+        for dimensions, platforms in platform_groups.items():
+            label = f"{dimensions[0]}x{dimensions[1]}"
+            data = {"width": dimensions[0], "height": dimensions[1], "duration": duration, "durationRange": list(job.duration_range), "fps": 30, "motionTypes": ["zoomPan", "productHighlight", "sceneTransition"], "shots": shots, "captions": captions, "voiceover": voice.path, "platforms": platforms, "provenance": {"provider": "local_orchestrator", "language": language, "cloudUpload": False}}
+            result = self.video_provider(data, paths.videos / f"professional-demo-{label}.mp4", paths.videos / f".professional-demo-{label}-hyperframes")
+            if result.status not in {"ready", "degraded"}:
+                return result
+            degraded = degraded or result.status == "degraded"
+            warnings.extend(result.warnings)
+            caption_timing_valid = result.diagnostics.get("captionTimingValid") is True
+            caption_timing_results.append(caption_timing_valid)
+            for artifact in result.artifacts:
+                metadata = dict(artifact.metadata)
+                metadata.update({"platforms": list(platforms), "dimensions": list(dimensions), "captionTimingValid": caption_timing_valid})
+                artifacts.append(replace(artifact, metadata=metadata))
+        return StageResult(
+            status="degraded" if degraded or warnings else "ready",
+            provider=_provider_name(self.video_provider, "video"),
+            artifacts=tuple(artifacts),
+            warnings=tuple(warnings),
+            diagnostics={
+                "platformGroups": [{"platforms": items, "dimensions": list(size)} for size, items in platform_groups.items()],
+                "captionTimingValid": bool(caption_timing_results) and all(caption_timing_results),
+            },
+        )
 
     @staticmethod
     def _video_dimensions(job: MediaJob) -> tuple[int, int] | None:
         ratio = str(job.aspect_ratios[0] if job.aspect_ratios else "16:9").strip().replace(" ", "")
         return {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}.get(ratio)
+
+    @staticmethod
+    def _platform_video_dimensions(platform: str) -> tuple[int, int] | None:
+        if platform in {"douyin", "xiaohongshu", "tiktok"}:
+            return (1080, 1920)
+        if platform == "github":
+            return (1080, 1080)
+        if platform in PLATFORM_SIZES:
+            return (1920, 1080)
+        return None
 
     @staticmethod
     def _first_artifact(result: StageResult | None, artifact_type: str) -> Artifact | None:
@@ -797,7 +836,7 @@ class MediaOrchestrator:
         payload = json.loads(pack_path.read_text(encoding="utf-8"))
         if not isinstance(payload, list):
             raise ValueError("publish pack JSON must be a list")
-        video = next((self._artifact_record(item) for item in stages.get("video", StageResult("failed", "orchestrator")).artifacts if item.type == "professional_product_demo_video"), None)
+        video_artifacts = [item for item in stages.get("video", StageResult("failed", "orchestrator")).artifacts if item.type == "professional_product_demo_video"]
         visual_artifacts = stages.get("visuals", StageResult("failed", "orchestrator")).artifacts
         quality = stages.get("quality")
         quality_summary = {
@@ -809,6 +848,10 @@ class MediaOrchestrator:
             if not isinstance(item, dict):
                 continue
             platform = str(item.get("platform") or "")
+            video_artifact = next((artifact for artifact in video_artifacts if platform in artifact.metadata.get("platforms", ())), None)
+            if video_artifact is None and len(video_artifacts) == 1 and len(job.target_platforms) == 1:
+                video_artifact = video_artifacts[0]
+            video = self._artifact_record(video_artifact) if video_artifact else None
             platform_visuals = []
             for artifact in visual_artifacts:
                 platforms = artifact.metadata.get("platforms", ())
