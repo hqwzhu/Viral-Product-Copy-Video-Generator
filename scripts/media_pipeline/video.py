@@ -383,6 +383,22 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
         errors.append("audio_silent")
     if int(probe.get("shortEdge", 0) or 0) < 1080:
         errors.append("resolution_below_1080_short_edge")
+    try:
+        expected_width = int(clean["width"])
+        expected_height = int(clean["height"])
+        actual_width = int(probe["width"])
+        actual_height = int(probe["height"])
+        if (
+            expected_width <= 0
+            or expected_height <= 0
+            or actual_width <= 0
+            or actual_height <= 0
+        ):
+            raise ValueError
+        if (expected_width, expected_height) != (actual_width, actual_height):
+            errors.append("resolution_dimensions_mismatch")
+    except (KeyError, TypeError, ValueError):
+        errors.append("resolution_dimensions_invalid")
     if int(probe.get("sampledVisualFrames", 0) or 0) < 3 or int(probe.get("distinctVisualFrames", 0) or 0) < 3:
         errors.append("video_visuals_static")
     duration = float(probe.get("duration", 0) or 0)
@@ -440,7 +456,10 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
             errors.append("product_sources_not_distinct")
         if len(supporting_hashes) < 2:
             errors.append("supporting_sources_not_distinct")
-    captions = clean.get("captions") or []
+    captions = clean.get("captions")
+    if not isinstance(captions, (list, tuple)) or not captions:
+        errors.append("captions_missing")
+        captions = []
     for caption in captions:
         try:
             start = float(caption.get("start", 0))
@@ -544,7 +563,7 @@ def render_professional_video(data: Mapping[str, Any], output: str | Path, proje
                 "productShotCount": sum(shot.get("kind") == "product" for shot in clean["shots"]),
                 "supportingSceneCount": sum(shot.get("kind") in {"supporting", "broll", "ai_scene"} for shot in clean["shots"]),
                 "captionCount": len(clean.get("captions", [])),
-                "captionTimingValid": all(
+                "captionTimingValid": bool(clean.get("captions")) and all(
                     float(caption.get("start", 0)) >= 0
                     and float(caption.get("start", 0)) + float(caption.get("duration", 0)) <= float(clean["duration"]) + 1e-6
                     for caption in clean.get("captions", [])

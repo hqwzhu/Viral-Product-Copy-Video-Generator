@@ -132,6 +132,17 @@ def _artifact_hashes(result: StageResult) -> list[str]:
     return [artifact.sha256 for artifact in result.artifacts]
 
 
+def _stable_diagnostics(result: StageResult) -> Any:
+    diagnostics = _json_safe(result.diagnostics)
+    if isinstance(diagnostics, Mapping):
+        return {
+            key: value
+            for key, value in diagnostics.items()
+            if str(key) != "resumed"
+        }
+    return diagnostics
+
+
 def _result_dict(result: StageResult) -> dict[str, Any]:
     # All provider fields are receipt data.  Sanitize the complete result,
     # while still allowing local safe paths to remain available for resume.
@@ -535,6 +546,7 @@ class MediaOrchestrator:
                 ],
                 "warnings": list(result.warnings),
                 "errorCode": result.error_code,
+                "diagnostics": _stable_diagnostics(result),
             }
             for name, result in stages.items()
         }
@@ -547,7 +559,18 @@ class MediaOrchestrator:
         if stage == "visuals":
             return {"stage": stage, "platforms": job.target_platforms, "title": self._title(content, job), "subtitle": self._subtitle(content), "captures": previous.get("capture", []), "scenes": previous.get("scenes", []), "logo": job.brand_assets}
         if stage == "video":
-            return {"stage": stage, "platforms": job.target_platforms, "captures": previous.get("capture", []), "scenes": previous.get("scenes", []), "voiceover": previous.get("voiceover", []), "visuals": previous.get("visuals", [])}
+            return {
+                "stage": stage,
+                "platforms": job.target_platforms,
+                "captures": previous.get("capture", []),
+                "scenes": previous.get("scenes", []),
+                "voiceover": previous.get("voiceover", []),
+                "visuals": previous.get("visuals", []),
+                "captionSegments": self._caption_segments(
+                    stages.get("voiceover"),
+                    self._video_duration(job, stages),
+                ),
+            }
         return {"stage": stage, "qualityTarget": job.quality_target, "allStages": previous}
 
     def _content(self, job: MediaJob) -> dict[str, Any]:
@@ -571,6 +594,64 @@ class MediaOrchestrator:
     @staticmethod
     def _scene_prompt(content: Mapping[str, Any]) -> str:
         return str(content.get("scenePrompt") or content.get("scene_prompt") or content.get("visualPrompt") or content.get("title") or "Professional product marketing scene").strip()
+
+    @staticmethod
+    def _video_duration(
+        job: MediaJob, stages: Mapping[str, StageResult]
+    ) -> float | None:
+        captures = [
+            artifact
+            for artifact in (
+                stages.get("capture").artifacts if stages.get("capture") else ()
+            )
+            if artifact.type == "product_capture_image"
+        ]
+        scenes = [
+            artifact
+            for artifact in (
+                stages.get("scenes").artifacts if stages.get("scenes") else ()
+            )
+            if artifact.type
+            in {
+                "ai_scene",
+                "ai_scene_image",
+                "b_roll_image",
+                "supporting_scene_image",
+                "pexels_b_roll_image",
+            }
+        ]
+        shot_count = min(3, len(captures)) + min(2, len(scenes))
+        lower, upper = (int(job.duration_range[0]), int(job.duration_range[1]))
+        if shot_count < 5 or upper < lower or lower <= 0:
+            return None
+        return (
+            min(upper, max(lower, max(20, shot_count * 4)))
+            if upper >= 20
+            else lower
+        )
+
+    @staticmethod
+    def _caption_segments(
+        voice_result: StageResult | None, duration: float | None
+    ) -> list[dict[str, Any]]:
+        captions: list[dict[str, Any]] = []
+        if voice_result is None or duration is None:
+            return captions
+        for segment in voice_result.diagnostics.get("segments", ()):
+            try:
+                start = max(0.0, float(segment["start"]))
+                end = min(float(duration), float(segment["end"]))
+                if end > start:
+                    captions.append(
+                        {
+                            "start": start,
+                            "duration": end - start,
+                            "text": str(segment["text"]),
+                        }
+                    )
+            except (KeyError, TypeError, ValueError):
+                pass
+        return captions
 
     def _execute_stage(self, stage: str, job: MediaJob, paths: RunPaths, stages: Mapping[str, StageResult], capture_plan: Mapping[str, Any]) -> StageResult:
         content = self._content(job)
@@ -673,23 +754,16 @@ class MediaOrchestrator:
         lower, upper = (int(job.duration_range[0]), int(job.duration_range[1]))
         if upper < lower or lower <= 0:
             return StageResult(status="failed", provider="orchestrator", error_code="duration_range_invalid")
-        duration = min(upper, max(lower, max(20, len(shots) * 4))) if upper >= 20 else lower
+        duration = self._video_duration(job, stages)
+        if duration is None:
+            return StageResult(status="failed", provider="orchestrator", error_code="video_inputs_missing")
         shot_duration = duration / len(shots)
         for index, shot in enumerate(shots):
             shot["start"] = round(index * shot_duration, 3)
             shot["duration"] = round(shot_duration, 3)
         language = job.language
         voice_result = stages.get("voiceover")
-        captions = []
-        if voice_result:
-            for segment in voice_result.diagnostics.get("segments", ()):
-                try:
-                    start = max(0.0, float(segment["start"]))
-                    end = min(float(duration), float(segment["end"]))
-                    if end > start:
-                        captions.append({"start": start, "duration": end - start, "text": str(segment["text"])})
-                except (KeyError, TypeError, ValueError):
-                    pass
+        captions = self._caption_segments(voice_result, duration)
         platform_groups: dict[tuple[int, int], list[str]] = {}
         for platform in job.target_platforms:
             dimensions = self._video_dimensions(job) if len(job.target_platforms) == 1 else self._platform_video_dimensions(platform)

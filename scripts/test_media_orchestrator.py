@@ -178,6 +178,68 @@ class MediaOrchestratorTest(unittest.TestCase):
             orchestrator.run(job, run_dir=run_dir, resume=True)
             self.assertEqual(capture.calls, 2)
 
+    def test_voice_diagnostics_change_invalidates_video_and_updates_captions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text(
+                json.dumps({"title": "Fixture", "narration": "Fixture narration"}),
+                encoding="utf-8",
+            )
+            logo = _png(root / "logo.png", "#ffffff")
+            job = MediaJob(
+                run_id="caption-resume",
+                product_name="Fixture",
+                source_url="https://example.com/product",
+                language="en",
+                target_platforms=("youtube",),
+                quality_target="draft",
+                aspect_ratios=("16:9",),
+                duration_range=(20, 60),
+                providers={},
+                allow_cloud_media=False,
+                product_data_path=str(content),
+                brand_assets=(str(logo),),
+                generated_content_path=str(content),
+                capture_plan_path="",
+            )
+            capture, voice, quality = _Capture(), _Voice(), _Quality()
+            video = _InspectingVideo()
+            orchestrator = MediaOrchestrator(
+                capture, voice, _Scenes(), _Visuals(), video, quality
+            )
+            run_dir = root / "run"
+            first = orchestrator.run(job, run_dir=run_dir, resume=False)
+            first_manifest = json.loads(
+                first.manifest_path.read_text(encoding="utf-8")
+            )
+            first_video_fingerprint = first_manifest["stages"]["video"][
+                "inputFingerprint"
+            ]
+
+            first_manifest["stages"]["voiceover"]["result"]["diagnostics"][
+                "segments"
+            ] = [{"start": 1.5, "end": 3.5, "text": "updated"}]
+            first.manifest_path.write_text(
+                json.dumps(first_manifest), encoding="utf-8"
+            )
+
+            resumed = orchestrator.run(job, run_dir=run_dir, resume=True)
+            second_manifest = json.loads(
+                resumed.manifest_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(resumed.status, "ready")
+            self.assertEqual(voice.calls, 1)
+            self.assertEqual(video.calls, 2)
+            self.assertNotEqual(
+                first_video_fingerprint,
+                second_manifest["stages"]["video"]["inputFingerprint"],
+            )
+            self.assertEqual(
+                video.data["captions"],
+                [{"start": 1.5, "duration": 2.0, "text": "updated"}],
+            )
+
     def test_manifest_publish_pack_and_local_guards(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

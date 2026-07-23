@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from scripts.media_pipeline.contracts import Artifact, StageResult
 from scripts.media_pipeline.security import MediaSecurityError, validate_capture_shot
@@ -264,6 +264,20 @@ class PlaywrightCaptureProvider:
                     page.mouse.wheel(0, max(350, viewport[1] // 3))
                     page.wait_for_timeout(350)
                 elif action == "click":
+                    if locator.get_attribute("download") is not None:
+                        raise MediaSecurityError(
+                            "Download navigation is not allowed"
+                        )
+                    href = locator.get_attribute("href")
+                    if not isinstance(href, str) or not href.strip():
+                        raise MediaSecurityError(
+                            "Clickable target must expose a safe href"
+                        )
+                    _validate_final_url(
+                        source_url,
+                        urljoin(page.url, href),
+                        self.allow_localhost,
+                    )
                     locator.click()
                     page.wait_for_timeout(350)
 

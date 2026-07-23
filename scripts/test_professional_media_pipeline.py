@@ -2183,6 +2183,92 @@ class ProductCaptureTest(unittest.TestCase):
                 start.assert_not_called()
                 launch.assert_not_called()
 
+    def test_click_rejects_cross_origin_link_before_request(self):
+        capture = load_capture_module(self)
+        if not capture.playwright_chromium_available():
+            self.skipTest("Playwright Chromium is unavailable")
+
+        target_hits = []
+
+        class TargetHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def do_GET(self):
+                target_hits.append(self.path)
+                payload = b"target"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        target_server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), TargetHandler
+        )
+        target_server.daemon_threads = True
+        target_thread = threading.Thread(
+            target=target_server.serve_forever, daemon=True
+        )
+        target_thread.start()
+
+        class SourceHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def do_GET(self):
+                target_url = (
+                    f"http://127.0.0.1:{target_server.server_port}/target"
+                )
+                payload = (
+                    "<main><a id='leave' href='"
+                    + target_url
+                    + "'>Leave</a></main>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        source_server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), SourceHandler
+        )
+        source_server.daemon_threads = True
+        source_thread = threading.Thread(
+            target=source_server.serve_forever, daemon=True
+        )
+        source_thread.start()
+        try:
+            source_url = f"http://127.0.0.1:{source_server.server_port}/"
+            plan = {
+                "sourceUrl": source_url,
+                "shots": [
+                    {
+                        "id": "leave",
+                        "url": source_url,
+                        "selector": "#leave",
+                        "action": "click",
+                        "viewport": [800, 600],
+                        "screenshotMode": "viewport",
+                        "duration": 1,
+                    }
+                ],
+            }
+            with tempfile.TemporaryDirectory() as temp:
+                with self.assertRaises(MediaSecurityError):
+                    capture.PlaywrightCaptureProvider(
+                        allow_localhost=True
+                    ).capture(plan, Path(temp))
+            self.assertEqual(target_hits, [])
+        finally:
+            source_server.shutdown()
+            source_server.server_close()
+            source_thread.join(timeout=5)
+            target_server.shutdown()
+            target_server.server_close()
+            target_thread.join(timeout=5)
+
     def test_http_errors_fail_without_ready_artifacts(self):
         capture = load_capture_module(self)
         if not capture.playwright_chromium_available():
@@ -2686,6 +2772,34 @@ class ProfessionalVideoTest(unittest.TestCase):
             }
 
             self.assertIn("video_visuals_static", video._quality_errors(clean, probe))
+
+    def test_quality_gate_rejects_dimension_mismatch_and_empty_captions(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            data.update({"width": 1080, "height": 1920, "captions": []})
+            clean = video._normalise_data(data)
+            clean["sourceHashes"] = [
+                {"shotId": shot["id"], "sha256": f"{index + 1:064x}"}
+                for index, shot in enumerate(clean["shots"])
+            ]
+            probe = {
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "videoStreams": 1,
+                "audioStreams": 1,
+                "nonSilent": True,
+                "width": 1920,
+                "height": 1080,
+                "shortEdge": 1080,
+                "duration": 20.0,
+                "sampledVisualFrames": 10,
+                "distinctVisualFrames": 5,
+            }
+            errors = video._quality_errors(clean, probe)
+            self.assertIn("resolution_dimensions_mismatch", errors)
+            self.assertIn("captions_missing", errors)
 
 
 class MediaQualityTest(unittest.TestCase):
