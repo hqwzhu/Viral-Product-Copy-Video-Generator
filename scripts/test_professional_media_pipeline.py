@@ -3148,6 +3148,77 @@ class WorkflowIntegrationTest(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reasonCode"], "brand_logo_required")
 
+    def test_professional_media_does_not_reuse_stale_success_after_subprocess_failure(self):
+        workflow = importlib.import_module("scripts.run_promotion_workflow")
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp)
+            content_dir = out_dir / "reports" / "promotion-manager" / "generated-content"
+            publish_dir = out_dir / "reports" / "promotion-manager" / "publish-packs"
+            reports = out_dir / "reports_报告"
+            videos = out_dir / "videos_视频"
+            content_dir.mkdir(parents=True)
+            publish_dir.mkdir(parents=True)
+            reports.mkdir()
+            videos.mkdir()
+            (content_dir / "enhe-platform-content.json").write_text(
+                json.dumps(
+                    {
+                        "youtube": {
+                            "title": "ENHE",
+                            "description": "Product campaign",
+                            "voiceover": "Generate professional campaign media.",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (publish_dir / "enhe-publish-pack.json").write_text("[]", encoding="utf-8")
+            (reports / "media-quality-report.json").write_text(
+                json.dumps(
+                    {
+                        "status": "professional_ready",
+                        "blockers": [],
+                        "missingFamilies": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (videos / "stale-professional.mp4").write_bytes(b"stale")
+            logo = out_dir / "logo.png"
+            logo.write_bytes(PNG_BYTES)
+            args = SimpleNamespace(
+                skip_video=False,
+                media_quality="professional",
+                language="zh-CN",
+                platforms="youtube",
+                brand_logo=str(logo),
+                comfyui_url="http://127.0.0.1:8188",
+                presenter="none",
+                presenter_asset="",
+                portrait_authorized=False,
+                allow_cloud_media=False,
+                video_platforms="auto",
+            )
+            product = {
+                "name": "ENHE",
+                "url": "https://example.com/product",
+                "platforms": ["youtube"],
+            }
+            failed_step = {
+                "command": ["python", "professional_media_pipeline.py"],
+                "exitCode": 1,
+                "stdoutTail": "",
+                "stderrTail": "render failed",
+            }
+
+            with mock.patch.object(workflow, "run_command", return_value=failed_step):
+                result = workflow.run_professional_media(args, product, out_dir, [])
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["videos"], [])
+        with self.assertRaises(SystemExit):
+            workflow.enforce_professional_media_result(args, result)
+
     def test_professional_default_fails_closed_below_professional_ready(self):
         workflow = importlib.import_module("scripts.run_promotion_workflow")
         args = SimpleNamespace(media_quality="professional", skip_video=False)

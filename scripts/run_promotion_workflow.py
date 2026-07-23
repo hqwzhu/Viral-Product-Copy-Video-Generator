@@ -753,6 +753,20 @@ def run_professional_media(
         command.append("--allow-cloud-media")
     step = run_command("professional_media_pipeline", command, check=False)
     steps.append(step)
+    if step["exitCode"] != 0:
+        return {
+            "status": "error",
+            "reasonCode": "professional_media_pipeline_failed",
+            "reason": "The professional media subprocess failed.",
+            "videos": [],
+            "assetPack": "",
+            "qualityReport": "",
+            "summary": {
+                "blockers": ["professional_media_pipeline_failed"],
+                "missingFamilies": [],
+            },
+            "exitCode": step["exitCode"],
+        }
     reports = out_dir / "reports_报告"
     quality_path = reports / "media-quality-report.json"
     manifest_path = reports / "media-manifest.json"
