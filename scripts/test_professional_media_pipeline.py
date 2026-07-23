@@ -1899,6 +1899,31 @@ class PathContractTest(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             job.providers = {}
 
+    def test_build_job_serializes_brand_assets_as_absolute_strings(self):
+        pipeline = importlib.import_module("scripts.professional_media_pipeline")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            content = root / "content.json"
+            content.write_text("{}", encoding="utf-8")
+            logo = root / "logo.png"
+            logo.write_bytes(PNG_BYTES)
+            args = pipeline.parse_args(
+                [
+                    "--product-url",
+                    "https://example.com/product",
+                    "--product-name",
+                    "ENHE",
+                    "--content-json",
+                    str(content),
+                    "--brand-logo",
+                    str(logo),
+                ]
+            )
+
+            payload = pipeline.build_job(args).to_dict()
+            self.assertEqual(payload["brandAssets"], [str(logo.resolve())])
+            json.dumps(payload)
+
     def test_artifact_and_ready_stage_result_round_trip(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "capture.png"

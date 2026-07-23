@@ -83,7 +83,9 @@ def build_job(args: argparse.Namespace) -> MediaJob:
         providers={"comfyuiUrl": args.comfyui_url} if args.comfyui_url else {},
         allow_cloud_media=args.allow_cloud_media,
         product_data_path=str(content),
-        brand_assets=tuple(Path(item).expanduser().resolve() for item in args.brand_logo),
+        brand_assets=tuple(
+            str(Path(item).expanduser().resolve()) for item in args.brand_logo
+        ),
         generated_content_path=str(content),
         capture_plan_path=capture_plan,
         presenter=args.presenter,
