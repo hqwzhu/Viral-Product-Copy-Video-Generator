@@ -422,10 +422,10 @@ class MediaOrchestrator:
         except (MediaSecurityError, OSError, ValueError):
             return None
         try:
-        for artifact in result.artifacts:
-            _safe_path(artifact.path, root)
-            if _contains_sensitive_text({"source": artifact.source, "license": artifact.license, "metadata": artifact.metadata}):
-                raise MediaSecurityError("sensitive artifact metadata is not allowed")
+            for artifact in result.artifacts:
+                _safe_path(artifact.path, root)
+                if _contains_sensitive_text({"source": artifact.source, "license": artifact.license, "metadata": artifact.metadata}):
+                    raise MediaSecurityError("sensitive artifact metadata is not allowed")
         except (MediaSecurityError, OSError):
             return None
         return replace(result, diagnostics={**dict(result.diagnostics), "resumed": True})
@@ -573,6 +573,8 @@ class MediaOrchestrator:
             safe_artifact_path = _safe_path(artifact.path, root)
             if not safe_artifact_path.is_file() or _sha256(safe_artifact_path) != artifact.sha256:
                 raise MediaSecurityError("artifact hash mismatch")
+            if _contains_sensitive_text({"source": artifact.source, "license": artifact.license, "metadata": artifact.metadata}):
+                raise MediaSecurityError("sensitive artifact metadata is not allowed")
             if _contains_cloud_upload(artifact.to_dict()):
                 raise MediaSecurityError("cloud upload is disabled")
             # A capture may legitimately contain user-visible product data.
