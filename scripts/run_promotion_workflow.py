@@ -12,6 +12,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:  # direct ``python scripts/run_promotion_workflow.py``
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.media_pipeline.paths import RUNS_DIR, new_run_paths
 
 
