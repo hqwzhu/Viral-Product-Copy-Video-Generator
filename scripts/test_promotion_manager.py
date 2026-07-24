@@ -515,6 +515,135 @@ class PromotionManagerScriptTest(unittest.TestCase):
         self.assertEqual(profile["targetAudienceAssumptions"], ["AI operators", "content marketers"])
         self.assertEqual(profile["painPointAssumptions"], ["Blank page copywriting", "Slow launch content"])
 
+    def test_product_intake_prefers_product_json_ld_over_site_organization(self) -> None:
+        module = load_script_module(PRODUCT_INTAKE)
+        snapshot = {
+            "url": "https://example.com/software/local-video-suite",
+            "title": "Local Video Suite | ENHE AI",
+            "description": "Generic site description.",
+            "headings": [{"level": "h1", "text": "Local Video Suite"}],
+            "text": "首页 AI工具。Local Video Suite 是一款 Windows 本地 AI 视频工作站，支持文生视频、图生视频和视频增强。常见问题。",
+            "jsonLd": [
+                {"@type": "Organization", "name": "ENHE AI"},
+                {
+                    "@graph": [
+                        {
+                            "@type": "SoftwareApplication",
+                            "name": "Local Video Suite",
+                            "description": "Windows local AI video workstation for text-to-video and image-to-video.",
+                            "offers": {"price": "35.00"},
+                        }
+                    ]
+                },
+            ],
+        }
+
+        profile = module.extract_profile_from_structured_json(snapshot, snapshot["url"])
+
+        self.assertEqual(profile["productName"], "Local Video Suite")
+        self.assertIn("Windows 本地 AI 视频工作站", profile["valueProposition"])
+        self.assertEqual(profile["pricing"], "35.00")
+        self.assertIn("SoftwareApplication", profile["jsonLdTypes"])
+
+    def test_product_intake_prefers_product_description_over_software_application(self) -> None:
+        module = load_script_module(PRODUCT_INTAKE)
+        snapshot = {
+            "url": "https://example.com/software/local-video-suite",
+            "title": "Local Video Suite | ENHE AI",
+            "description": "Generic site description.",
+            "jsonLd": [
+                {"@type": "SoftwareApplication", "name": "Local Video Suite", "description": "Generic app description."},
+                {
+                    "@type": "Product",
+                    "name": "Local Video Suite",
+                    "description": "Local AI video workstation for text-to-video, image-to-video, and video enhancement.",
+                    "offers": {"price": "35.00"},
+                },
+            ],
+        }
+
+        profile = module.extract_profile_from_structured_json(snapshot, snapshot["url"])
+
+        self.assertIn("text-to-video", profile["valueProposition"])
+        self.assertEqual(profile["pricing"], "35.00")
+
+    def test_promotion_cycle_runner_tail_allows_empty_subprocess_output(self) -> None:
+        module = load_script_module(PROMOTION_CYCLE_RUNNER)
+
+        self.assertEqual(module.tail(None), "")
+        self.assertEqual(module.tail("  ready  "), "ready")
+
+    def test_product_batch_runner_tail_allows_empty_subprocess_output(self) -> None:
+        module = load_script_module(PRODUCT_BATCH_RUNNER)
+
+        self.assertEqual(module.tail(None), "")
+        self.assertEqual(module.tail("  ready  "), "ready")
+
+    def test_local_ai_video_product_content_does_not_use_promotion_manager_copy(self) -> None:
+        from scripts import promotion_manager as module
+        product = module.Product(
+            name="无所不能版 | AI生成视频应用",
+            url="https://example.com/local-ai-video",
+            audience=["AI 视频创作者"],
+            pain_points=["需要本地可控的视频生成工作流"],
+            value_proposition="Windows 本地 AI 视频工作站，支持文生视频、图生视频和视频增强。",
+            pricing="35.00",
+            goal="sales",
+            language="zh-CN",
+            platforms=["youtube", "zhihu", "xiaohongshu", "douyin", "github"],
+        )
+
+        content = module.generate_platform_content(product, module.build_content_plan(product))
+        combined = json.dumps(content, ensure_ascii=False)
+
+        self.assertIn("本地 AI 视频", combined)
+        self.assertIn("文生视频", combined)
+        self.assertIn("图生视频", combined)
+        self.assertNotIn("输入产品链接，生成标题、文案、口播", combined)
+        self.assertNotIn("不知道怎么发 YouTube、知乎、小红书、抖音和 GitHub", combined)
+        self.assertNotIn("Which platform is hardest for you to promote", combined)
+        self.assertNotIn("Drop your product URL", combined)
+        self.assertNotIn("before your next launch post", combined)
+        self.assertIn("核对配置要求和使用说明", combined)
+        xiaohongshu = content["xiaohongshu"]
+        self.assertNotIn(product.url, xiaohongshu["cta"])
+        self.assertNotIn(product.url, xiaohongshu["firstBatch"]["pinnedComment"])
+        self.assertNotIn(product.url, "\n".join(xiaohongshu["formats"]["notes"]))
+
+    def test_xiaohongshu_public_payload_removes_absolute_claims_only(self) -> None:
+        from scripts import promotion_manager as module
+
+        product = module.Product(
+            name="无所不能版 | AI生成视频应用 with no restrictions unlimited",
+            url="https://example.com/local-ai-video",
+            audience=["AI 视频创作者"],
+            pain_points=["需要本地可控的视频生成工作流"],
+            value_proposition="Windows 本地 AI 视频工作站，支持文生视频、图生视频和视频增强。",
+            pricing="35.00",
+            goal="sales",
+            language="zh-CN",
+            platforms=["youtube", "xiaohongshu"],
+        )
+
+        content = module.generate_platform_content(product, module.build_content_plan(product))
+        xiaohongshu = content["xiaohongshu"]
+        public_payload = {
+            key: value for key, value in xiaohongshu.items() if key != "sourceProduct"
+        }
+        public_text = json.dumps(public_payload, ensure_ascii=False).lower()
+
+        for risky_claim in (
+            "无所不能",
+            "不受限制",
+            "无限制",
+            "with no restrictions",
+            "unlimited",
+        ):
+            self.assertNotIn(risky_claim, public_text)
+        self.assertNotIn(product.url, public_text)
+        self.assertEqual(xiaohongshu["sourceProduct"]["name"], product.name)
+        self.assertIn(product.name, json.dumps(content["youtube"], ensure_ascii=False))
+
     def test_product_intake_accepts_rendered_text_snapshot(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="product-text-intake-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -2797,6 +2926,155 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(report["recordCount"], 1)
         self.assertEqual(report["records"][0]["url"], "https://www.douyin.com/video/7123456789012345678")
 
+    def test_platform_search_capture_filters_youtube_navigation_chrome(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-youtube-navigation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "youtube.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "local AI video generator",
+                    "items": [
+                        {
+                            "title": "YouTube Home",
+                            "url": "https://www.youtube.com/",
+                            "content": "Skip navigation",
+                        },
+                        {
+                            "title": "Subscriptions",
+                            "url": "https://www.youtube.com/feed/subscriptions",
+                            "content": "Home Shorts Subscriptions You History",
+                        },
+                        {
+                            "title": "Local AI video workflow tutorial",
+                            "url": "https://www.youtube.com/watch?v=real-video",
+                            "content": "Run text-to-video locally, then verify the generated clip before publishing.",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "youtube",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-youtube.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recordCount"], 1)
+        self.assertEqual(report["records"][0]["url"], "https://www.youtube.com/watch?v=real-video")
+        self.assertNotIn("Skip navigation", report["records"][0]["hook"])
+
+    def test_platform_search_capture_filters_github_navigation_chrome(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-github-navigation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "github.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "local AI video generator",
+                    "items": [
+                        {
+                            "title": "Skip to content",
+                            "url": "https://github.com/search?q=local+AI+video+generator&type=repositories",
+                            "content": "Navigation Menu Platform Solutions Resources Open Source Enterprise Pricing",
+                        },
+                        {
+                            "title": "Sign in",
+                            "url": "https://github.com/login",
+                            "content": "Sign in Appearance settings",
+                        },
+                        {
+                            "title": "example/local-ai-video",
+                            "url": "https://github.com/example/local-ai-video",
+                            "content": "A local text-to-video workflow with documented hardware requirements.",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "github",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-github.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recordCount"], 1)
+        self.assertEqual(report["records"][0]["url"], "https://github.com/example/local-ai-video")
+
+    def test_platform_search_capture_filters_xiaohongshu_navigation_chrome(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-xiaohongshu-navigation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        snapshot_path = out_dir / "xiaohongshu.json"
+        snapshot_path.write_text(
+            json.dumps(
+                {
+                    "query": "local AI video generator",
+                    "items": [
+                        {
+                            "title": "创作服务",
+                            "url": "https://creator.xiaohongshu.com/?source=official",
+                            "content": "创作服务",
+                        },
+                        {
+                            "title": "推广合作",
+                            "url": "https://e.xiaohongshu.com/require-clue?sourcePage=6",
+                            "content": "推广合作",
+                        },
+                        {
+                            "title": "本地 AI 视频工作流实测",
+                            "url": "https://www.xiaohongshu.com/explore/real-note",
+                            "content": "从显卡配置到文生视频结果，完整记录本地生成流程。",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_CAPTURE),
+                "--structured-json",
+                str(snapshot_path),
+                "--platform",
+                "xiaohongshu",
+                "--top-n",
+                "5",
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        report = json.loads((out_dir / "output/reports/promotion-manager/competitors/captured-search-results-xiaohongshu.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["recordCount"], 1)
+        self.assertEqual(report["records"][0]["url"], "https://www.xiaohongshu.com/explore/real-note")
+
     def test_viral_content_library_ranks_multiplatform_capture_reports(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="viral-content-library-test-"))
         self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
@@ -3792,6 +4070,52 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(snapshot["captureMode"], "firecrawl_search")
         self.assertEqual(len(snapshot["items"]), 1)
         self.assertIn("site:youtube.com", snapshot["webDataQuery"])
+
+    def test_platform_search_browser_drops_navigation_items_from_saved_snapshot(self) -> None:
+        out_dir = Path(tempfile.mkdtemp(prefix="platform-search-browser-navigation-test-"))
+        self.addCleanup(shutil.rmtree, out_dir, ignore_errors=True)
+        html_dir = out_dir / "html"
+        html_dir.mkdir()
+        (html_dir / "github.html").write_text(
+            """<!doctype html>
+<html>
+<head><title>GitHub search</title></head>
+<body>
+  <nav>
+    <a href="https://github.com/search?q=local+AI+video&type=repositories">Skip to content</a>
+    <a href="https://github.com/login">Sign in</a>
+  </nav>
+  <section>
+    <a href="https://github.com/example/local-ai-video">example/local-ai-video</a>
+    <p>Local text-to-video workflow with documented hardware requirements.</p>
+  </section>
+</body>
+</html>""",
+            encoding="utf-8",
+        )
+        snapshot_dir = out_dir / "snapshots"
+        subprocess.run(
+            [
+                sys.executable,
+                str(PLATFORM_SEARCH_BROWSER),
+                "--query",
+                "local AI video",
+                "--platforms",
+                "github",
+                "--html-snapshot-dir",
+                str(html_dir),
+                "--snapshot-dir",
+                str(snapshot_dir),
+                "--out-dir",
+                str(out_dir / "output"),
+            ],
+            check=True,
+            cwd=ROOT,
+        )
+        snapshot = json.loads((snapshot_dir / "github.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(snapshot["items"]), 1)
+        self.assertEqual(snapshot["items"][0]["url"], "https://github.com/example/local-ai-video")
+        self.assertNotIn("Skip to content", json.dumps(snapshot, ensure_ascii=False))
 
     def test_platform_capabilities_registry_outputs_monetization_blueprint(self) -> None:
         out_dir = Path(tempfile.mkdtemp(prefix="platform-capabilities-test-"))
@@ -8506,6 +8830,9 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertIn("agents/openai.yaml", files)
         self.assertIn("references/professional-media-runtime.json", files)
         self.assertIn("references/comfyui/flux1-schnell-api.json", files)
+        self.assertIn("references/hyperframes-professional/index.html", files)
+        self.assertIn("references/hyperframes-professional/style.css", files)
+        self.assertIn("references/hyperframes-professional/composition.js", files)
         self.assertIn("docs/installation.md", files)
         self.assertIn("docs/zh-CN/installation.md", files)
         self.assertIn("docs/zh-CN/usage.md", files)
@@ -10000,6 +10327,7 @@ Prompt templates for product copy, SEO content, and video scripts.
                 skip_browser_search=False,
                 browser_search_timeout_ms=15000,
                 browser_search_wait_until="domcontentloaded",
+                allow_localhost_follow_up=True,
             )
             result = module.run_browser_search(args, out_dir, [])
         finally:
@@ -10012,6 +10340,7 @@ Prompt templates for product copy, SEO content, and video scripts.
         self.assertEqual(command[command.index("--timeout-ms") + 1], "15000")
         self.assertIn("--wait-until", command)
         self.assertEqual(command[command.index("--wait-until") + 1], "domcontentloaded")
+        self.assertIn("--allow-localhost", command)
 
     def test_viral_discovery_runner_reports_deep_video_follow_up_evidence(self) -> None:
         if not playwright_chromium_available():

@@ -670,7 +670,7 @@ def infer_workflow_out_dir(manifest_path: Path, fallback: Path) -> Path:
 
 
 def run_command(name: str, command: list[str]) -> dict[str, Any]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     return {
         "name": name,
         "command": display_command(command),
@@ -759,8 +759,8 @@ def display_command(command: list[str]) -> list[str]:
     return ["python" if item == sys.executable else item for item in command]
 
 
-def tail(value: str, limit: int = 1200) -> str:
-    value = value.strip()
+def tail(value: str | None, limit: int = 1200) -> str:
+    value = (value or "").strip()
     return value if len(value) <= limit else value[-limit:]
 
 

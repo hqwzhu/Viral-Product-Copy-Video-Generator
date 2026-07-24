@@ -176,6 +176,8 @@ def run_browser_search(args: argparse.Namespace, out_dir: Path, steps: list[dict
         command.extend(["--html-snapshot-dir", args.html_snapshot_dir])
     if args.install_browser_if_missing:
         command.append("--install-browser-if-missing")
+    if getattr(args, "allow_localhost_follow_up", False):
+        command.append("--allow-localhost")
     step = run_command("platform_search_browser", command, check=False)
     steps.append(step)
     report_path = out_dir / "reports/promotion-manager/competitors/browser-search-snapshots.json"
@@ -222,6 +224,8 @@ def run_search_captures(
             str(source["flag"]),
             str(source["path"]),
         ]
+        if args.allow_localhost_follow_up:
+            command.append("--allow-localhost")
         step = run_command(f"platform_search_capture_{platform}", command, check=False)
         steps.append(step)
         report_path = out_dir / "reports/promotion-manager/competitors" / f"captured-search-results-{platform}.json"

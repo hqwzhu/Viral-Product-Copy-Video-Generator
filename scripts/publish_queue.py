@@ -333,7 +333,7 @@ def run_douyin_queue_item(args: argparse.Namespace, out_dir: Path, content: dict
 
 
 def execute_publish_command(platform: str, command: list[str]) -> dict[str, Any]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     report_path = execution_out_dir_from_command(command) / "reports/promotion-manager/publish-results/publish-execution.json"
     execution_report = read_json(report_path) if report_path.exists() else {}
     status = str(execution_report.get("status") or ("ready" if result.returncode == 0 else "error"))
@@ -518,6 +518,8 @@ def write_published_items(out_dir: Path) -> None:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if result.returncode != 0:
@@ -623,8 +625,8 @@ def display_command(command: list[str]) -> list[str]:
     return displayed
 
 
-def tail(value: str, limit: int = 1200) -> str:
-    value = value.strip()
+def tail(value: str | None, limit: int = 1200) -> str:
+    value = (value or "").strip()
     return value if len(value) <= limit else value[-limit:]
 
 

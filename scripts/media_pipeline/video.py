@@ -24,6 +24,7 @@ MOTION_TYPES = ("zoomPan", "productHighlight", "sceneTransition")
 DEFAULT_SIZE = (1920, 1080)
 TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "references" / "hyperframes-professional"
 RUNTIME_ROOT = Path(__file__).resolve().parents[2] / "tools" / "hyperframes-runtime"
+MAX_HYPERFRAMES_WORKSPACE_PATH = 180
 
 
 def _json_safe(value: Any) -> Any:
@@ -473,12 +474,27 @@ def _quality_errors(clean: Mapping[str, Any], probe: Mapping[str, Any]) -> list[
     return list(dict.fromkeys(errors))
 
 
+def hyperframes_workspace(
+    output: str | Path, project_dir: str | Path | None = None
+) -> Path:
+    output_path = Path(output).resolve()
+    requested = (
+        Path(project_dir).resolve()
+        if project_dir
+        else output_path.parent / f".{output_path.stem}-hyperframes"
+    )
+    if len(str(requested)) < MAX_HYPERFRAMES_WORKSPACE_PATH:
+        return requested
+    fingerprint = hashlib.sha256(str(requested).encode("utf-8")).hexdigest()[:16]
+    return (Path(tempfile.gettempdir()) / "enhe-hyperframes" / fingerprint).resolve()
+
+
 def render_professional_video(data: Mapping[str, Any], output: str | Path, project_dir: str | Path | None = None) -> StageResult:
     """Render a HyperFrames project, then normalize and inspect its MP4."""
 
     clean = _normalise_data(data)
     output_path = Path(output).resolve()
-    workspace = Path(project_dir).resolve() if project_dir else output_path.parent / f".{output_path.stem}-hyperframes"
+    workspace = hyperframes_workspace(output_path, project_dir)
     raw = workspace / "raw.mp4"
     staged_output = output_path.with_name(output_path.name + ".quality.part.mp4")
     staged_output.unlink(missing_ok=True)
@@ -594,6 +610,7 @@ def render_fixture_professional_video(out_dir: str | Path) -> StageResult:
 __all__ = [
     "MOTION_TYPES",
     "materialize_hyperframes_project",
+    "hyperframes_workspace",
     "hyperframes_executable",
     "professional_render_available",
     "probe_media",

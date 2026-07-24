@@ -362,9 +362,19 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
     audit_item = requirement(final_audit, "copy_and_real_video_generation")
     summary = final_run.get("summary") if isinstance(final_run.get("summary"), dict) else {}
     content_count = int_value(summary.get("contentArtifacts"))
-    video_count = int_value(summary.get("videoFilesGenerated"))
-    cover_count = int_value(summary.get("mediaAssetCoversReady"))
-    detail_count = int_value(summary.get("mediaAssetDetailImagesReady"))
+    evidence_counts = professional_media_counts(final_run)
+    video_count = max(
+        int_value(summary.get("videoFilesGenerated")),
+        evidence_counts["videosReady"],
+    )
+    cover_count = max(
+        int_value(summary.get("mediaAssetCoversReady")),
+        evidence_counts["coversReady"],
+    )
+    detail_count = max(
+        int_value(summary.get("mediaAssetDetailImagesReady")),
+        evidence_counts["detailImagesReady"],
+    )
     status = audit_item.get("status") or "unknown"
     missing: list[str] = []
     if final_run and content_count == 0:
@@ -386,6 +396,24 @@ def copy_video_row(final_run: dict[str, Any], final_audit: dict[str, Any]) -> di
         "detailImagesGenerated": detail_count,
     }
     return row("copy_and_real_video_generation", status, audit_item.get("evidence") or [], missing or audit_item.get("missing") or [], [], metrics)
+
+
+def professional_media_counts(final_run: dict[str, Any]) -> dict[str, int]:
+    counts = {"videosReady": 0, "coversReady": 0, "detailImagesReady": 0}
+    try:
+        from scripts.final_capability_runner import summarize_media_assets
+    except ModuleNotFoundError:
+        from final_capability_runner import summarize_media_assets
+    for item in list_records(final_run, "cycleEvidence"):
+        media_assets = item.get("mediaAssets") if isinstance(item.get("mediaAssets"), dict) else {}
+        report_path = Path(str(media_assets.get("report") or "").strip())
+        report = read_json(report_path) if str(report_path) not in {"", "."} else {}
+        if not report:
+            continue
+        evidence_summary = summarize_media_assets(report_path, report).get("summary", {})
+        for key in counts:
+            counts[key] += int_value(evidence_summary.get(key))
+    return counts
 
 
 def publish_row(

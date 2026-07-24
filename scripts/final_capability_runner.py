@@ -853,7 +853,10 @@ def summarize_videos(videos: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def summarize_media_assets(path: Path | None, report: dict[str, Any]) -> dict[str, Any]:
-    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    summary = dict(report.get("summary")) if isinstance(report.get("summary"), dict) else {}
+    professional_summary = summarize_professional_media_artifacts(report)
+    if professional_summary:
+        summary.update(professional_summary)
     return {
         "status": report.get("status", "missing" if not report else ""),
         "report": str(path) if path and path.exists() else "",
@@ -861,6 +864,67 @@ def summarize_media_assets(path: Path | None, report: dict[str, Any]) -> dict[st
         "summary": summary,
         "platforms": len(report.get("platforms", [])) if isinstance(report.get("platforms"), list) else 0,
     }
+
+
+def summarize_professional_media_artifacts(report: dict[str, Any]) -> dict[str, int]:
+    artifacts = [
+        item for item in report.get("artifacts", []) if isinstance(item, dict)
+    ]
+    if not artifacts:
+        return {}
+    media_types = {
+        "professional_product_demo_video",
+        "cover_image",
+        "detail_image",
+    }
+    if not any(str(item.get("type") or "") in media_types for item in artifacts):
+        return {}
+    quality_path = Path(str(report.get("qualityReport") or "").strip())
+    quality_report = read_json(quality_path) if str(quality_path) not in {"", "."} else {}
+    quality_artifacts = [
+        item
+        for item in quality_report.get("artifacts", [])
+        if isinstance(item, dict)
+    ]
+    accepted_paths = {
+        normalized_artifact_path(item.get("path"))
+        for item in quality_artifacts
+        if item.get("passed") is True and normalized_artifact_path(item.get("path"))
+    }
+    require_quality_match = bool(quality_artifacts)
+    counts = {
+        "professional_product_demo_video": 0,
+        "cover_image": 0,
+        "detail_image": 0,
+    }
+    platforms: set[str] = set()
+    for item in artifacts:
+        artifact_type = str(item.get("type") or "")
+        if artifact_type not in counts:
+            continue
+        artifact_path = normalized_artifact_path(item.get("path"))
+        if not artifact_path or not Path(artifact_path).exists():
+            continue
+        if require_quality_match and artifact_path not in accepted_paths:
+            continue
+        if not require_quality_match and item.get("passed") is False:
+            continue
+        counts[artifact_type] += 1
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        for platform in metadata.get("platforms", []):
+            if str(platform).strip():
+                platforms.add(str(platform).strip())
+    return {
+        "platforms": len(platforms),
+        "videosReady": counts["professional_product_demo_video"],
+        "coversReady": counts["cover_image"],
+        "detailImagesReady": counts["detail_image"],
+    }
+
+
+def normalized_artifact_path(value: Any) -> str:
+    text = str(value or "").strip()
+    return str(Path(text).resolve()) if text else ""
 
 
 def summarize_section(value: Any, path_key: str, extra_path_keys: list[str] | None = None) -> dict[str, Any]:
@@ -1204,7 +1268,7 @@ def append_publish_args(command: list[str], args: argparse.Namespace) -> None:
 
 
 def run_command(name: str, command: list[str], check: bool = True) -> dict[str, Any]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     step = {
         "name": name,
         "command": display_command(command),

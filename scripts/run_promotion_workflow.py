@@ -870,19 +870,35 @@ def write_professional_media_input(
     narration = first_non_empty(source.get("voiceover"), source.get("shortVideoScript"), source.get("article"))
     if not narration:
         raise ValueError("Generated platform content does not contain a usable narration.")
+    platform_content = {
+        platform: {
+            "title": first_non_empty(item.get("coverText"), item.get("title"), item.get("viralTitle"), product["name"]),
+            "subtitle": professional_visual_subtitle(item, product.get("valueProposition")),
+        }
+        for platform, item in content.items()
+        if isinstance(platform, str) and isinstance(item, dict)
+    }
     media_input = {
-        "title": first_non_empty(source.get("title"), source.get("viralTitle"), product["name"]),
-        "subtitle": first_non_empty(source.get("description"), product.get("valueProposition")),
+        "title": first_non_empty(source.get("coverText"), source.get("title"), source.get("viralTitle"), product["name"]),
+        "subtitle": professional_visual_subtitle(source, product.get("valueProposition")),
         "narration": narration,
         "scenePrompt": f"Premium commercial product photography for {product['name']}, real product workflow, clean studio lighting, brand-consistent colors, no readable text, no watermark",
         "sourcePlatform": source_platform,
         "sourceContent": str(content_json.resolve()),
+        "platformContent": platform_content,
     }
     directory = out_dir / "generated-content_生成内容"
     directory.mkdir(parents=True, exist_ok=True)
     destination = directory / "professional-media-input.json"
     destination.write_text(json.dumps(media_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return destination
+
+
+def professional_visual_subtitle(item: dict[str, Any], fallback: Any = "") -> str:
+    copy = str(item.get("copy") or "").strip()
+    if copy and len(copy) <= 100 and len(copy.splitlines()) == 1:
+        return copy
+    return first_non_empty(item.get("description"), fallback)
 
 
 def run_metrics_import(args: argparse.Namespace, out_dir: Path, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -994,7 +1010,7 @@ def build_manifest(
 
 
 def run_command(name: str, command: list[str], check: bool = True) -> dict[str, Any]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     step = {
         "name": name,
         "status": "ready" if result.returncode == 0 else "error",

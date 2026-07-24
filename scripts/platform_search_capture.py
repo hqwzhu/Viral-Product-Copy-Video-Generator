@@ -52,6 +52,19 @@ NON_CONTENT_TITLE_TERMS = {
     "联系我们",
     "账号找回",
 }
+YOUTUBE_NAVIGATION_TITLES = {
+    "home",
+    "history",
+    "movies & tv",
+    "music",
+    "shopping",
+    "subscriptions",
+    "try premium for $0",
+    "youtube home",
+    "youtube kids",
+    "youtube music",
+    "youtube tv",
+}
 ITEM_LIST_KEYS = [
     "items",
     "results",
@@ -127,7 +140,7 @@ class SourcePayload:
 def main() -> None:
     args = parse_args()
     payload = load_payload(args)
-    records = normalize_records(payload, args.top_n)
+    records = normalize_records(payload, args.top_n, allow_localhost=args.allow_localhost)
     report = build_report(payload, records)
     write_report(args.out_dir, payload.platform, report)
     path = report_path(args.out_dir, payload.platform, "json")
@@ -144,6 +157,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", required=True, choices=["youtube", "zhihu", "xiaohongshu", "douyin", "github", "tiktok", "other"])
     parser.add_argument("--query", default="")
     parser.add_argument("--top-n", type=int, default=10)
+    parser.add_argument("--allow-localhost", action="store_true")
     parser.add_argument("--out-dir", default="./promotion-output")
     return parser.parse_args()
 
@@ -231,7 +245,7 @@ def item_from_text_block(block: str) -> dict[str, Any]:
     }
 
 
-def normalize_records(payload: SourcePayload, top_n: int) -> list[dict[str, Any]]:
+def normalize_records(payload: SourcePayload, top_n: int, *, allow_localhost: bool = False) -> list[dict[str, Any]]:
     records = []
     for index, item in enumerate(payload.items[:top_n], start=1):
         raw = normalize_item(item, payload.platform)
@@ -248,7 +262,7 @@ def normalize_records(payload: SourcePayload, top_n: int) -> list[dict[str, Any]
         metrics = {**extract_metrics(content), **normalize_metric_mapping(raw.get("visibleMetrics") or {})}
         title = first_non_empty(raw.get("title"), f"{payload.platform} search result {index}")
         url = raw.get("url", "")
-        if is_non_content_result(payload.platform, url, title):
+        if is_non_content_result(payload.platform, url, title, allow_localhost=allow_localhost):
             continue
         creator = raw.get("creatorName", "")
         hook = first_non_empty(raw.get("hook"), extract_hook(content), title)
@@ -394,17 +408,49 @@ def relevant_url(platform: str, url: str) -> bool:
     return bool(url)
 
 
-def is_non_content_result(platform: str, url: str, title: str = "") -> bool:
+def is_non_content_result(platform: str, url: str, title: str = "", *, allow_localhost: bool = False) -> bool:
     parsed = urllib.parse.urlparse(url)
     path_parts = {part.lower() for part in parsed.path.split("/") if part}
     normalized_title = normalize_space(title).lower()
+    if url and not is_platform_content_url(platform, parsed, allow_localhost=allow_localhost):
+        return True
     if path_parts & NON_CONTENT_PATH_PARTS:
         return True
     if any(term in normalized_title for term in NON_CONTENT_TITLE_TERMS):
         return True
+    if platform == "youtube":
+        known_content_path = bool(path_parts & {"live", "playlist", "shorts", "watch"})
+        if not known_content_path and normalized_title in YOUTUBE_NAVIGATION_TITLES:
+            return True
+        if parsed.path in {"", "/"} or bool(path_parts & {"feed", "premium"}):
+            return True
     if platform == "douyin":
         return not any(part in path_parts for part in {"video", "user", "search"}) and bool(path_parts & {"aboutus", "agreements"})
     return False
+
+
+def is_platform_content_url(platform: str, parsed: urllib.parse.ParseResult, *, allow_localhost: bool = False) -> bool:
+    host = parsed.netloc.lower().split(":", 1)[0]
+    parts = [part.lower() for part in parsed.path.split("/") if part]
+    if allow_localhost and host in {"127.0.0.1", "localhost", "::1"}:
+        return bool(parts)
+    if platform == "youtube":
+        if host == "youtu.be":
+            return bool(parts)
+        if host not in {"youtube.com", "www.youtube.com", "m.youtube.com"} or not parts:
+            return False
+        if parts[0] == "watch":
+            return bool(urllib.parse.parse_qs(parsed.query).get("v"))
+        return parts[0] in {"live", "playlist", "shorts"}
+    if platform == "github":
+        return host in {"github.com", "www.github.com"} and len(parts) >= 2 and parts[0] not in {"login", "pricing", "search", "signup"}
+    if platform == "xiaohongshu":
+        if host in {"xhslink.com", "www.xhslink.com"}:
+            return bool(parts)
+        if host not in {"xiaohongshu.com", "www.xiaohongshu.com"}:
+            return False
+        return bool(parts) and (parts[0] == "explore" or parts[:2] == ["discovery", "item"])
+    return True
 
 
 def absolutize_url(url: str, base: str) -> str:
