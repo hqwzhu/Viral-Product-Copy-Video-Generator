@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from env_loader import load_project_env, preparse_env_file
+from platform_search_capture import is_non_content_result
 from web_data_provider import DEFAULT_FIRECRAWL_BASE_URL, WebDataProviderError, search_web
 
 
@@ -129,6 +130,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wait-until", default="networkidle", choices=["load", "domcontentloaded", "networkidle"])
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--install-browser-if-missing", action="store_true")
+    parser.add_argument("--allow-localhost", action="store_true")
     parser.add_argument("--web-data-provider", default=os.environ.get("WEB_DATA_PROVIDER", "auto"), choices=["auto", "local", "firecrawl"], help="Optional provider for public web search before browser capture.")
     parser.add_argument("--firecrawl-base-url", default=os.environ.get("FIRECRAWL_BASE_URL", DEFAULT_FIRECRAWL_BASE_URL), help="Firecrawl API base URL. API key is read only from FIRECRAWL_API_KEY.")
     parser.add_argument("--web-data-fixture-json", default="", help="Local web data fixture for tests/offline review.")
@@ -145,6 +147,17 @@ def capture_platform(args: argparse.Namespace, platform: str, snapshot_dir: Path
         snapshot, status = snapshot_from_web_data(args, platform, search_url)
     if status not in {"ready"} and not html_file:
         snapshot, status = snapshot_from_browser(args, platform, search_url)
+    snapshot["items"] = [
+        item
+        for item in snapshot.get("items", [])
+        if isinstance(item, dict)
+        and not is_non_content_result(
+            platform,
+            str(item.get("url") or ""),
+            str(item.get("title") or ""),
+            allow_localhost=args.allow_localhost,
+        )
+    ]
     snapshot_path = snapshot_dir / f"{platform}.json"
     snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {

@@ -199,16 +199,21 @@ def extract_profile_from_html(html: str, source: str) -> dict[str, Any]:
     image = first_non_empty(parser.meta.get("og:image"), parser.meta.get("twitter:image"))
     canonical = canonical_url(parser.links)
     jsonld_objects = parse_json_ld(parser.json_ld)
+    product_jsonld = preferred_product_jsonld(jsonld_objects)
     inferred_name = first_non_empty(
+        product_jsonld.get("name"),
         value_from_json_ld(jsonld_objects, "name"),
         title,
         "Unknown product",
     )
     inferred_offer = first_non_empty(
+        nested_value(product_jsonld, "offers.price"),
         value_from_json_ld(jsonld_objects, "offers.price"),
         value_from_json_ld(jsonld_objects, "price"),
         "unknown",
     )
+    description = first_non_empty(product_jsonld.get("description"), description)
+    image = first_non_empty(jsonld_scalar(product_jsonld.get("image")), image)
     keywords = infer_keywords(title, description, parser.meta.get("keywords", ""))
     value_proposition = infer_value_proposition(inferred_name, description)
     profile = {
@@ -236,15 +241,23 @@ def extract_profile_from_html(html: str, source: str) -> dict[str, Any]:
 
 def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> dict[str, Any]:
     flattened = flatten_snapshot(data)
+    page_text = normalize_space(str(data.get("text") or ""))
+    jsonld_objects = structured_json_ld_objects(data)
+    product_jsonld = preferred_product_jsonld(jsonld_objects)
     source_type = "browser_rendered_snapshot" if data.get("snapshotType") == "browser_rendered" else "structured_json"
+    heading_title = first_heading(data, "h1")
     title = first_non_empty(
+        product_jsonld.get("name"),
+        heading_title,
         flattened.get("productName"),
-        flattened.get("name"),
         flattened.get("title"),
+        flattened.get("name"),
         flattened.get("og:title"),
         flattened.get("twitter:title"),
     )
     description = first_non_empty(
+        product_summary_from_text(page_text, title),
+        product_jsonld.get("description"),
         flattened.get("valueProposition"),
         flattened.get("description"),
         flattened.get("metaDescription"),
@@ -256,19 +269,20 @@ def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> d
     url = first_non_empty(flattened.get("canonicalUrl"), flattened.get("url"), flattened.get("href"), source)
     image = first_non_empty(flattened.get("image"), flattened.get("og:image"), flattened.get("twitter:image"), first_list_value(data, "images"))
     pricing = first_non_empty(
+        nested_value(product_jsonld, "offers.price"),
         flattened.get("pricing"),
         flattened.get("price"),
         flattened.get("offers.price"),
-        extract_price(" ".join([title, description, flattened.get("text", "")])),
+        extract_price(" ".join([title, description, page_text])),
         "unknown",
     )
-    keywords = infer_keywords(title, description, flattened.get("keywords", ""), flattened.get("text", ""))
-    text = " ".join([title, description, flattened.get("text", "")])
+    keywords = infer_keywords(title, description, flattened.get("keywords", ""), page_text)
+    text = " ".join([title, description, page_text])
     return {
         "source": source,
         "sourceType": source_type,
         "canonicalUrl": url,
-        "productName": first_non_empty(flattened.get("productName"), flattened.get("name"), title, "Unknown product"),
+        "productName": first_non_empty(title, flattened.get("productName"), flattened.get("name"), "Unknown product"),
         "title": title,
         "description": description,
         "valueProposition": infer_value_proposition(title or "Product", description),
@@ -277,7 +291,9 @@ def extract_profile_from_structured_json(data: dict[str, Any], source: str) -> d
         "keywords": keywords,
         "targetAudienceAssumptions": explicit_or_infer_list(data, ["targetAudience", "audience", "audiences"], infer_audience(keywords, text)),
         "painPointAssumptions": explicit_or_infer_list(data, ["painPoints", "painPointAssumptions", "problems"], infer_pain_points(keywords, text)),
-        "jsonLdTypes": list_from_any(data.get("jsonLdTypes") or data.get("jsonLdType")),
+        "jsonLdTypes": list_from_any(data.get("jsonLdTypes") or data.get("jsonLdType")) or sorted(
+            {str(item.get("@type")) for item in jsonld_objects if item.get("@type")}
+        ),
         "confidence": confidence_score(title, description, [{"source": "structured_json"}]),
         "notes": [
             "Derived from a structured page snapshot supplied by Codex/browser tooling.",
@@ -330,6 +346,98 @@ def parse_json_ld(blocks: list[str]) -> list[dict[str, Any]]:
         elif isinstance(data, list):
             parsed.extend([item for item in data if isinstance(item, dict)])
     return parsed
+
+
+def structured_json_ld_objects(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize browser snapshot JSON-LD into the same objects as HTML intake."""
+
+    raw = data.get("jsonLd") or data.get("jsonLdRaw") or []
+    if isinstance(raw, str):
+        return parse_json_ld([raw])
+    if isinstance(raw, list):
+        blocks = [item for item in raw if isinstance(item, str)]
+        parsed = parse_json_ld(blocks)
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            graph = item.get("@graph")
+            if isinstance(graph, list):
+                parsed.extend(child for child in graph if isinstance(child, dict))
+            parsed.append(item)
+        return parsed
+    if isinstance(raw, dict):
+        graph = raw.get("@graph")
+        return [*(child for child in graph if isinstance(child, dict)), raw] if isinstance(graph, list) else [raw]
+    return []
+
+
+def preferred_product_jsonld(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Prefer a product/application entity over the site's Organization/WebSite entity."""
+
+    preferred_types = ("product", "softwareapplication", "mobileapplication", "webapplication")
+    for preferred_type in preferred_types:
+        for item in items:
+            types = item.get("@type", [])
+            if isinstance(types, str):
+                types = [types]
+            normalized_types = {str(item_type).lower() for item_type in types}
+            if preferred_type in normalized_types and item.get("name"):
+                return item
+    return {}
+
+
+def nested_value(item: dict[str, Any], dotted_key: str) -> str:
+    value: Any = item
+    for part in dotted_key.split("."):
+        if not isinstance(value, dict):
+            return ""
+        value = value.get(part)
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return ""
+
+
+def jsonld_scalar(value: Any) -> str:
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        return str(value.get("url") or value.get("contentUrl") or "")
+    if isinstance(value, list):
+        for item in value:
+            candidate = jsonld_scalar(item)
+            if candidate:
+                return candidate
+    return ""
+
+
+def first_heading(data: dict[str, Any], level: str) -> str:
+    headings = data.get("headings")
+    if not isinstance(headings, list):
+        return ""
+    for item in headings:
+        if isinstance(item, dict) and str(item.get("level", "")).lower() == level:
+            value = normalize_space(str(item.get("text") or ""))
+            if value:
+                return value
+    return ""
+
+
+def product_summary_from_text(text: str, product_name: str = "") -> str:
+    """Prefer a concrete product-introduction sentence from rendered page copy."""
+
+    for sentence in re.split(r"(?<=[。！？!?])|\n+", text):
+        candidate = normalize_space(sentence)
+        if "是一款" not in candidate:
+            continue
+        if not any(signal in candidate.lower() for signal in ["video", "视频", "software", "软件", "工具", "应用"]):
+            continue
+        marker = candidate.find("是一款")
+        if product_name and marker >= 0:
+            name_start = candidate.rfind(product_name, 0, marker + 1)
+            if name_start >= 0:
+                candidate = candidate[name_start:]
+        return candidate[:500]
+    return ""
 
 
 def value_from_json_ld(items: list[dict[str, Any]], dotted_key: str) -> str:
@@ -491,6 +599,8 @@ def infer_audience(keywords: list[str], description: str) -> list[str]:
         audiences.append("developers and technical founders")
     if any(term in text for term in ["shop", "ecommerce", "seller", "store"]):
         audiences.append("ecommerce sellers")
+    if any(term in text for term in ["video", "视频", "文生视频", "图生视频"]):
+        audiences.append("AI video creators and designers")
     return audiences or ["target audience needs manual verification"]
 
 
@@ -503,6 +613,10 @@ def infer_pain_points(keywords: list[str], description: str) -> list[str]:
         points.append("needs more qualified traffic")
     if any(term in text for term in ["automation", "workflow", "tool"]):
         points.append("manual workflows are slow")
+    if any(term in text for term in ["video", "视频", "文生视频", "图生视频"]):
+        points.append("needs a controllable AI video generation workflow")
+    if any(term in text for term in ["local", "本地", "windows", "显卡", "模型"]):
+        points.append("needs clear local hardware and model setup guidance")
     return points or ["pain points need manual verification"]
 
 

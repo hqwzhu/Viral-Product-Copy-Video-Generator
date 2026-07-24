@@ -573,7 +573,7 @@ class MediaOrchestrator:
         if stage == "scenes":
             return {"stage": stage, "prompt": self._scene_prompt(content), "provider": _provider_name(self.scene_provider, stage), "voiceover": previous.get("voiceover", [])}
         if stage == "visuals":
-            return {"stage": stage, "platforms": job.target_platforms, "title": self._title(content, job), "subtitle": self._subtitle(content), "captures": previous.get("capture", []), "scenes": previous.get("scenes", []), "logo": job.brand_assets}
+            return {"stage": stage, "platforms": job.target_platforms, "title": self._title(content, job), "subtitle": self._subtitle(content), "platformCopy": {platform: {"title": self._visual_title(content, job, platform), "subtitle": self._visual_subtitle(content, platform)} for platform in job.target_platforms}, "captures": previous.get("capture", []), "scenes": previous.get("scenes", []), "logo": job.brand_assets}
         if stage == "video":
             return {
                 "stage": stage,
@@ -602,6 +602,24 @@ class MediaOrchestrator:
     @staticmethod
     def _subtitle(content: Mapping[str, Any]) -> str:
         return str(content.get("subtitle") or content.get("description") or content.get("summary") or "Turn a product page into publish-ready creative.").strip()
+
+    @staticmethod
+    def _visual_title(content: Mapping[str, Any], job: MediaJob, platform: str) -> str:
+        platform_content = content.get("platformContent")
+        if isinstance(platform_content, Mapping):
+            item = platform_content.get(platform)
+            if isinstance(item, Mapping) and str(item.get("title") or "").strip():
+                return str(item["title"]).strip()
+        return MediaOrchestrator._title(content, job)
+
+    @staticmethod
+    def _visual_subtitle(content: Mapping[str, Any], platform: str) -> str:
+        platform_content = content.get("platformContent")
+        if isinstance(platform_content, Mapping):
+            item = platform_content.get(platform)
+            if isinstance(item, Mapping) and str(item.get("subtitle") or "").strip():
+                return str(item["subtitle"]).strip()
+        return MediaOrchestrator._subtitle(content)
 
     @staticmethod
     def _narration(content: Mapping[str, Any]) -> str:
@@ -746,7 +764,7 @@ class MediaOrchestrator:
             if not isinstance(platform, str) or platform not in PLATFORM_SIZES or Path(platform).name != platform or "/" in platform or "\\" in platform:
                 return StageResult(status="failed", provider="orchestrator", error_code="invalid_platform")
             output_dir = _safe_path(paths.covers / platform, paths.root)
-            result = self.visual_provider.render(platform, self._title(content, job), self._subtitle(content), scene.path, capture.path, logo, output_dir, background_source={"provider": scene.provider, "source": scene.source, "license": scene.license})
+            result = self.visual_provider.render(platform, self._visual_title(content, job, platform), self._visual_subtitle(content, platform), scene.path, capture.path, logo, output_dir, background_source={"provider": scene.provider, "source": scene.source, "license": scene.license})
             if result.status in {"failed", "skipped"}:
                 return result
             had_degraded = had_degraded or result.status == "degraded"
@@ -764,7 +782,9 @@ class MediaOrchestrator:
         shots: list[dict[str, Any]] = []
         for index, artifact in enumerate(captures[:3]):
             shots.append({"id": f"product-{index + 1}", "kind": "product", "start": index * 4, "duration": 4, "src": artifact.path, "provenance": {"source": artifact.source, "provider": artifact.provider, "sha256": artifact.sha256}})
-        for index, artifact in enumerate(scenes[:2]):
+        for index, artifact in enumerate(captures[3:5]):
+            shots.append({"id": f"supporting-capture-{index + 1}", "kind": "supporting", "start": (len(shots)) * 4, "duration": 4, "src": artifact.path, "provenance": {"source": artifact.source, "provider": artifact.provider, "sha256": artifact.sha256}})
+        for index, artifact in enumerate(scenes[: max(0, 5 - len(shots))]):
             shots.append({"id": f"scene-{index + 1}", "kind": "supporting", "start": (len(shots)) * 4, "duration": 4, "src": artifact.path, "provenance": {"source": artifact.source, "provider": artifact.provider, "aiGenerated": artifact.metadata.get("aiGenerated", True), "sha256": artifact.sha256}})
         if len(shots) < 5 or voice is None:
             return StageResult(status="failed", provider="orchestrator", error_code="video_inputs_missing")

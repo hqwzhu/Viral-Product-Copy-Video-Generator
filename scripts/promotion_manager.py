@@ -583,16 +583,24 @@ def build_deconstruction_report(product: Product) -> dict[str, Any]:
 def build_content_plan(product: Product) -> dict[str, Any]:
     platform_plans = []
     for platform in product.platforms:
+        if is_local_ai_video_product(product):
+            cta = (
+                "购买前先核对 Windows、NVIDIA 显卡、显存和磁盘要求。"
+                if platform == "xiaohongshu"
+                else f"打开 {product.url}，核对配置要求和使用说明。"
+            )
+        else:
+            cta = f"Open {product.url} and try {product.name} before your next launch post."
         platform_plans.append(
             {
                 "platform": platform,
                 "audienceAngle": angle_for(platform),
                 "topics": [
-                    f"{product.name} solves a painful blank-page problem",
-                    f"Turn one product URL into a reusable content system",
-                    f"How {product.name} helps {product.audience[0] if product.audience else 'operators'} ship faster",
+                    topic_for(platform, product, 0),
+                    topic_for(platform, product, 1),
+                    topic_for(platform, product, 2),
                 ],
-                "cta": f"Open {product.url} and try {product.name} before your next launch post.",
+                "cta": cta,
                 "frequency": frequency_for(platform),
                 "reusePlan": reuse_plan_for(platform),
                 "approvalRequired": True,
@@ -607,6 +615,31 @@ def build_content_plan(product: Product) -> dict[str, Any]:
             for item in platform_plans
         ],
     }
+
+
+def is_local_ai_video_product(product: Product) -> bool:
+    text = " ".join(
+        [product.name, product.value_proposition, *product.audience, *product.pain_points]
+    ).lower()
+    video_signals = ["ai video", "video generation", "视频生成", "文生视频", "图生视频", "视频增强"]
+    local_signals = ["local", "本地", "windows", "comfyui", "显卡", "模型"]
+    return any(signal in text for signal in video_signals) and any(signal in text for signal in local_signals)
+
+
+def topic_for(platform: str, product: Product, index: int) -> str:
+    if is_local_ai_video_product(product):
+        topics = [
+            f"{product.name} 本地文生视频与图生视频实测",
+            "Windows 本地 AI 视频生成需要什么显卡和磁盘配置",
+            "从视频生成到增强、任务队列和作品管理的完整工作流",
+        ]
+        return topics[index]
+    topics = [
+        f"{product.name} solves a painful blank-page problem",
+        "Turn one product URL into a reusable content system",
+        f"How {product.name} helps {product.audience[0] if product.audience else 'operators'} ship faster",
+    ]
+    return topics[index]
 
 
 def angle_for(platform: str) -> str:
@@ -646,12 +679,12 @@ def generate_platform_content(product: Product, plan: dict[str, Any]) -> dict[st
     content: dict[str, Any] = {}
     for item in plan["platformPlans"]:
         platform = item["platform"]
-        title = title_for(platform, product.name)
+        title = title_for(platform, product.name, product)
         article = article_for(platform, product)
         short_video_script = short_video_script_for(platform, product)
         voiceover = voiceover_for(platform, product)
         formats = format_payload(platform, product)
-        content[platform] = {
+        public_content = {
             "platform": platform,
             "contentType": content_type_for(platform),
             "title": title,
@@ -661,17 +694,45 @@ def generate_platform_content(product: Product, plan: dict[str, Any]) -> dict[st
             "shortVideoScript": short_video_script,
             "voiceover": voiceover,
             "storyboard": storyboard_for(platform, product),
-            "coverText": cover_text_for(platform, product.name),
-            "tags": tags_for(platform),
+            "coverText": cover_text_for(platform, product.name, product),
+            "tags": tags_for(platform, product),
             "cta": item["cta"],
             "copy": publication_copy_for(platform, product, article, short_video_script, voiceover, formats),
             "firstBatch": first_batch_for(platform, product, formats),
             "complianceNotice": "Human approval required. Verify facts, price, links, and platform rules before publishing.",
-            "sourceProduct": asdict(product),
             "formats": formats,
             "generatedAt": TODAY,
         }
+        if platform == "xiaohongshu":
+            public_content = sanitize_xiaohongshu_public_content(public_content, product)
+        public_content["sourceProduct"] = asdict(product)
+        content[platform] = public_content
     return content
+
+
+def sanitize_xiaohongshu_public_content(value: Any, product: Product) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: sanitize_xiaohongshu_public_content(item, product)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_xiaohongshu_public_content(item, product) for item in value]
+    if not isinstance(value, str):
+        return value
+    text = value.replace(product.name, "本地 AI 视频生成套件")
+    if product.url:
+        text = text.replace(product.url, "")
+    replacements = (
+        (r"无所不能", "功能完整"),
+        (r"不受限制", "本地可控"),
+        (r"无限制", "按配置使用"),
+        (r"with\s+no\s+restrictions", "locally controlled"),
+        (r"\bunlimited\b", "configurable"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
 def content_type_for(platform: str) -> str:
@@ -685,7 +746,16 @@ def content_type_for(platform: str) -> str:
     }.get(platform, "promotion_pack")
 
 
-def title_for(platform: str, name: str) -> str:
+def title_for(platform: str, name: str, product: Product | None = None) -> str:
+    if product and is_local_ai_video_product(product):
+        return {
+            "youtube": f"本地 AI 视频生成工作站实测：{name} 的文生视频与图生视频",
+            "zhihu": f"本地 AI 视频生成工作站怎么选？{name} 文生视频、图生视频实测",
+            "xiaohongshu": f"本地 AI 视频生成实测｜{name} 文生视频+图生视频",
+            "douyin": f"不用云端？{name} 本地 AI 视频生成工作站实测",
+            "github": f"{name}: local AI video generation workstation",
+            "tiktok": f"Local AI video generation test with {name}",
+        }.get(platform, f"{name} AI video generation demo")
     return {
         "youtube": f"How to turn one product URL into a week of content with {name}",
         "zhihu": f"如何用 {name} 系统化生成产品推广内容？",
@@ -699,6 +769,13 @@ def title_for(platform: str, name: str) -> str:
 def article_for(platform: str, product: Product) -> str | None:
     if platform != "zhihu":
         return None
+    if is_local_ai_video_product(product):
+        return (
+            f"# {product.name}：本地 AI 视频生成工作站实测\n\n"
+            f"{product.value_proposition}\n\n"
+            "适合希望在 Windows 电脑上本地运行模型、控制素材和参数的创作者。重点看三件事：文生视频、图生视频，以及视频增强和任务管理是否能顺畅接入工作流。\n\n"
+            f"使用前请核对 Windows 10/11、NVIDIA 显卡和磁盘空间等要求，再打开 {product.url} 查看教程、交付方式与限制说明。"
+        )
     return (
         f"# 如何用 {product.name} 系统化生成产品推广内容？\n\n"
         f"很多产品推广失败，不是产品没有价值，而是没有把目标用户、痛点、结果和行动路径讲清楚。\n\n"
@@ -711,6 +788,12 @@ def article_for(platform: str, product: Product) -> str | None:
 def short_video_script_for(platform: str, product: Product) -> str | None:
     if platform not in {"douyin", "tiktok", "youtube"}:
         return None
+    if is_local_ai_video_product(product):
+        return (
+            f"Hook: 想做 AI 视频，又担心云端限制？看看 {product.name}。\n"
+            "Demo: 在本地选择文生视频或图生视频，再用视频增强、任务队列和作品管理完成一条工作流。\n"
+            f"CTA: 打开 {product.url}，先核对显卡和系统要求。"
+        )
     return (
         f"Hook: 你不是不会推广，是还没有把 {product.name} 的用户、痛点、卖点和 CTA 拆开。\n"
         f"Demo: 输入产品链接，生成标题、文案、口播、视频脚本和发布包。\n"
@@ -721,6 +804,11 @@ def short_video_script_for(platform: str, product: Product) -> str | None:
 def voiceover_for(platform: str, product: Product) -> str | None:
     if platform not in {"douyin", "tiktok", "youtube"}:
         return None
+    if is_local_ai_video_product(product):
+        return (
+            f"如果你想在本地生成 AI 视频，{product.name} 把文生视频、图生视频、视频增强、任务队列和作品管理放进一个 Windows 工作站。"
+            "先核对显卡、显存和磁盘要求，再用真实素材测试效果；生成速度和画质取决于模型、参数和硬件。"
+        )
     return (
         f"如果你有一个产品，却不知道怎么发 YouTube、知乎、小红书、抖音和 GitHub，"
         f"先用 {product.name} 把目标用户、痛点、卖点和 CTA 拆清楚。"
@@ -732,14 +820,23 @@ def storyboard_for(platform: str, product: Product) -> list[dict[str, str]] | No
     if platform not in {"douyin", "tiktok", "youtube"}:
         return None
     return [
-        {"time": "0-3s", "visual": "show messy product notes", "voiceover": "你不是不会推广，是信息没拆清楚。"},
-        {"time": "3-12s", "visual": "show product URL input", "voiceover": f"输入 {product.name} 的链接。"},
-        {"time": "12-24s", "visual": "show platform packs", "voiceover": "生成标题、口播、脚本、文章和发布步骤。"},
+        {"time": "0-3s", "visual": "show product interface and local model workspace", "voiceover": "想做 AI 视频，又担心云端限制？" if is_local_ai_video_product(product) else "你不是不会推广，是信息没拆清楚。"},
+        {"time": "3-12s", "visual": "show text-to-video and image-to-video controls", "voiceover": f"打开 {product.name}，选择文生视频或图生视频。" if is_local_ai_video_product(product) else f"输入 {product.name} 的链接。"},
+        {"time": "12-24s", "visual": "show enhancement queue and works manager", "voiceover": "继续用视频增强、任务队列和作品管理完成工作流。" if is_local_ai_video_product(product) else "生成标题、口播、脚本、文章和发布步骤。"},
         {"time": "24-30s", "visual": "show CTA", "voiceover": f"打开 {product.url} 试一次。"},
     ]
 
 
-def cover_text_for(platform: str, name: str) -> str:
+def cover_text_for(platform: str, name: str, product: Product | None = None) -> str:
+    if product and is_local_ai_video_product(product):
+        return {
+            "youtube": "本地 AI 视频生成实测",
+            "zhihu": "文生视频与图生视频怎么选？",
+            "xiaohongshu": "本地 AI 视频生成工作站",
+            "douyin": "不用云端也能做 AI 视频？",
+            "github": "Local AI video workstation",
+            "tiktok": "Local AI video demo",
+        }.get(platform, f"{name} AI video demo")
     return {
         "youtube": "One URL -> one week of content",
         "zhihu": "产品推广怎么系统化？",
@@ -750,7 +847,16 @@ def cover_text_for(platform: str, name: str) -> str:
     }.get(platform, f"{name} promotion")
 
 
-def tags_for(platform: str) -> list[str]:
+def tags_for(platform: str, product: Product | None = None) -> list[str]:
+    if product and is_local_ai_video_product(product):
+        return {
+            "youtube": ["AI视频生成", "文生视频", "图生视频", "本地部署"],
+            "zhihu": ["AI视频", "文生视频", "图生视频", "ComfyUI"],
+            "xiaohongshu": ["AI视频生成", "本地部署", "ComfyUI", "视频创作"],
+            "douyin": ["AI视频", "文生视频", "图生视频", "视频工作流"],
+            "github": ["ai-video", "text-to-video", "image-to-video", "local-ai"],
+            "tiktok": ["aivideo", "texttovideo", "imagetovideo", "localai"],
+        }.get(platform, ["ai-video", "local-ai"])
     return {
         "youtube": ["AI tools", "product marketing", "content strategy", "SaaS growth"],
         "zhihu": ["AI工具", "产品推广", "内容运营", "SEO"],
@@ -762,6 +868,60 @@ def tags_for(platform: str) -> list[str]:
 
 
 def format_payload(platform: str, product: Product) -> dict[str, Any]:
+    if is_local_ai_video_product(product):
+        if platform == "youtube":
+            return {
+                "longVideoTitles": [f"{i}. {product.name} 本地 AI 视频生成工作站实测" for i in range(1, 11)],
+                "shortsTitles": [f"{i}. 30秒看懂本地文生视频与图生视频" for i in range(1, 11)],
+                "videoScripts": [
+                    f"实测 {product.name}：本地完成文生视频、图生视频和视频增强，使用前先核对显卡与磁盘要求。{product.url}",
+                    "展示从提示词或参考图开始，到任务队列、作品管理和模型诊断的完整流程。",
+                    "说明限制：速度和画质取决于显卡、显存、模型、参数和素材质量。",
+                ],
+            }
+        if platform == "zhihu":
+            return {
+                "articleTitles": [f"{i}. {product.name} 本地 AI 视频生成工作站实测" for i in range(1, 11)],
+                "articleOutlines": [
+                    "适合人群 -> 系统与显卡要求 -> 文生视频 -> 图生视频 -> 视频增强 -> 限制",
+                    "本地部署价值 -> 任务队列 -> 作品管理 -> 模型诊断 -> 购买前检查",
+                    "创作场景 -> 实际流程 -> 速度画质影响因素 -> 合规边界 -> CTA",
+                ],
+            }
+        if platform == "xiaohongshu":
+            return {
+                "noteTitles": [f"{i}. 本地 AI 视频生成工作站｜{product.name}" for i in range(1, 21)],
+                "notes": [
+                    f"想在 Windows 本地做 AI 视频，可以用 {product.name} 测试文生视频、图生视频和视频增强。",
+                    "先看配置：NVIDIA 显卡建议 8GB 或更高显存，并预留足够磁盘空间。",
+                    "完整流程还包括任务队列、作品管理和模型诊断修复。",
+                    "速度和画质取决于硬件、模型、参数和素材，不承诺任何特定生成效果。",
+                    "购买前请核对教程、交付方式与限制说明。",
+                ],
+                "commentPrompts": ["你更想测试文生视频还是图生视频？", "你的显卡型号和显存是多少？"],
+            }
+        if platform in {"douyin", "tiktok"}:
+            return {
+                "voiceoverTitles": [f"{i}. 30秒看懂 {product.name} 本地 AI 视频生成" for i in range(1, 21)],
+                "thirtySecondScripts": [
+                    f"想在本地生成 AI 视频？{product.name} 支持文生视频、图生视频和视频增强。",
+                    "从任务队列到作品管理，再到模型诊断，把常用工作流集中到一个 Windows 入口。",
+                    "购买前先核对 NVIDIA 显卡、显存和磁盘空间。",
+                    "生成速度和画质取决于硬件、模型、参数与素材。",
+                    f"详情和配置要求请看 {product.url}",
+                ],
+                "captions": ["本地 AI 视频", "文生视频 + 图生视频", "先核对显卡配置"],
+            }
+        if platform == "github":
+            return {
+                "readmePromotion": f"## {product.name}\n\n{product.value_proposition}\n\nLocal Windows AI video workstation for text-to-video, image-to-video, enhancement, queues, works management, and model diagnostics.\n\nDetails: {product.url}",
+                "releaseNote": f"Product overview: {product.name} local AI video generation workstation.",
+                "discussionPrompts": [
+                    "Which local text-to-video or image-to-video workflow do you use?",
+                    "What GPU and VRAM configuration works for your models?",
+                    "Which model diagnostics make local video workflows easier to maintain?",
+                ],
+            }
     if platform == "youtube":
         return {
             "longVideoTitles": [f"{i}. {product.name} product promotion workflow" for i in range(1, 11)],
@@ -844,7 +1004,28 @@ def publication_copy_for(
 
 def first_batch_for(platform: str, product: Product, formats: dict[str, Any]) -> dict[str, Any]:
     comment_prompts = clean_list(formats.get("commentPrompts"))
-    if platform == "github":
+    reply_prompts = [
+        "Ask the user which product category they are promoting.",
+        "Ask which platform they want to publish on first.",
+        "Offer one concrete title, hook, or CTA rewrite.",
+    ]
+    pinned_comment = f"Try {product.name}: {product.url}" if product.url else f"Try {product.name}"
+    if is_local_ai_video_product(product):
+        first_comments = comment_prompts or clean_list(formats.get("discussionPrompts"))[:2] or [
+            "你更想先测试文生视频还是图生视频？",
+            "使用前请先核对 Windows、NVIDIA 显卡、显存和磁盘要求。",
+        ]
+        reply_prompts = [
+            "询问用户更关注文生视频、图生视频还是视频增强。",
+            "询问用户的 Windows 版本、NVIDIA 显卡、显存和磁盘配置。",
+            "只根据产品页说明配置要求，不承诺生成速度或画质。",
+        ]
+        pinned_comment = (
+            "使用前先核对 Windows、NVIDIA 显卡、显存和磁盘要求。"
+            if platform == "xiaohongshu"
+            else f"产品详情与配置要求：{product.url}" if product.url else f"查看 {product.name} 的配置要求"
+        )
+    elif platform == "github":
         first_comments = [
             "Open a launch Discussion with the generated README positioning.",
             "Pin the release note and ask users which integration or template they need next.",
@@ -855,13 +1036,9 @@ def first_batch_for(platform: str, product: Product, formats: dict[str, Any]) ->
             "Drop your product URL and rewrite the first hook with this structure.",
         ]
     return {
-        "pinnedComment": f"Try {product.name}: {product.url}" if product.url else f"Try {product.name}",
+        "pinnedComment": pinned_comment,
         "firstComments": first_comments,
-        "replyPrompts": [
-            "Ask the user which product category they are promoting.",
-            "Ask which platform they want to publish on first.",
-            "Offer one concrete title, hook, or CTA rewrite.",
-        ],
+        "replyPrompts": reply_prompts,
         "launchActions": [
             "Publish only after human review.",
             "Pin the strongest CTA or resource comment.",

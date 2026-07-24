@@ -436,7 +436,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def run_step(name: str, command: list[str], steps: list[dict[str, Any]]) -> None:
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    result = subprocess.run(command, cwd=ROOT, text=True, encoding="utf-8", errors="replace", capture_output=True)
     steps.append(
         {
             "name": name,
@@ -492,7 +492,7 @@ def append_many(command: list[str], flag: str, values: list[str]) -> None:
         append_arg(command, flag, value)
 
 
-def tail(value: str, limit: int = 1200) -> str:
+def tail(value: str | None, limit: int = 1200) -> str:
     text = (value or "").strip()
     return text[-limit:] if len(text) > limit else text
 

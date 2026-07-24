@@ -2714,6 +2714,43 @@ class ProfessionalVideoTest(unittest.TestCase):
             self.assertIn("shots.forEach(addShot);", index)
             self.assertIn("window.__timelines.root = timeline;", index)
 
+    def test_long_hyperframes_project_paths_use_short_local_workspace(self):
+        video = self.load_video()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = video.sample_composition_data(root)
+            output = root / "output.mp4"
+            long_project = root / ("nested-" + ("x" * 220))
+            selected = []
+
+            def capture_project(_data, project_dir):
+                selected.append(Path(project_dir))
+
+            def write_encoded(_raw, staged_output, _voice, _duration):
+                Path(staged_output).write_bytes(b"video")
+
+            with mock.patch.object(
+                video, "materialize_hyperframes_project", side_effect=capture_project
+            ), mock.patch.object(
+                video, "hyperframes_executable", return_value=Path("hyperframes.mjs")
+            ), mock.patch.object(
+                video, "_tool", side_effect=lambda name: "node.exe" if name == "node" else None
+            ), mock.patch.object(
+                video, "_run", return_value=mock.Mock(stdout="", stderr="")
+            ), mock.patch.object(
+                video, "_encode_final", side_effect=write_encoded
+            ), mock.patch.object(
+                video, "probe_media", return_value={}
+            ), mock.patch.object(
+                video, "_quality_errors", return_value=[]
+            ):
+                result = video.render_professional_video(data, output, long_project)
+
+            self.assertEqual(result.status, "ready", result.to_dict())
+            self.assertNotEqual(selected[0], long_project.resolve())
+            self.assertLess(len(str(selected[0])), 180)
+            self.assertIn("enhe-hyperframes", selected[0].parts)
+
     def test_professional_render_has_h264_aac_and_non_silent_audio(self):
         video = self.load_video()
         if not video.professional_render_available():
@@ -3166,6 +3203,101 @@ class MediaQualityTest(unittest.TestCase):
 
 
 class WorkflowIntegrationTest(unittest.TestCase):
+    def test_final_runner_counts_accepted_professional_manifest_assets(self):
+        runner = importlib.import_module("scripts.final_capability_runner")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifacts = []
+            quality_artifacts = []
+            for artifact_type, count in (
+                ("professional_product_demo_video", 3),
+                ("cover_image", 5),
+                ("detail_image", 15),
+            ):
+                for index in range(count):
+                    path = root / f"{artifact_type}-{index}.bin"
+                    path.write_bytes(b"ready")
+                    record = {
+                        "type": artifact_type,
+                        "path": str(path),
+                        "metadata": {"platforms": ["xiaohongshu"]},
+                    }
+                    artifacts.append(record)
+                    quality_artifacts.append({**record, "passed": True})
+            rejected = root / "rejected-cover.bin"
+            rejected.write_bytes(b"rejected")
+            artifacts.append({"type": "cover_image", "path": str(rejected)})
+            quality_artifacts.append(
+                {"type": "cover_image", "path": str(rejected), "passed": False}
+            )
+            quality_report = root / "quality-report.json"
+            quality_report.write_text(
+                json.dumps({"status": "professional_ready", "artifacts": quality_artifacts}),
+                encoding="utf-8",
+            )
+            manifest_path = root / "media-manifest.json"
+            report = {
+                "status": "complete",
+                "qualityReport": str(quality_report),
+                "summary": {"videosReady": 99, "coversReady": 99, "detailImagesReady": 99},
+                "artifacts": artifacts,
+            }
+            manifest_path.write_text(json.dumps(report), encoding="utf-8")
+
+            result = runner.summarize_media_assets(manifest_path, report)
+
+        self.assertEqual(result["summary"]["videosReady"], 3)
+        self.assertEqual(result["summary"]["coversReady"], 5)
+        self.assertEqual(result["summary"]["detailImagesReady"], 15)
+
+    def test_final_readiness_rechecks_professional_manifest_when_run_summary_is_stale(self):
+        readiness = importlib.import_module("scripts.final_capability_readiness")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifacts = []
+            for artifact_type, count in (
+                ("professional_product_demo_video", 3),
+                ("cover_image", 5),
+                ("detail_image", 15),
+            ):
+                for index in range(count):
+                    path = root / f"{artifact_type}-{index}.bin"
+                    path.write_bytes(b"ready")
+                    artifacts.append(
+                        {"type": artifact_type, "path": str(path), "passed": True}
+                    )
+            manifest_path = root / "media-manifest.json"
+            manifest_path.write_text(
+                json.dumps({"status": "complete", "artifacts": artifacts}),
+                encoding="utf-8",
+            )
+            final_run = {
+                "summary": {
+                    "contentArtifacts": 1,
+                    "videoFilesGenerated": 3,
+                    "mediaAssetCoversReady": 0,
+                    "mediaAssetDetailImagesReady": 0,
+                },
+                "cycleEvidence": [
+                    {"mediaAssets": {"report": str(manifest_path), "summary": {}}}
+                ],
+            }
+
+            result = readiness.copy_video_row(
+                final_run,
+                {
+                    "requirements": [
+                        {"id": "copy_and_real_video_generation", "status": "ready"}
+                    ]
+                },
+            )
+
+        self.assertEqual(result["metrics"]["videoFilesGenerated"], 3)
+        self.assertEqual(result["metrics"]["coverImagesGenerated"], 5)
+        self.assertEqual(result["metrics"]["detailImagesGenerated"], 15)
+        self.assertNotIn("no cover images generated in the final run", result["missing"])
+        self.assertNotIn("no detail images generated in the final run", result["missing"])
+
     def test_skill_entry_defaults_to_bilingual_root_and_professional_media(self):
         skill_entry = importlib.import_module("scripts.skill_entry")
         argv = [
@@ -3287,8 +3419,15 @@ class WorkflowIntegrationTest(unittest.TestCase):
                         "youtube": {
                             "title": "ENHE product demo",
                             "description": "Turn one product page into campaign assets.",
+                            "copy": "Hook: show the product.\nDemo: explain the workflow.\nCTA: open the product page.",
                             "voiceover": "See how ENHE turns one product page into professional campaign assets.",
                             "coverText": "One link to a full campaign",
+                        },
+                        "xiaohongshu": {
+                            "title": "ENHE XHS product demo",
+                            "description": "Short platform-native description.",
+                            "copy": "Concise XHS visual subtitle.",
+                            "coverText": "小红书短封面",
                         }
                     }
                 ),
@@ -3340,6 +3479,10 @@ class WorkflowIntegrationTest(unittest.TestCase):
         self.assertEqual(len(result["videos"]), 1)
         self.assertTrue(media_input["narration"])
         self.assertEqual(media_input["sourcePlatform"], "youtube")
+        self.assertEqual(media_input["platformContent"]["xiaohongshu"]["subtitle"], "Concise XHS visual subtitle.")
+        self.assertEqual(media_input["platformContent"]["youtube"]["subtitle"], "Turn one product page into campaign assets.")
+        self.assertEqual(media_input["platformContent"]["youtube"]["title"], "One link to a full campaign")
+        self.assertEqual(media_input["platformContent"]["xiaohongshu"]["title"], "小红书短封面")
         self.assertEqual(captured[0][0], "professional_media_pipeline")
         command = captured[0][1]
         self.assertIn("--quality-target", command)
@@ -3450,6 +3593,7 @@ class WorkflowIntegrationTest(unittest.TestCase):
         from scripts.media_pipeline.orchestrator import MediaOrchestrator
 
         calls = []
+        rendered_shot_kinds = []
         with tempfile.TemporaryDirectory() as temp:
             paths = new_run_paths(Path(temp), "ENHE", now="20260723-120000").create()
 
@@ -3460,6 +3604,7 @@ class WorkflowIntegrationTest(unittest.TestCase):
 
             def fake_video_provider(data, output_path, _workspace):
                 calls.append((data["width"], data["height"], tuple(data["platforms"])))
+                rendered_shot_kinds.append(tuple(shot["kind"] for shot in data["shots"]))
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(b"video")
                 return StageResult.ready(
@@ -3485,11 +3630,17 @@ class WorkflowIntegrationTest(unittest.TestCase):
                 capture_plan_path="",
             )
             stages = {
-                "capture": StageResult.ready("fixture", [artifact(f"capture-{index}.png", "product_capture_image") for index in range(3)]),
+                "capture": StageResult.ready("fixture", [artifact(f"capture-{index}.png", "product_capture_image") for index in range(5)]),
                 "scenes": StageResult.ready("fixture", [artifact(f"scene-{index}.png", "ai_scene") for index in range(2)]),
                 "voiceover": StageResult.ready("fixture", [artifact("voice.wav", "voiceover_audio")]),
             }
             orchestrator = MediaOrchestrator(video_provider=fake_video_provider)
+            platform_content = {
+                "title": "Global title",
+                "platformContent": {"xiaohongshu": {"title": "XHS cover", "subtitle": "XHS subtitle"}},
+            }
+            self.assertEqual(orchestrator._visual_title(platform_content, job, "xiaohongshu"), "XHS cover")
+            self.assertEqual(orchestrator._visual_subtitle(platform_content, "xiaohongshu"), "XHS subtitle")
 
             result = orchestrator._render_video(job, paths, stages, {})
 
@@ -3518,6 +3669,7 @@ class WorkflowIntegrationTest(unittest.TestCase):
                 (1080, 1080, ("github",)),
             ],
         )
+        self.assertTrue(all(kinds == ("product", "product", "product", "supporting", "supporting") for kinds in rendered_shot_kinds))
         self.assertEqual(len({item["video"]["path"] for item in updated}), 3)
         self.assertTrue(result.diagnostics["captionTimingValid"])
         self.assertTrue(

@@ -501,7 +501,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def run_command(name: str, command: list[str], check: bool = True) -> dict[str, Any]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     step = {
         "name": name,
         "command": display_command(command),
